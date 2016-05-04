@@ -1,0 +1,10 @@
+#
+set -e
+set -x
+#git checkout remotes/origin/atomicc1 -b atomicc1
+#git checkout remotes/origin/llvm-3.7 -b llvm-3.7
+
+CC=clang CXX=clang++ ./configure --with-stp=`pwd`/../stp/build \
+  --with-llvmsrc=`pwd`/../llvm \
+  --with-llvmobj=`pwd`/../llvm/build \
+  --enable-posix-runtime
