@@ -2465,7 +2465,7 @@ fi
 ac_config_files="$ac_config_files Makefile.config"
 
 
-ac_config_files="$ac_config_files docs/doxygen.cfg"
+#ac_config_files="$ac_config_files docs/doxygen.cfg"
 
 
 ac_config_headers="$ac_config_headers include/klee/Config/config.h"
@@ -3458,7 +3458,7 @@ if ${klee_cv_os_type+:} false; then :
 else
   case $host in
   *-*-linux*)
-    host_supports_posix_runtime=yes ;;
+    host_supports_posix_runtime=no ;;
   *)
     host_supports_posix_runtime=no ;;
 esac
@@ -5409,16 +5409,16 @@ ac_config_commands="$ac_config_commands Makefile.common"
 ac_config_commands="$ac_config_commands lib/Makefile"
 
 
-ac_config_commands="$ac_config_commands runtime/Makefile"
+#ac_config_commands="$ac_config_commands runtime/Makefile"
 
 
-ac_config_commands="$ac_config_commands test/Makefile"
+#ac_config_commands="$ac_config_commands test/Makefile"
 
 
-ac_config_commands="$ac_config_commands test/Makefile.tests"
+#ac_config_commands="$ac_config_commands test/Makefile.tests"
 
 
-ac_config_commands="$ac_config_commands test/Concrete/Makefile"
+#ac_config_commands="$ac_config_commands test/Concrete/Makefile"
 
 
 ac_config_commands="$ac_config_commands tools/Makefile"
@@ -6129,7 +6129,6 @@ do
   case $ac_config_target in
     "setup") CONFIG_COMMANDS="$CONFIG_COMMANDS setup" ;;
     "Makefile.config") CONFIG_FILES="$CONFIG_FILES Makefile.config" ;;
-    "docs/doxygen.cfg") CONFIG_FILES="$CONFIG_FILES docs/doxygen.cfg" ;;
     "include/klee/Config/config.h") CONFIG_HEADERS="$CONFIG_HEADERS include/klee/Config/config.h" ;;
     "Makefile") CONFIG_COMMANDS="$CONFIG_COMMANDS Makefile" ;;
     "Makefile.common") CONFIG_COMMANDS="$CONFIG_COMMANDS Makefile.common" ;;

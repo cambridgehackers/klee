@@ -15,12 +15,8 @@ LEVEL=..
 #
 # List all of the subdirectories that we will compile.
 #
-PARALLEL_DIRS=klee kleaver ktest-tool gen-random-bout klee-stats
+PARALLEL_DIRS=klee kleaver ktest-tool
 
 include $(LEVEL)/Makefile.config
-
-ifeq ($(ENABLE_POSIX_RUNTIME),1)
-PARALLEL_DIRS += klee-replay
-endif
 
 include $(LEVEL)/Makefile.common
