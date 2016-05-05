@@ -1171,6 +1171,10 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule, StringRef libDir) 
 #endif
 
 int main(int argc, char **argv, char **envp) {
+printf("[%s:%d]klee: ", __FUNCTION__, __LINE__);
+for (int i = 0; i < argc; i++)
+    printf("; %s", argv[i]);
+printf("\n");
   atexit(llvm_shutdown);  // Call llvm_shutdown() on exit.
 
   llvm::InitializeNativeTarget();

@@ -393,6 +393,10 @@ static bool printInputAsSMTLIBv2(const char *Filename,
 }
 
 int main(int argc, char **argv) {
+printf("[%s:%d]kleaver: ", __FUNCTION__, __LINE__);
+for (int i = 0; i < argc; i++)
+    printf("; %s", argv[i]);
+printf("\n");
   bool success = true;
 
   llvm::sys::PrintStackTraceOnErrorSignal();

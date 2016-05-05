@@ -523,6 +523,7 @@ ifdef TOOL_VERBOSE
   LD.Flags += -v
   VERBOSE := 1
 endif
+VERBOSE := 1
 
 # Adjust settings for verbose mode
 ifndef VERBOSE
