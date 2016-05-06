@@ -149,9 +149,8 @@ llvm::raw_fd_ostream *KleeHandler::openOutputFile(const std::string &filename) {
   if (ec)
     Error = ec.message();
   if (!Error.empty()) {
-    klee_error("error opening file \"%s\".  KLEE may have run out of file " "descriptors: try to increase the maximum number of open file " "descriptors by using ulimit (%s).", filename.c_str(), Error.c_str());
-    delete f;
-    f = NULL;
+    klee_error("error opening file \"%s\".  (%s).", filename.c_str(), Error.c_str());
+    exit(-1);
   }
 
   return f;
@@ -192,29 +191,15 @@ printf("[%s:%d] outsize %d\n", __FUNCTION__, __LINE__, (int)out.size());
       }
       delete f;
     }
-    if (errorMessage || 1) {
-      std::string constraints;
-      m_interpreter->getConstraintLog(state, constraints,Interpreter::KQUERY);
-      llvm::raw_ostream *f = openTestFile("pc", id);
-      *f << constraints;
-      delete f;
-    }
-    if (1) {
+    std::string constraints;
+    m_interpreter->getConstraintLog(state, constraints,Interpreter::KQUERY);
+    printf("[%s:%d] KQUERY '%s'\n", __FUNCTION__, __LINE__, constraints.c_str());
       // FIXME: If using Z3 as the core solver the emitted file is actually
       // SMT-LIBv2 not CVC which is a bit confusing
-      std::string constraints;
-      m_interpreter->getConstraintLog(state, constraints, Interpreter::STP);
-      llvm::raw_ostream *f = openTestFile("cvc", id);
-      *f << constraints;
-      delete f;
-    }
-    if(1) {
-      std::string constraints;
-        m_interpreter->getConstraintLog(state, constraints, Interpreter::SMTLIB2);
-        llvm::raw_ostream *f = openTestFile("smt2", id);
-        *f << constraints;
-        delete f;
-    }
+    m_interpreter->getConstraintLog(state, constraints, Interpreter::STP);
+    printf("[%s:%d] STP '%s'\n", __FUNCTION__, __LINE__, constraints.c_str());
+    m_interpreter->getConstraintLog(state, constraints, Interpreter::SMTLIB2);
+    printf("[%s:%d] SMTLIB '%s'\n", __FUNCTION__, __LINE__, constraints.c_str());
     if (m_symPathWriter) {
       std::vector<unsigned char> symbolicBranches;
       m_symPathWriter->readStream(m_interpreter->getSymbolicPathStreamID(state), symbolicBranches);
