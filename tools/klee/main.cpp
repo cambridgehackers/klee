@@ -1183,6 +1183,7 @@ printf("\n");
   sys::PrintStackTraceOnErrorSignal();
 
   if (Watchdog) {
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
     if (MaxTime==0) {
       klee_error("--watchdog used without --max-time");
     }
@@ -1250,37 +1251,17 @@ printf("\n");
   // Load the bytecode...
   std::string ErrorMsg;
   Module *mainModule = 0;
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
-  OwningPtr<MemoryBuffer> BufferPtr;
-  error_code ec=MemoryBuffer::getFileOrSTDIN(InputFile.c_str(), BufferPtr);
-  if (ec) {
-    klee_error("error loading program '%s': %s", InputFile.c_str(),
-               ec.message().c_str());
-  }
-
-  mainModule = getLazyBitcodeModule(BufferPtr.get(), getGlobalContext(), &ErrorMsg);
-
-  if (mainModule) {
-    if (mainModule->MaterializeAllPermanently(&ErrorMsg)) {
-      delete mainModule;
-      mainModule = 0;
-    }
-  }
-  if (!mainModule)
-    klee_error("error loading program '%s': %s", InputFile.c_str(),
-               ErrorMsg.c_str());
-#else
   auto Buffer = MemoryBuffer::getFileOrSTDIN(InputFile.c_str());
   if (!Buffer)
     klee_error("error loading program '%s': %s", InputFile.c_str(),
                Buffer.getError().message().c_str());
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
+//#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
   auto mainModuleOrError =
       getLazyBitcodeModule(std::move(Buffer.get()), getGlobalContext());
-#else
-  auto mainModuleOrError =
-      getLazyBitcodeModule(Buffer->get(), getGlobalContext());
-#endif
+//#else
+  //auto mainModuleOrError =
+      //getLazyBitcodeModule(Buffer->get(), getGlobalContext());
+//#endif
   if (!mainModuleOrError) {
     klee_error("error loading program '%s': %s", InputFile.c_str(),
                mainModuleOrError.getError().message().c_str());
@@ -1290,16 +1271,15 @@ printf("\n");
     // from the std::unique_ptr
     Buffer->release();
   }
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
+//#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
   mainModule = mainModuleOrError->release();
-#else
-  mainModule = *mainModuleOrError;
-#endif
+//#else
+  //mainModule = *mainModuleOrError;
+//#endif
   if (auto ec = mainModule->materializeAllPermanently()) {
     klee_error("error loading program '%s': %s", InputFile.c_str(),
                ec.message().c_str());
   }
-#endif
 
 
   if (WithPOSIXRuntime) {
@@ -1337,6 +1317,7 @@ printf("\n");
   }
 
   if (WithPOSIXRuntime) {
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
     SmallString<128> Path(Opts.LibraryDir);
     llvm::sys::path::append(Path, "libkleeRuntimePOSIX.bca");
     klee_message("NOTE: Using model: %s", Path.c_str());
@@ -1365,6 +1346,7 @@ printf("\n");
   char **pArgv;
   char **pEnvp;
   if (Environ != "") {
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
     std::vector<std::string> items;
     std::ifstream f(Environ.c_str());
     if (!f.good())
@@ -1402,6 +1384,7 @@ printf("\n");
   std::vector<bool> replayPath;
 
   if (ReplayPathFile != "") {
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
     KleeHandler::loadPathFile(ReplayPathFile, replayPath);
   }
 
@@ -1423,6 +1406,7 @@ printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
   externalsAndGlobalsCheck(finalModule);
 
   if (ReplayPathFile != "") {
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
     interpreter->setReplayPath(&replayPath);
   }
 
@@ -1434,103 +1418,26 @@ printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
   handler->getInfoStream().flush();
 
   if (!ReplayKTestDir.empty() || !ReplayKTestFile.empty()) {
-    assert(SeedOutFile.empty());
-    assert(SeedOutDir.empty());
-
-    std::vector<std::string> kTestFiles = ReplayKTestFile;
-    for (std::vector<std::string>::iterator
-           it = ReplayKTestDir.begin(), ie = ReplayKTestDir.end();
-         it != ie; ++it)
-      KleeHandler::getKTestFilesInDir(*it, kTestFiles);
-    std::vector<KTest*> kTests;
-    for (std::vector<std::string>::iterator
-           it = kTestFiles.begin(), ie = kTestFiles.end();
-         it != ie; ++it) {
-      KTest *out = kTest_fromFile(it->c_str());
-      if (out) {
-        kTests.push_back(out);
-      } else {
-        llvm::errs() << "KLEE: unable to open: " << *it << "\n";
-      }
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+exit(-1);
+  }
+printf("[%s:%d] before test\n", __FUNCTION__, __LINE__);
+    for (std::vector<std::string>::iterator it = SeedOutFile.begin(), ie = SeedOutFile.end(); it != ie; ++it) {
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
     }
-
-    if (RunInDir != "") {
-      int res = chdir(RunInDir.c_str());
-      if (res < 0) {
-        klee_error("Unable to change directory to: %s", RunInDir.c_str());
-      }
-    }
-
-    unsigned i=0;
-    for (std::vector<KTest*>::iterator
-           it = kTests.begin(), ie = kTests.end();
-         it != ie; ++it) {
-      KTest *out = *it;
-      interpreter->setReplayKTest(out);
-      llvm::errs() << "KLEE: replaying: " << *it << " (" << kTest_numBytes(out)
-                   << " bytes)"
-                   << " (" << ++i << "/" << kTestFiles.size() << ")\n";
-      // XXX should put envp in .ktest ?
-      interpreter->runFunctionAsMain(mainFn, out->numArgs, out->args, pEnvp);
-      if (interrupted) break;
-    }
-    interpreter->setReplayKTest(0);
-    while (!kTests.empty()) {
-      kTest_free(kTests.back());
-      kTests.pop_back();
-    }
-  } else {
-    std::vector<KTest *> seeds;
-    for (std::vector<std::string>::iterator
-           it = SeedOutFile.begin(), ie = SeedOutFile.end();
-         it != ie; ++it) {
-      KTest *out = kTest_fromFile(it->c_str());
-      if (!out) {
-        llvm::errs() << "KLEE: unable to open: " << *it << "\n";
-        exit(1);
-      }
-      seeds.push_back(out);
-    }
-    for (std::vector<std::string>::iterator
-           it = SeedOutDir.begin(), ie = SeedOutDir.end();
-         it != ie; ++it) {
-      std::vector<std::string> kTestFiles;
-      KleeHandler::getKTestFilesInDir(*it, kTestFiles);
-      for (std::vector<std::string>::iterator
-             it2 = kTestFiles.begin(), ie = kTestFiles.end();
-           it2 != ie; ++it2) {
-        KTest *out = kTest_fromFile(it2->c_str());
-        if (!out) {
-          llvm::errs() << "KLEE: unable to open: " << *it2 << "\n";
-          exit(1);
-        }
-        seeds.push_back(out);
-      }
-      if (kTestFiles.empty()) {
-        llvm::errs() << "KLEE: seeds directory is empty: " << *it << "\n";
-        exit(1);
-      }
-    }
-
-    if (!seeds.empty()) {
-      llvm::errs() << "KLEE: using " << seeds.size() << " seeds\n";
-      interpreter->useSeeds(&seeds);
+    for (std::vector<std::string>::iterator it = SeedOutDir.begin(), ie = SeedOutDir.end(); it != ie; ++it) {
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
     }
     if (RunInDir != "") {
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
       int res = chdir(RunInDir.c_str());
       if (res < 0) {
         klee_error("Unable to change directory to: %s", RunInDir.c_str());
       }
     }
 printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
-    interpreter->runFunctionAsMain(mainFn, pArgc, pArgv, pEnvp);
+  interpreter->runFunctionAsMain(mainFn, pArgc, pArgv, pEnvp);
 printf("[%s:%d] after runFunctionAsMain\n", __FUNCTION__, __LINE__);
-
-    while (!seeds.empty()) {
-      kTest_free(seeds.back());
-      seeds.pop_back();
-    }
-  }
 
   t[1] = time(NULL);
   strftime(buf, sizeof(buf), "Finished: %Y-%m-%d %H:%M:%S\n", localtime(&t[1]));
@@ -1598,14 +1505,6 @@ printf("[%s:%d] after runFunctionAsMain\n", __FUNCTION__, __LINE__);
     llvm::errs().resetColor();
 
   handler->getInfoStream() << stats.str();
-
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
-  // FIXME: This really doesn't look right
-  // This is preventing the module from being
-  // deleted automatically
-  BufferPtr.take();
-#endif
   delete handler;
-
   return 0;
 }
