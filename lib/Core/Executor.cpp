@@ -320,11 +320,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   kmodule = new KModule(module);
 
   // Initialize the context.
-#if LLVM_VERSION_CODE <= LLVM_VERSION(3, 1)
-  TargetData *TD = kmodule->targetData;
-#else
   DataLayout *TD = kmodule->targetData;
-#endif
   Context::initialize(TD->isLittleEndian(),
                       (Expr::Width) TD->getPointerSizeInBits());
 
@@ -367,11 +363,7 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
                                       const Constant *c, 
                                       unsigned offset) {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-#if LLVM_VERSION_CODE <= LLVM_VERSION(3, 1)
-  TargetData *targetData = kmodule->targetData;
-#else
   DataLayout *targetData = kmodule->targetData;
-#endif
   if (const ConstantVector *cp = dyn_cast<ConstantVector>(c)) {
     unsigned elementSize =
       targetData->getTypeStoreSize(cp->getType()->getElementType());
@@ -394,7 +386,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     for (unsigned i=0, e=cs->getNumOperands(); i != e; ++i)
       initializeGlobalObject(state, os, cs->getOperand(i), 
 			     offset + sl->getElementOffset(i));
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
   } else if (const ConstantDataSequential *cds =
                dyn_cast<ConstantDataSequential>(c)) {
     unsigned elementSize =
@@ -402,7 +393,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     for (unsigned i=0, e=cds->getNumElements(); i != e; ++i)
       initializeGlobalObject(state, os, cds->getElementAsConstant(i),
                              offset + i*elementSize);
-#endif
   } else if (!isa<UndefValue>(c)) {
     unsigned StoreBits = targetData->getTypeStoreSizeInBits(c->getType());
     ref<ConstantExpr> C = evalConstant(c);
@@ -437,10 +427,6 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
   if (m->getModuleInlineAsm() != "")
     klee_warning("executable has module level assembly (ignoring)");
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 3)
-  assert(m->lib_begin() == m->lib_end() &&
-         "XXX do not support dependent libraries");
-#endif
   // represent function globals using the address of the actual llvm function
   // object. given that we use malloc to allocate memory in states this also
   // ensures that we won't conflict. we don't need to allocate a memory object
@@ -510,7 +496,6 @@ void Executor::initializeGlobals(ExecutionState &state) {
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
 
       // XXX - DWD - hardcode some things until we decide how to fix.
-#ifndef WINDOWS
       if (i->getName() == "_ZTVN10__cxxabiv117__class_type_infoE") {
         size = 0x2C;
       } else if (i->getName() == "_ZTVN10__cxxabiv120__si_class_type_infoE") {
@@ -518,7 +503,6 @@ void Executor::initializeGlobals(ExecutionState &state) {
       } else if (i->getName() == "_ZTVN10__cxxabiv121__vmi_class_type_infoE") {
         size = 0x2C;
       }
-#endif
 
       if (size == 0) {
         llvm::errs() << "Unable to find size for global variable: " 
@@ -948,7 +932,6 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       return Expr::createPointer(0);
     } else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c)) {
       return ConstantExpr::create(0, getWidthForLLVMType(c->getType()));
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
     } else if (const ConstantDataSequential *cds =
                  dyn_cast<ConstantDataSequential>(c)) {
       std::vector<ref<Expr> > kids;
@@ -958,7 +941,6 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       }
       ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
       return cast<ConstantExpr>(res);
-#endif
     } else if (const ConstantStruct *cs = dyn_cast<ConstantStruct>(c)) {
       const StructLayout *sl = kmodule->targetData->getStructLayout(cs->getType());
       llvm::SmallVector<ref<Expr>, 4> kids;
@@ -1436,13 +1418,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
                            CallSite(cast<CallInst>(caller)));
 
             // XXX need to check other param attrs ?
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
       bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 2)
-	    bool isSExt = cs.paramHasAttr(0, llvm::Attributes::SExt);
-#else
-	    bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
-#endif
             if (isSExt) {
               result = SExtExpr::create(result, to);
             } else {
@@ -2410,15 +2386,11 @@ void Executor::checkMemoryUsage() {
 }
 
 void Executor::run(ExecutionState &initialState) {
-printf("[%s:%d] start usingSeeds %d\n", __FUNCTION__, __LINE__, usingSeeds);
+printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   bindModuleConstants();
-
-  // Delay init till now so that ticks don't accrue during
-  // optimization and such.
+  // Delay init till now so that ticks don't accrue during optimization and such.
   initTimers();
-
   states.insert(&initialState);
-
   if (usingSeeds) {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 exit(-1);
@@ -2429,24 +2401,16 @@ exit(-1);
     ExecutionState &state = searcher->selectState();
     KInstruction *ki = state.pc;
     stepInstruction(state);
-
     executeInstruction(state, ki);
     processTimers(&state, MaxInstructionTime);
-
     checkMemoryUsage();
-
     updateStates(&state);
   }
-
   delete searcher;
   searcher = 0;
-  
- dump:
   if (DumpStatesOnHalt && !states.empty()) {
     llvm::errs() << "KLEE: halting execution, dumping remaining states\n";
-    for (std::set<ExecutionState*>::iterator
-           it = states.begin(), ie = states.end();
-         it != ie; ++it) {
+    for (std::set<ExecutionState*>::iterator it = states.begin(), ie = states.end(); it != ie; ++it) {
       ExecutionState &state = **it;
       stepInstruction(state); // keep stats rolling
       terminateStateEarly(state, "Execution halting.");
@@ -3164,6 +3128,7 @@ void Executor::runFunctionAsMain(Function *f,
 				 int argc,
 				 char **argv,
 				 char **envp) {
+printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   std::vector<ref<Expr> > arguments;
 
   // force deterministic initialization of memory objects
@@ -3244,7 +3209,9 @@ void Executor::runFunctionAsMain(Function *f,
 
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
+printf("[%s:%d] before run\n", __FUNCTION__, __LINE__);
   run(*state);
+printf("[%s:%d] after run\n", __FUNCTION__, __LINE__);
   delete processTree;
   processTree = 0;
 
