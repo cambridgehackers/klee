@@ -22,7 +22,6 @@
 #include "klee/Internal/Support/PrintVersion.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 2)
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
@@ -30,16 +29,6 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
-#else
-#include "llvm/Constants.h"
-#include "llvm/Module.h"
-#include "llvm/Type.h"
-#include "llvm/InstrTypes.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
-#include "llvm/LLVMContext.h"
-#include "llvm/Support/FileSystem.h"
-#endif
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Support/CommandLine.h"
@@ -47,20 +36,9 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 0)
-#include "llvm/Target/TargetSelect.h"
-#else
 #include "llvm/Support/TargetSelect.h"
-#endif
 #include "llvm/Support/Signals.h"
-
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
-#include "llvm/Support/system_error.h"
-#endif
-
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
 #include "llvm/Support/Path.h"
-#endif
 
 #include <dirent.h>
 #include <signal.h>
@@ -150,12 +128,6 @@ namespace {
 		  clEnumValN(UcLibc, "uclibc", "Link in uclibc (adapted for klee)"),
 		  clEnumValEnd),
        cl::init(NoLibc));
-
-
-  cl::opt<bool>
-  WithPOSIXRuntime("posix-runtime",
-		cl::desc("Link with POSIX runtime.  Options that can be passed as arguments to the programs are: --sym-argv <max-len>  --sym-argvs <min-argvs> <max-argvs> <max-len> + file model options"),
-		cl::init(false));
 
   cl::opt<bool>
   OptimizeModule("optimize",
@@ -542,11 +514,7 @@ void KleeHandler::loadPathFile(std::string name,
 
 void KleeHandler::getKTestFilesInDir(std::string directoryPath,
                                      std::vector<std::string> &results) {
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
-  error_code ec;
-#else
   std::error_code ec;
-#endif
   for (llvm::sys::fs::directory_iterator i(directoryPath, ec), e; i != e && !ec;
        i.increment(ec)) {
     std::string f = (*i).path();
@@ -665,26 +633,6 @@ static const char *modelledExternals[] = {
 };
 // Symbols we aren't going to warn about
 static const char *dontCareExternals[] = {
-#if 0
-  // stdio
-  "fprintf",
-  "fflush",
-  "fopen",
-  "fclose",
-  "fputs_unlocked",
-  "putchar_unlocked",
-  "vfprintf",
-  "fwrite",
-  "puts",
-  "printf",
-  "stdin",
-  "stdout",
-  "stderr",
-  "_stdio_term",
-  "__errno_location",
-  "fstat",
-#endif
-
   // static information, pretty ok to return
   "getegid",
   "geteuid",
@@ -742,27 +690,9 @@ static const char *unsafeExternals[] = {
 #define NELEMS(array) (sizeof(array)/sizeof(array[0]))
 void externalsAndGlobalsCheck(const Module *m) {
   std::map<std::string, bool> externals;
-  std::set<std::string> modelled(modelledExternals,
-                                 modelledExternals+NELEMS(modelledExternals));
-  std::set<std::string> dontCare(dontCareExternals,
-                                 dontCareExternals+NELEMS(dontCareExternals));
-  std::set<std::string> unsafe(unsafeExternals,
-                               unsafeExternals+NELEMS(unsafeExternals));
-
-  switch (Libc) {
-  case KleeLibc:
-    dontCare.insert(dontCareKlee, dontCareKlee+NELEMS(dontCareKlee));
-    break;
-  case UcLibc:
-    dontCare.insert(dontCareUclibc,
-                    dontCareUclibc+NELEMS(dontCareUclibc));
-    break;
-  case NoLibc: /* silence compiler warning */
-    break;
-  }
-
-  if (WithPOSIXRuntime)
-    dontCare.insert("syscall");
+  std::set<std::string> modelled(modelledExternals, modelledExternals+NELEMS(modelledExternals));
+  std::set<std::string> dontCare(dontCareExternals, dontCareExternals+NELEMS(dontCareExternals));
+  std::set<std::string> unsafe(unsafeExternals, unsafeExternals+NELEMS(unsafeExternals));
 
   for (Module::const_iterator fnIt = m->begin(), fn_ie = m->end();
        fnIt != fn_ie; ++fnIt) {
@@ -774,54 +704,38 @@ void externalsAndGlobalsCheck(const Module *m) {
            it != ie; ++it) {
         if (const CallInst *ci = dyn_cast<CallInst>(it)) {
           if (isa<InlineAsm>(ci->getCalledValue())) {
-            klee_warning_once(&*fnIt,
-                              "function \"%s\" has inline asm",
-                              fnIt->getName().data());
+            klee_warning_once(&*fnIt, "function \"%s\" has inline asm", fnIt->getName().data());
           }
         }
       }
     }
   }
-  for (Module::const_global_iterator
-         it = m->global_begin(), ie = m->global_end();
-       it != ie; ++it)
+  for (Module::const_global_iterator it = m->global_begin(), ie = m->global_end(); it != ie; ++it)
     if (it->isDeclaration() && !it->use_empty())
       externals.insert(std::make_pair(it->getName(), true));
   // and remove aliases (they define the symbol after global
   // initialization)
-  for (Module::const_alias_iterator
-         it = m->alias_begin(), ie = m->alias_end();
-       it != ie; ++it) {
-    std::map<std::string, bool>::iterator it2 =
-      externals.find(it->getName());
+  for (Module::const_alias_iterator it = m->alias_begin(), ie = m->alias_end(); it != ie; ++it) {
+    std::map<std::string, bool>::iterator it2 = externals.find(it->getName());
     if (it2!=externals.end())
       externals.erase(it2);
   }
 
   std::map<std::string, bool> foundUnsafe;
-  for (std::map<std::string, bool>::iterator
-         it = externals.begin(), ie = externals.end();
-       it != ie; ++it) {
+  for (std::map<std::string, bool>::iterator it = externals.begin(), ie = externals.end(); it != ie; ++it) {
     const std::string &ext = it->first;
-    if (!modelled.count(ext) && (WarnAllExternals ||
-                                 !dontCare.count(ext))) {
+    if (!modelled.count(ext) && (WarnAllExternals || !dontCare.count(ext))) {
       if (unsafe.count(ext)) {
         foundUnsafe.insert(*it);
       } else {
-        klee_warning("undefined reference to %s: %s",
-                     it->second ? "variable" : "function",
-                     ext.c_str());
+        klee_warning("undefined reference to %s: %s", it->second ? "variable" : "function", ext.c_str());
       }
     }
   }
 
-  for (std::map<std::string, bool>::iterator
-         it = foundUnsafe.begin(), ie = foundUnsafe.end();
-       it != ie; ++it) {
+  for (std::map<std::string, bool>::iterator it = foundUnsafe.begin(), ie = foundUnsafe.end(); it != ie; ++it) {
     const std::string &ext = it->first;
-    klee_warning("undefined reference to %s: %s (UNSAFE)!",
-                 it->second ? "variable" : "function",
-                 ext.c_str());
+    klee_warning("undefined reference to %s: %s (UNSAFE)!", it->second ? "variable" : "function", ext.c_str());
   }
 }
 
@@ -909,10 +823,6 @@ printf("\n");
     break;
   case KleeLibc:
   case UcLibc:
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-  }
-
-  if (WithPOSIXRuntime) {
 printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
   }
 
