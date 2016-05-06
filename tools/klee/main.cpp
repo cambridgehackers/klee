@@ -116,29 +116,21 @@ private:
   Interpreter *m_interpreter;
   TreeStreamWriter *m_pathWriter, *m_symPathWriter;
   llvm::raw_ostream *m_infoFile; 
-  SmallString<128> m_outputDirectory; 
   unsigned m_testIndex;  // number of tests written so far
   unsigned m_pathsExplored; // number of paths explored so far
-
-  // used for writing .ktest files
   int m_argc;
   char **m_argv;
-
 public:
   KleeHandler(int argc, char **argv);
   ~KleeHandler();
-
   llvm::raw_ostream &getInfoStream() const { return *m_infoFile; }
   void incPathsExplored() { m_pathsExplored++; }
-
   void setInterpreter(Interpreter *i);
-
   void processTestCase(const ExecutionState  &state, const char *errorMessage, const char *errorSuffix); 
   std::string getOutputFilename(const std::string &filename);
   llvm::raw_fd_ostream *openOutputFile(const std::string &filename);
   std::string getTestFilename(const std::string &suffix, unsigned id);
   llvm::raw_fd_ostream *openTestFile(const std::string &suffix, unsigned id);
-
   static std::string getRunTimeLibraryPath(const char *argv0);
 };
 
@@ -147,44 +139,10 @@ KleeHandler::KleeHandler(int argc, char **argv)
     m_pathWriter(0),
     m_symPathWriter(0),
     m_infoFile(0),
-    m_outputDirectory(),
     m_testIndex(0),
     m_pathsExplored(0),
     m_argc(argc),
     m_argv(argv) {
-  SmallString<128> directory(InputFile);
-
-  sys::path::remove_filename(directory);
-  if (auto ec = sys::fs::make_absolute(directory)) {
-    klee_error("unable to determine absolute path: %s", ec.message().c_str());
-  }
-    // "klee-out-<i>"
-    int i = 0;
-    for (; i <= INT_MAX; ++i) {
-      SmallString<128> d(directory);
-      llvm::sys::path::append(d, "klee-out-");
-      raw_svector_ostream ds(d); ds << i; ds.flush();
-
-      // create directory and try to link klee-last
-      if (mkdir(d.c_str(), 0775) == 0) {
-        m_outputDirectory = d; 
-        SmallString<128> klee_last(directory);
-        llvm::sys::path::append(klee_last, "klee-last"); 
-        if (((unlink(klee_last.c_str()) < 0) && (errno != ENOENT)) ||
-            symlink(m_outputDirectory.c_str(), klee_last.c_str()) < 0) { 
-          klee_warning("cannot create klee-last symlink: %s", strerror(errno));
-        } 
-        break;
-      } 
-      // otherwise try again or exit on error
-      if (errno != EEXIST)
-        klee_error("cannot create \"%s\": %s", m_outputDirectory.c_str(), strerror(errno));
-    }
-    if (i == INT_MAX && m_outputDirectory.str().equals(""))
-        klee_error("cannot create output directory: index out of range");
-
-  klee_message("output directory is \"%s\"", m_outputDirectory.c_str());
-
   klee_warning_file = stdout;
   klee_message_file = stdout;
   m_infoFile = openOutputFile("info");
@@ -213,9 +171,7 @@ void KleeHandler::setInterpreter(Interpreter *i) {
 }
 
 std::string KleeHandler::getOutputFilename(const std::string &filename) {
-  SmallString<128> path = m_outputDirectory;
-  sys::path::append(path,filename);
-  return path.str();
+  return "tmp/" + filename;
 }
 
 llvm::raw_fd_ostream *KleeHandler::openOutputFile(const std::string &filename) {
@@ -246,9 +202,11 @@ llvm::raw_fd_ostream *KleeHandler::openTestFile(const std::string &suffix, unsig
 }
 
 /* Outputs all files (.ktest, .pc, .cov etc.) describing a test case */
-void KleeHandler::processTestCase(const ExecutionState &state, const char *errorMessage, const char *errorSuffix) {
+void KleeHandler::processTestCase(const ExecutionState &state, const char *errorMessage, const char *errorSuffix)
+{
+printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   if (errorMessage)
-    llvm::errs() << "EXITING ON ERROR:\n" << errorMessage << "\n";
+    llvm::outs() << "EXITING ON ERROR:\n" << errorMessage << "\n";
   std::vector< std::pair<std::string, std::vector<unsigned char> > > out;
   bool success = m_interpreter->getSymbolicSolution(state, out);
 
@@ -344,6 +302,7 @@ void KleeHandler::processTestCase(const ExecutionState &state, const char *error
       *f << "Time to generate test case: " << elapsed_time << "s\n";
       delete f;
     }
+printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
 }
 
 std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
@@ -413,7 +372,7 @@ printf("\n");
   // locale and other data and then calls main.
   Function *mainFn = mainModule->getFunction("main");
   if (!mainFn) {
-    llvm::errs() << "'" << "main" << "' function not found in module.\n";
+    llvm::outs() << "'" << "main" << "' function not found in module.\n";
     return -1;
   }
 
