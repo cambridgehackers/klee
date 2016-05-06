@@ -1408,6 +1408,7 @@ printf("\n");
   Interpreter::InterpreterOptions IOpts;
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
   KleeHandler *handler = new KleeHandler(pArgc, pArgv);
+printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
   Interpreter *interpreter =
     theInterpreter = Interpreter::create(IOpts, handler);
   handler->setInterpreter(interpreter);
@@ -1521,7 +1522,9 @@ printf("\n");
         klee_error("Unable to change directory to: %s", RunInDir.c_str());
       }
     }
+printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
     interpreter->runFunctionAsMain(mainFn, pArgc, pArgv, pEnvp);
+printf("[%s:%d] after runFunctionAsMain\n", __FUNCTION__, __LINE__);
 
     while (!seeds.empty()) {
       kTest_free(seeds.back());

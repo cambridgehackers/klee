@@ -87,7 +87,9 @@ protected:
 
   Interpreter(const InterpreterOptions &_interpreterOpts)
     : interpreterOpts(_interpreterOpts)
-  {}
+  {
+printf("[%s:%d] constructor\n", __FUNCTION__, __LINE__);
+}
 
 public:
   virtual ~Interpreter() {}

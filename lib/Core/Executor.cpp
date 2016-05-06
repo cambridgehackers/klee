@@ -293,7 +293,7 @@ Executor::Executor(const InterpreterOptions &opts,
       ? std::min(MaxCoreSolverTime,MaxInstructionTime)
       : std::max(MaxCoreSolverTime,MaxInstructionTime)) {
       
-printf("[%s:%d] timeout %d\n", __FUNCTION__, __LINE__, (int)coreSolverTimeout);
+printf("[%s:%d] constructor timeout %d\n", __FUNCTION__, __LINE__, (int)coreSolverTimeout);
   if (coreSolverTimeout) UseForkedCoreSolver = true;
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
@@ -1463,29 +1463,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     }      
     break;
   }
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 1)
-  case Instruction::Unwind: {
-    for (;;) {
-      KInstruction *kcaller = state.stack.back().caller;
-      state.popFrame();
-
-      if (statsTracker)
-        statsTracker->framePopped(state);
-
-      if (state.stack.empty()) {
-        terminateStateOnExecError(state, "unwind from initial stack frame");
-        break;
-      } else {
-        Instruction *caller = kcaller->inst;
-        if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
-          transferToBasicBlock(ii->getUnwindDest(), caller->getParent(), state);
-          break;
-        }
-      }
-    }
-    break;
-  }
-#endif
   case Instruction::Br: {
     BranchInst *bi = cast<BranchInst>(i);
     if (bi->isUnconditional()) {
@@ -1523,23 +1500,14 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       LLVM_TYPE_Q llvm::IntegerType *Ty =
           cast<IntegerType>(si->getCondition()->getType());
       ConstantInt *ci = ConstantInt::get(Ty, CE->getZExtValue());
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
       unsigned index = si->findCaseValue(ci).getSuccessorIndex();
-#else
-      unsigned index = si->findCaseValue(ci);
-#endif
       transferToBasicBlock(si->getSuccessor(index), si->getParent(), state);
     } else {
       std::map<BasicBlock *, ref<Expr> > targets;
       ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
       for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e;
            ++i) {
         ref<Expr> value = evalConstant(i.getCaseValue());
-#else
-      for (unsigned i = 1, cases = si->getNumCases(); i < cases; ++i) {
-        ref<Expr> value = evalConstant(si->getCaseValue(i));
-#endif
         ref<Expr> match = EqExpr::create(cond, value);
         isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
         bool result;
@@ -1547,11 +1515,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         assert(success && "FIXME: Unhandled solver failure");
         (void)success;
         if (result) {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
           BasicBlock *caseSuccessor = i.getCaseSuccessor();
-#else
-          BasicBlock *caseSuccessor = si->getSuccessor(i);
-#endif
           std::map<BasicBlock *, ref<Expr> >::iterator it =
               targets.insert(std::make_pair(caseSuccessor,
                                             ConstantExpr::alloc(0, Expr::Bool)))
@@ -1643,13 +1607,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
             if (from != to) {
               // XXX need to check other param attrs ?
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
               bool isSExt = cs.paramHasAttr(i+1, llvm::Attribute::SExt);
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 2)
-	      bool isSExt = cs.paramHasAttr(i+1, llvm::Attributes::SExt);
-#else
-	      bool isSExt = cs.paramHasAttr(i+1, llvm::Attribute::SExt);
-#endif
               if (isSExt) {
                 arguments[i] = SExtExpr::create(arguments[i], to);
               } else {
@@ -1705,11 +1663,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     break;
   }
   case Instruction::PHI: {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 0)
     ref<Expr> result = eval(ki, state.incomingBBIndex, state).value;
-#else
-    ref<Expr> result = eval(ki, state.incomingBBIndex * 2, state).value;
-#endif
     bindLocal(ki, state, result);
     break;
   }
@@ -2027,13 +1981,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FAdd operation");
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
     Res.add(APFloat(*fpWidthToSemantics(right->getWidth()),right->getAPValue()), APFloat::rmNearestTiesToEven);
-#else
-    llvm::APFloat Res(left->getAPValue());
-    Res.add(APFloat(right->getAPValue()), APFloat::rmNearestTiesToEven);
-#endif
     bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
     break;
   }
@@ -2046,13 +1995,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     if (!fpWidthToSemantics(left->getWidth()) ||
         !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FSub operation");
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
     Res.subtract(APFloat(*fpWidthToSemantics(right->getWidth()), right->getAPValue()), APFloat::rmNearestTiesToEven);
-#else
-    llvm::APFloat Res(left->getAPValue());
-    Res.subtract(APFloat(right->getAPValue()), APFloat::rmNearestTiesToEven);
-#endif
     bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
     break;
   }
@@ -2066,13 +2010,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FMul operation");
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
     Res.multiply(APFloat(*fpWidthToSemantics(right->getWidth()), right->getAPValue()), APFloat::rmNearestTiesToEven);
-#else
-    llvm::APFloat Res(left->getAPValue());
-    Res.multiply(APFloat(right->getAPValue()), APFloat::rmNearestTiesToEven);
-#endif
     bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
     break;
   }
@@ -2086,13 +2025,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FDiv operation");
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
     Res.divide(APFloat(*fpWidthToSemantics(right->getWidth()), right->getAPValue()), APFloat::rmNearestTiesToEven);
-#else
-    llvm::APFloat Res(left->getAPValue());
-    Res.divide(APFloat(right->getAPValue()), APFloat::rmNearestTiesToEven);
-#endif
     bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
     break;
   }
@@ -2105,14 +2039,9 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     if (!fpWidthToSemantics(left->getWidth()) ||
         !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FRem operation");
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
     Res.mod(APFloat(*fpWidthToSemantics(right->getWidth()),right->getAPValue()),
             APFloat::rmNearestTiesToEven);
-#else
-    llvm::APFloat Res(left->getAPValue());
-    Res.mod(APFloat(right->getAPValue()), APFloat::rmNearestTiesToEven);
-#endif
     bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
     break;
   }
@@ -2125,11 +2054,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > arg->getWidth())
       return terminateStateOnExecError(state, "Unsupported FPTrunc operation");
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Res(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
-#else
-    llvm::APFloat Res(arg->getAPValue());
-#endif
     bool losesInfo = false;
     Res.convert(*fpWidthToSemantics(resultType),
                 llvm::APFloat::rmNearestTiesToEven,
@@ -2145,11 +2070,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
                                         "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || arg->getWidth() > resultType)
       return terminateStateOnExecError(state, "Unsupported FPExt operation");
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Res(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
-#else
-    llvm::APFloat Res(arg->getAPValue());
-#endif
     bool losesInfo = false;
     Res.convert(*fpWidthToSemantics(resultType),
                 llvm::APFloat::rmNearestTiesToEven,
@@ -2166,11 +2087,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > 64)
       return terminateStateOnExecError(state, "Unsupported FPToUI operation");
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Arg(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
-#else
-    llvm::APFloat Arg(arg->getAPValue());
-#endif
     uint64_t value = 0;
     bool isExact = true;
     Arg.convertToInteger(&value, resultType, false,
@@ -2186,12 +2103,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
                                        "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > 64)
       return terminateStateOnExecError(state, "Unsupported FPToSI operation");
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     llvm::APFloat Arg(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
-#else
-    llvm::APFloat Arg(arg->getAPValue());
-
-#endif
     uint64_t value = 0;
     bool isExact = true;
     Arg.convertToInteger(&value, resultType, true,
@@ -2242,13 +2154,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FCmp operation");
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
     APFloat LHS(*fpWidthToSemantics(left->getWidth()),left->getAPValue());
     APFloat RHS(*fpWidthToSemantics(right->getWidth()),right->getAPValue());
-#else
-    APFloat LHS(left->getAPValue());
-    APFloat RHS(right->getAPValue());
-#endif
     APFloat::cmpResult CmpRes = LHS.compare(RHS);
 
     bool Result = false;
@@ -2503,6 +2410,7 @@ void Executor::checkMemoryUsage() {
 }
 
 void Executor::run(ExecutionState &initialState) {
+printf("[%s:%d] start usingSeeds %d\n", __FUNCTION__, __LINE__, usingSeeds);
   bindModuleConstants();
 
   // Delay init till now so that ticks don't accrue during
@@ -2512,73 +2420,11 @@ void Executor::run(ExecutionState &initialState) {
   states.insert(&initialState);
 
   if (usingSeeds) {
-    std::vector<SeedInfo> &v = seedMap[&initialState];
-    
-    for (std::vector<KTest*>::const_iterator it = usingSeeds->begin(), 
-           ie = usingSeeds->end(); it != ie; ++it)
-      v.push_back(SeedInfo(*it));
-
-    int lastNumSeeds = usingSeeds->size()+10;
-    double lastTime, startTime = lastTime = util::getWallTime();
-    ExecutionState *lastState = 0;
-    while (!seedMap.empty()) {
-      if (haltExecution) goto dump;
-
-      std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it = 
-        seedMap.upper_bound(lastState);
-      if (it == seedMap.end())
-        it = seedMap.begin();
-      lastState = it->first;
-      unsigned numSeeds = it->second.size();
-      ExecutionState &state = *lastState;
-      KInstruction *ki = state.pc;
-      stepInstruction(state);
-
-      executeInstruction(state, ki);
-      processTimers(&state, MaxInstructionTime * numSeeds);
-      updateStates(&state);
-
-      if ((stats::instructions % 1000) == 0) {
-        int numSeeds = 0, numStates = 0;
-        for (std::map<ExecutionState*, std::vector<SeedInfo> >::iterator
-               it = seedMap.begin(), ie = seedMap.end();
-             it != ie; ++it) {
-          numSeeds += it->second.size();
-          numStates++;
-        }
-        double time = util::getWallTime();
-        if (SeedTime>0. && time > startTime + SeedTime) {
-          klee_warning("seed time expired, %d seeds remain over %d states",
-                       numSeeds, numStates);
-          break;
-        } else if (numSeeds<=lastNumSeeds-10 ||
-                   time >= lastTime+10) {
-          lastTime = time;
-          lastNumSeeds = numSeeds;          
-          klee_message("%d seeds remaining over: %d states", 
-                       numSeeds, numStates);
-        }
-      }
-    }
-
-    klee_message("seeding done (%d states remain)", (int) states.size());
-
-    // XXX total hack, just because I like non uniform better but want
-    // seed results to be equally weighted.
-    for (std::set<ExecutionState*>::iterator
-           it = states.begin(), ie = states.end();
-         it != ie; ++it) {
-      (*it)->weight = 1.;
-    }
-
-    if (OnlySeed)
-      goto dump;
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+exit(-1);
   }
-
   searcher = constructUserSearcher(*this);
-
   searcher->update(0, states, std::set<ExecutionState*>());
-
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
     KInstruction *ki = state.pc;
@@ -2607,6 +2453,7 @@ void Executor::run(ExecutionState &initialState) {
     }
     updateStates(0);
   }
+printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
 }
 
 std::string Executor::getAddressInfo(ExecutionState &state, 
