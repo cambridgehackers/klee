@@ -60,38 +60,8 @@ namespace {
   cl::opt<std::string>
   InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"));
 
-  cl::opt<std::string>
-  RunInDir("run-in", cl::desc("Change to the given directory prior to executing"));
-
   cl::list<std::string>
   InputArgv(cl::ConsumeAfter, cl::desc("<program arguments>..."));
-
-  cl::opt<bool>
-  WarnAllExternals("warn-all-externals", cl::desc("Give initial warning for all externals."));
-
-  cl::opt<bool>
-  WriteCVCs("write-cvcs", cl::desc("Write .cvc files for each test case"));
-
-  cl::opt<bool>
-  WritePCs("write-pcs", cl::desc("Write .pc files for each test case"));
-
-  cl::opt<bool>
-  WriteSMT2s("write-smt2s", cl::desc("Write .smt2 (SMT-LIBv2) files for each test case"));
-
-  cl::opt<bool>
-  WriteCov("write-cov", cl::desc("Write coverage information for each test case"));
-
-  cl::opt<bool>
-  WriteTestInfo("write-test-info", cl::desc("Write additional test case information"));
-
-  cl::opt<bool>
-  WritePaths("write-paths", cl::desc("Write .path files for each test case"));
-
-  cl::opt<bool>
-  WriteSymPaths("write-sym-paths", cl::desc("Write .sym.path files for each test case"));
-
-  cl::opt<bool>
-  ExitOnError("exit-on-error", cl::desc("Exit if errors occur"));
 
   cl::opt<bool>
   OptimizeModule("optimize", cl::desc("Optimize before execution"), cl::init(false));
@@ -118,10 +88,8 @@ private:
   llvm::raw_ostream *m_infoFile; 
   unsigned m_testIndex;  // number of tests written so far
   unsigned m_pathsExplored; // number of paths explored so far
-  int m_argc;
-  char **m_argv;
 public:
-  KleeHandler(int argc, char **argv);
+  KleeHandler();
   ~KleeHandler();
   llvm::raw_ostream &getInfoStream() const { return *m_infoFile; }
   void incPathsExplored() { m_pathsExplored++; }
@@ -134,15 +102,13 @@ public:
   static std::string getRunTimeLibraryPath(const char *argv0);
 };
 
-KleeHandler::KleeHandler(int argc, char **argv)
+KleeHandler::KleeHandler()
   : m_interpreter(0),
     m_pathWriter(0),
     m_symPathWriter(0),
     m_infoFile(0),
     m_testIndex(0),
-    m_pathsExplored(0),
-    m_argc(argc),
-    m_argv(argv) {
+    m_pathsExplored(0) {
   klee_warning_file = stdout;
   klee_message_file = stdout;
   m_infoFile = openOutputFile("info");
@@ -157,13 +123,13 @@ KleeHandler::~KleeHandler() {
 void KleeHandler::setInterpreter(Interpreter *i) {
   m_interpreter = i;
 
-  if (WritePaths) {
+  if (1) {
     m_pathWriter = new TreeStreamWriter(getOutputFilename("paths.ts"));
     assert(m_pathWriter->good());
     m_interpreter->setPathWriter(m_pathWriter);
   }
 
-  if (WriteSymPaths) {
+  if (1) {
     m_symPathWriter = new TreeStreamWriter(getOutputFilename("symPaths.ts"));
     assert(m_symPathWriter->good());
     m_interpreter->setSymbolicPathWriter(m_symPathWriter);
@@ -205,45 +171,17 @@ llvm::raw_fd_ostream *KleeHandler::openTestFile(const std::string &suffix, unsig
 void KleeHandler::processTestCase(const ExecutionState &state, const char *errorMessage, const char *errorSuffix)
 {
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
-  if (errorMessage)
-    llvm::outs() << "EXITING ON ERROR:\n" << errorMessage << "\n";
   std::vector< std::pair<std::string, std::vector<unsigned char> > > out;
   bool success = m_interpreter->getSymbolicSolution(state, out);
 
     if (!success)
       klee_warning("unable to get symbolic solution, losing test case");
-    double start_time = util::getWallTime();
     unsigned id = ++m_testIndex;
-    if (success) {
-      KTest b;
-      b.numArgs = m_argc;
-      b.args = m_argv;
-      b.symArgvs = 0;
-      b.symArgvLen = 0;
-      b.numObjects = out.size();
-      b.objects = new KTestObject[b.numObjects];
-      assert(b.objects);
-      for (unsigned i=0; i<b.numObjects; i++) {
-        KTestObject *o = &b.objects[i];
-        o->name = const_cast<char*>(out[i].first.c_str());
-        o->numBytes = out[i].second.size();
-        o->bytes = new unsigned char[o->numBytes];
-        assert(o->bytes);
-        std::copy(out[i].second.begin(), out[i].second.end(), o->bytes);
-      }
-
-      if (!kTest_toFile(&b, getOutputFilename(getTestFilename("ktest", id)).c_str())) {
-        klee_warning("unable to write output test case, losing it");
-      }
-
-      for (unsigned i=0; i<b.numObjects; i++)
-        delete[] b.objects[i].bytes;
-      delete[] b.objects;
-    }
+printf("[%s:%d] outsize %d\n", __FUNCTION__, __LINE__, (int)out.size());
+    for (unsigned i=0; i<out.size(); i++)
+       printf("[%s:%d] [%d] = '%s'\n", __FUNCTION__, __LINE__, i, const_cast<char*>(out[i].first.c_str()));
     if (errorMessage) {
-      llvm::raw_ostream *f = openTestFile(errorSuffix, id);
-      *f << errorMessage;
-      delete f;
+       llvm::outs() << "TESTERROR:\n" << errorMessage << "\n";
     }
     if (m_pathWriter) {
       std::vector<unsigned char> concreteBranches;
@@ -254,14 +192,14 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       }
       delete f;
     }
-    if (errorMessage || WritePCs) {
+    if (errorMessage || 1) {
       std::string constraints;
       m_interpreter->getConstraintLog(state, constraints,Interpreter::KQUERY);
       llvm::raw_ostream *f = openTestFile("pc", id);
       *f << constraints;
       delete f;
     }
-    if (WriteCVCs) {
+    if (1) {
       // FIXME: If using Z3 as the core solver the emitted file is actually
       // SMT-LIBv2 not CVC which is a bit confusing
       std::string constraints;
@@ -270,7 +208,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       *f << constraints;
       delete f;
     }
-    if(WriteSMT2s) {
+    if(1) {
       std::string constraints;
         m_interpreter->getConstraintLog(state, constraints, Interpreter::SMTLIB2);
         llvm::raw_ostream *f = openTestFile("smt2", id);
@@ -286,7 +224,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       }
       delete f;
     }
-    if (WriteCov) {
+    if (1) {
       std::map<const std::string*, std::set<unsigned> > cov;
       m_interpreter->getCoveredLines(state, cov);
       llvm::raw_ostream *f = openTestFile("cov", id);
@@ -294,12 +232,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
         for (std::set<unsigned>::iterator it2 = it->second.begin(), ie = it->second.end(); it2 != ie; ++it2)
           *f << *it->first << ":" << *it2 << "\n";
       }
-      delete f;
-    }
-    if (WriteTestInfo) {
-      double elapsed_time = util::getWallTime() - start_time;
-      llvm::raw_ostream *f = openTestFile("info", id);
-      *f << "Time to generate test case: " << elapsed_time << "s\n";
       delete f;
     }
 printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
@@ -359,7 +291,7 @@ printf("\n");
   }
 
   std::string LibraryDir = KleeHandler::getRunTimeLibraryPath(argv[0]);
-  Interpreter::ModuleOptions Opts(LibraryDir.c_str(), /*Optimize=*/OptimizeModule, /*CheckDivZero=*/CheckDivZero, /*CheckOvershift=*/CheckOvershift); 
+  Interpreter::ModuleOptions Opts(LibraryDir.c_str(), OptimizeModule, CheckDivZero, CheckOvershift); 
 
   std::vector<std::string>::iterator libs_it;
   std::vector<std::string>::iterator libs_ie;
@@ -391,7 +323,7 @@ printf("\n");
   } 
   Interpreter::InterpreterOptions IOpts;
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
-  KleeHandler *handler = new KleeHandler(pArgc, pArgv);
+  KleeHandler *handler = new KleeHandler();
 printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
   Interpreter *interpreter = Interpreter::create(IOpts, handler);
   handler->setInterpreter(interpreter);
