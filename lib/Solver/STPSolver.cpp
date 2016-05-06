@@ -87,6 +87,7 @@ STPSolverImpl::STPSolverImpl(bool _useForkedSTP, bool _optimizeDivides)
     : vc(vc_createValidityChecker()),
       builder(new STPBuilder(vc, _optimizeDivides)), timeout(0.0),
       useForkedSTP(_useForkedSTP), runStatusCode(SOLVER_RUN_STATUS_FAILURE) {
+printf("[%s:%d] fork %d\n", __FUNCTION__, __LINE__, useForkedSTP);
   assert(vc && "unable to create validity checker");
   assert(builder && "unable to create STPBuilder");
 
@@ -140,10 +141,12 @@ char *STPSolverImpl::getConstraintLog(const Query &query) {
   vc_printQueryStateToBuffer(vc, builder->getFalse(), &buffer, &length, false);
   vc_pop(vc);
 
+printf("[%s:%d] buffer %s\n", __FUNCTION__, __LINE__, buffer);
   return buffer;
 }
 
 bool STPSolverImpl::computeTruth(const Query &query, bool &isValid) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::vector<const Array *> objects;
   std::vector<std::vector<unsigned char> > values;
   bool hasSolution;
@@ -156,6 +159,7 @@ bool STPSolverImpl::computeTruth(const Query &query, bool &isValid) {
 }
 
 bool STPSolverImpl::computeValue(const Query &query, ref<Expr> &result) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::vector<const Array *> objects;
   std::vector<std::vector<unsigned char> > values;
   bool hasSolution;
@@ -179,6 +183,7 @@ runAndGetCex(::VC vc, STPBuilder *builder, ::VCExpr q,
              const std::vector<const Array *> &objects,
              std::vector<std::vector<unsigned char> > &values,
              bool &hasSolution) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   // XXX I want to be able to timeout here, safely
   hasSolution = !vc_query(vc, q);
 
@@ -216,6 +221,7 @@ runAndGetCexForked(::VC vc, STPBuilder *builder, ::VCExpr q,
                    const std::vector<const Array *> &objects,
                    std::vector<std::vector<unsigned char> > &values,
                    bool &hasSolution, double timeout) {
+//printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   unsigned char *pos = shared_memory_ptr;
   unsigned sum = 0;
   for (std::vector<const Array *>::const_iterator it = objects.begin(),
@@ -321,6 +327,7 @@ runAndGetCexForked(::VC vc, STPBuilder *builder, ::VCExpr q,
 bool STPSolverImpl::computeInitialValues(
     const Query &query, const std::vector<const Array *> &objects,
     std::vector<std::vector<unsigned char> > &values, bool &hasSolution) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   runStatusCode = SOLVER_RUN_STATUS_FAILURE;
 
   TimerStatIncrementer t(stats::queryTime);
@@ -341,6 +348,7 @@ bool STPSolverImpl::computeInitialValues(
     char *buf;
     unsigned long len;
     vc_printQueryStateToBuffer(vc, stp_e, &buf, &len, false);
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     klee_warning("STP query:\n%.*s\n", (unsigned)len, buf);
   }
 
@@ -373,7 +381,9 @@ SolverImpl::SolverRunStatus STPSolverImpl::getOperationStatusCode() {
 }
 
 STPSolver::STPSolver(bool useForkedSTP, bool optimizeDivides)
-    : Solver(new STPSolverImpl(useForkedSTP, optimizeDivides)) {}
+    : Solver(new STPSolverImpl(useForkedSTP, optimizeDivides)) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+}
 
 char *STPSolver::getConstraintLog(const Query &query) {
   return impl->getConstraintLog(query);

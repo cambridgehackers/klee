@@ -293,6 +293,7 @@ Executor::Executor(const InterpreterOptions &opts,
       ? std::min(MaxCoreSolverTime,MaxInstructionTime)
       : std::max(MaxCoreSolverTime,MaxInstructionTime)) {
       
+printf("[%s:%d] timeout %d\n", __FUNCTION__, __LINE__, (int)coreSolverTimeout);
   if (coreSolverTimeout) UseForkedCoreSolver = true;
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
@@ -313,6 +314,7 @@ Executor::Executor(const InterpreterOptions &opts,
 
 const Module *Executor::setModule(llvm::Module *module, 
                                   const ModuleOptions &opts) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   assert(!kmodule && module && "can only register one module"); // XXX gross
   
   kmodule = new KModule(module);
@@ -364,6 +366,7 @@ Executor::~Executor() {
 void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
                                       const Constant *c, 
                                       unsigned offset) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 #if LLVM_VERSION_CODE <= LLVM_VERSION(3, 1)
   TargetData *targetData = kmodule->targetData;
 #else
@@ -1391,6 +1394,7 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   switch (i->getOpcode()) {
     // Control flow
   case Instruction::Ret: {

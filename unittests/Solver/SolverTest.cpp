@@ -101,6 +101,7 @@ void testOpcode(Solver &solver, bool tryBool = true, bool tryZero = true,
 
     if (type > maxWidth) continue;
 
+printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
     for (unsigned i=0; i<sizeof(g_constants)/sizeof(g_constants[0]); i++) {
       int value = g_constants[i];
       if (!tryZero && !value) continue;
@@ -124,15 +125,21 @@ void testOpcode(Solver &solver, bool tryBool = true, bool tryZero = true,
         testOperation<T>(solver, value, type, resultType);
       }
     }
+printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
   }
 }
 
 TEST(SolverTest, Evaluation) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   Solver *solver = klee::createCoreSolver(CoreSolverToUse);
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   solver = createCexCachingSolver(solver);
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   solver = createCachingSolver(solver);
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   solver = createIndependentSolver(solver);
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   testOpcode<SelectExpr>(*solver);
   testOpcode<ZExtExpr>(*solver);

@@ -179,6 +179,7 @@ bool MetaSMTSolverImpl<SolverContext>::computeInitialValues(
     for (ConstraintManager::const_iterator it = query.constraints.begin(),
                                            ie = query.constraints.end();
          it != ie; ++it) {
+printf("[%s:%d] callconstruct\n", __FUNCTION__, __LINE__);
       // assertion(_meta_solver, _builder->construct(*it));
       assumption(_meta_solver, _builder->construct(*it));
     }
@@ -191,10 +192,12 @@ bool MetaSMTSolverImpl<SolverContext>::computeInitialValues(
   if (_useForked) {
     _runStatusCode =
         runAndGetCexForked(query, objects, values, hasSolution, _timeout);
+printf("[%s:%d] afterrunAndGetCexForked %d\n", __FUNCTION__, __LINE__, _runStatusCode);
     success = ((SOLVER_RUN_STATUS_SUCCESS_SOLVABLE == _runStatusCode) ||
                (SOLVER_RUN_STATUS_SUCCESS_UNSOLVABLE == _runStatusCode));
   } else {
     _runStatusCode = runAndGetCex(query.expr, objects, values, hasSolution);
+printf("[%s:%d] afterrunAndGetCexForked %d\n", __FUNCTION__, __LINE__, _runStatusCode);
     success = true;
   }
 
@@ -217,6 +220,7 @@ SolverImpl::SolverRunStatus MetaSMTSolverImpl<SolverContext>::runAndGetCex(
     std::vector<std::vector<unsigned char> > &values, bool &hasSolution) {
 
   // assume the negation of the query
+printf("[%s:%d] callconstruct\n", __FUNCTION__, __LINE__);
   assumption(_meta_solver, _builder->construct(Expr::createIsZero(query_expr)));
   hasSolution = solve(_meta_solver);
 
@@ -291,6 +295,7 @@ MetaSMTSolverImpl<SolverContext>::runAndGetCexForked(
     for (ConstraintManager::const_iterator it = query.constraints.begin(),
                                            ie = query.constraints.end();
          it != ie; ++it) {
+printf("[%s:%d] callconstruct\n", __FUNCTION__, __LINE__);
       assertion(_meta_solver, _builder->construct(*it));
       // assumption(_meta_solver, _builder->construct(*it));
     }
@@ -321,6 +326,7 @@ MetaSMTSolverImpl<SolverContext>::runAndGetCexForked(
 
     // assume the negation of the query
     // can be also asserted instead of assumed as we are in a child process
+printf("[%s:%d] callconstruct\n", __FUNCTION__, __LINE__);
     assumption(_meta_solver,
                _builder->construct(Expr::createIsZero(query.expr)));
     unsigned res = solve(_meta_solver);

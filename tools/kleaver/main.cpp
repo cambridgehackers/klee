@@ -159,6 +159,7 @@ static void PrintInputTokens(const MemoryBuffer *MB) {
 static bool PrintInputAST(const char *Filename,
                           const MemoryBuffer *MB,
                           ExprBuilder *Builder) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::vector<Decl*> Decls;
   Parser *P = Parser::Create(Filename, MB, Builder);
   P->SetMaxErrors(20);
@@ -192,6 +193,7 @@ static bool PrintInputAST(const char *Filename,
 static bool EvaluateInputAST(const char *Filename,
                              const MemoryBuffer *MB,
                              ExprBuilder *Builder) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::vector<Decl*> Decls;
   Parser *P = Parser::Create(Filename, MB, Builder);
   P->SetMaxErrors(20);
@@ -325,6 +327,7 @@ static bool printInputAsSMTLIBv2(const char *Filename,
                              const MemoryBuffer *MB,
                              ExprBuilder *Builder)
 {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 	//Parse the input file
 	std::vector<Decl*> Decls;
 	Parser *P = Parser::Create(Filename, MB, Builder);

@@ -76,6 +76,7 @@ STPArrayExprHash::~STPArrayExprHash() {
 
 STPBuilder::STPBuilder(::VC _vc, bool _optimizeDivides)
   : vc(_vc), optimizeDivides(_optimizeDivides) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
 }
 
@@ -90,6 +91,7 @@ STPBuilder::~STPBuilder() {
    you call vc_DeleteExpr on them. */
 
 ::VCExpr STPBuilder::buildVar(const char *name, unsigned width) {
+printf("[%s:%d] name %s width %d\n", __FUNCTION__, __LINE__, name, width);
   // XXX don't rebuild if this stuff cons's
   ::Type t = (width==1) ? vc_boolType(vc) : vc_bvType(vc, width);
   ::VCExpr res = vc_varExpr(vc, const_cast<char*>(name), t);
@@ -499,6 +501,7 @@ ExprHandle STPBuilder::construct(ref<Expr> e, int *width_out) {
 /** if *width_out!=1 then result is a bitvector,
     otherwise it is a bool */
 ExprHandle STPBuilder::constructActual(ref<Expr> e, int *width_out) {
+//printf("[%s:%d] %d\n", __FUNCTION__, __LINE__, e->getKind());
   int width;
   if (!width_out) width_out = &width;
 

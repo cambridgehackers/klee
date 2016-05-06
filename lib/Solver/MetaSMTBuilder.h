@@ -624,9 +624,10 @@ typename SolverContext::result_type MetaSMTBuilder<SolverContext>::constructActu
     
     ++stats::queryConstructs;
     
-//     llvm::errs() << "Constructing expression ";
-//     ExprPPrinter::printSingleExpr(llvm::errs(), e);
-//     llvm::errs() << "\n";
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+     llvm::errs() << "Constructing expression ";
+     ExprPPrinter::printSingleExpr(llvm::errs(), e);
+     llvm::errs() << "\n";
 
     switch (e->getKind()) {
 

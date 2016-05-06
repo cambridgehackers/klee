@@ -378,5 +378,6 @@ void CexCachingSolver::setCoreSolverTimeout(double timeout) {
 ///
 
 Solver *klee::createCexCachingSolver(Solver *_solver) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   return new Solver(new CexCachingSolver(_solver));
 }

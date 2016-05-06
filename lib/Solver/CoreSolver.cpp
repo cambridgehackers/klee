@@ -67,6 +67,7 @@ static klee::Solver *handleMetaSMT() {
 namespace klee {
 
 Solver *createCoreSolver(CoreSolverType cst) {
+printf("[%s:%d] cst %d\n", __FUNCTION__, __LINE__, cst);
   switch (cst) {
   case STP_SOLVER:
 #ifdef ENABLE_STP

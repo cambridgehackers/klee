@@ -34,6 +34,7 @@ void Solver::setCoreSolverTimeout(double timeout) {
 }
 
 bool Solver::evaluate(const Query& query, Validity &result) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   assert(query.expr->getWidth() == Expr::Bool && "Invalid expression type!");
 
   // Maintain invariants implementations expect.
@@ -98,6 +99,7 @@ Solver::getInitialValues(const Query& query,
                          const std::vector<const Array*> &objects,
                          std::vector< std::vector<unsigned char> > &values) {
   bool hasSolution;
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   bool success =
     impl->computeInitialValues(query, objects, values, hasSolution);
   // FIXME: Propogate this out.
