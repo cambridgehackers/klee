@@ -67,9 +67,6 @@ namespace {
   InputArgv(cl::ConsumeAfter, cl::desc("<program arguments>..."));
 
   cl::opt<bool>
-  NoOutput("no-output", cl::desc("Don't generate test files"));
-
-  cl::opt<bool>
   WarnAllExternals("warn-all-externals", cl::desc("Give initial warning for all externals."));
 
   cl::opt<bool>
@@ -188,23 +185,14 @@ KleeHandler::KleeHandler(int argc, char **argv)
 
   klee_message("output directory is \"%s\"", m_outputDirectory.c_str());
 
-  // open warnings.txt
-  std::string file_path = getOutputFilename("warnings.txt");
-  if ((klee_warning_file = fopen(file_path.c_str(), "w")) == NULL)
-    klee_error("cannot open file \"%s\": %s", file_path.c_str(), strerror(errno)); 
-  // open messages.txt
-  file_path = getOutputFilename("messages.txt");
-  if ((klee_message_file = fopen(file_path.c_str(), "w")) == NULL)
-    klee_error("cannot open file \"%s\": %s", file_path.c_str(), strerror(errno)); 
-  // open info
+  klee_warning_file = stdout;
+  klee_message_file = stdout;
   m_infoFile = openOutputFile("info");
 }
 
 KleeHandler::~KleeHandler() {
   if (m_pathWriter) delete m_pathWriter;
   if (m_symPathWriter) delete m_symPathWriter;
-  fclose(klee_warning_file);
-  fclose(klee_message_file);
   delete m_infoFile;
 }
 
@@ -259,22 +247,15 @@ llvm::raw_fd_ostream *KleeHandler::openTestFile(const std::string &suffix, unsig
 
 /* Outputs all files (.ktest, .pc, .cov etc.) describing a test case */
 void KleeHandler::processTestCase(const ExecutionState &state, const char *errorMessage, const char *errorSuffix) {
-  if (errorMessage && ExitOnError) {
+  if (errorMessage)
     llvm::errs() << "EXITING ON ERROR:\n" << errorMessage << "\n";
-    exit(1);
-  }
-
-  if (!NoOutput) {
-    std::vector< std::pair<std::string, std::vector<unsigned char> > > out;
-    bool success = m_interpreter->getSymbolicSolution(state, out);
+  std::vector< std::pair<std::string, std::vector<unsigned char> > > out;
+  bool success = m_interpreter->getSymbolicSolution(state, out);
 
     if (!success)
       klee_warning("unable to get symbolic solution, losing test case");
-
     double start_time = util::getWallTime();
-
     unsigned id = ++m_testIndex;
-
     if (success) {
       KTest b;
       b.numArgs = m_argc;
@@ -301,13 +282,11 @@ void KleeHandler::processTestCase(const ExecutionState &state, const char *error
         delete[] b.objects[i].bytes;
       delete[] b.objects;
     }
-
     if (errorMessage) {
       llvm::raw_ostream *f = openTestFile(errorSuffix, id);
       *f << errorMessage;
       delete f;
     }
-
     if (m_pathWriter) {
       std::vector<unsigned char> concreteBranches;
       m_pathWriter->readStream(m_interpreter->getPathStreamID(state), concreteBranches);
@@ -317,7 +296,6 @@ void KleeHandler::processTestCase(const ExecutionState &state, const char *error
       }
       delete f;
     }
-
     if (errorMessage || WritePCs) {
       std::string constraints;
       m_interpreter->getConstraintLog(state, constraints,Interpreter::KQUERY);
@@ -325,7 +303,6 @@ void KleeHandler::processTestCase(const ExecutionState &state, const char *error
       *f << constraints;
       delete f;
     }
-
     if (WriteCVCs) {
       // FIXME: If using Z3 as the core solver the emitted file is actually
       // SMT-LIBv2 not CVC which is a bit confusing
@@ -335,7 +312,6 @@ void KleeHandler::processTestCase(const ExecutionState &state, const char *error
       *f << constraints;
       delete f;
     }
-
     if(WriteSMT2s) {
       std::string constraints;
         m_interpreter->getConstraintLog(state, constraints, Interpreter::SMTLIB2);
@@ -343,7 +319,6 @@ void KleeHandler::processTestCase(const ExecutionState &state, const char *error
         *f << constraints;
         delete f;
     }
-
     if (m_symPathWriter) {
       std::vector<unsigned char> symbolicBranches;
       m_symPathWriter->readStream(m_interpreter->getSymbolicPathStreamID(state), symbolicBranches);
@@ -353,7 +328,6 @@ void KleeHandler::processTestCase(const ExecutionState &state, const char *error
       }
       delete f;
     }
-
     if (WriteCov) {
       std::map<const std::string*, std::set<unsigned> > cov;
       m_interpreter->getCoveredLines(state, cov);
@@ -364,14 +338,12 @@ void KleeHandler::processTestCase(const ExecutionState &state, const char *error
       }
       delete f;
     }
-
     if (WriteTestInfo) {
       double elapsed_time = util::getWallTime() - start_time;
       llvm::raw_ostream *f = openTestFile("info", id);
       *f << "Time to generate test case: " << elapsed_time << "s\n";
       delete f;
     }
-  }
 }
 
 std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
@@ -392,27 +364,14 @@ std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
 //===----------------------------------------------------------------------===//
 // main Driver function
 //
-static void parseArguments(int argc, char **argv) { 
+static void parseArguments(int argc, char **argv)
+{ 
   cl::SetVersionPrinter(klee::printVersion); 
   cl::ParseCommandLineOptions(argc, (char **)argv, " klee\n"); // removes // warning
 }
 
-// returns the end of the string put in buf
-static char *format_tdiff(char *buf, long seconds)
+int main(int argc, char **argv, char **envp)
 {
-  assert(seconds >= 0);
-
-  long minutes = seconds / 60;  seconds %= 60;
-  long hours   = minutes / 60;  minutes %= 60;
-  long days    = hours   / 24;  hours   %= 24;
-
-  buf = strrchr(buf, '\0');
-  if (days > 0) buf += sprintf(buf, "%ld days, ", days);
-  buf += sprintf(buf, "%02ld:%02ld:%02ld", hours, minutes, seconds);
-  return buf;
-}
-
-int main(int argc, char **argv, char **envp) {
 printf("[%s:%d]klee: ", __FUNCTION__, __LINE__);
 for (int i = 0; i < argc; i++)
     printf("; %s", argv[i]);
@@ -477,30 +436,11 @@ printf("\n");
 printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
   Interpreter *interpreter = Interpreter::create(IOpts, handler);
   handler->setInterpreter(interpreter);
-
-  for (int i=0; i<argc; i++) {
-    llvm::outs() << argv[i] << (i+1<argc ? " ":"\n");
-  }
-  llvm::outs() << "PID: " << getpid() << "\n"; 
   const Module *finalModule = interpreter->setModule(mainModule, Opts);
-
-  char buf[256];
-  time_t t[2];
-  t[0] = time(NULL);
-  strftime(buf, sizeof(buf), "Started: %Y-%m-%d %H:%M:%S\n", localtime(&t[0]));
-  llvm::outs() << buf;
 
 printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
   interpreter->runFunctionAsMain(mainFn, pArgc, pArgv, pEnvp);
 printf("[%s:%d] after runFunctionAsMain\n", __FUNCTION__, __LINE__);
-
-  t[1] = time(NULL);
-  strftime(buf, sizeof(buf), "Finished: %Y-%m-%d %H:%M:%S\n", localtime(&t[1]));
-  llvm::outs() << buf;
-
-  strcpy(buf, "Elapsed: ");
-  strcpy(format_tdiff(buf, t[1] - t[0]), "\n");
-  llvm::outs() << buf;
 
   // Free all the args.
   for (unsigned i=0; i<InputArgv.size()+1; i++)
