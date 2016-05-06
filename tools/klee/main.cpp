@@ -293,7 +293,16 @@ printf("\n");
     return -1;
   }
 
-  // FIXME: Change me to std types.
+  Interpreter::InterpreterOptions IOpts;
+  IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
+  KleeHandler *handler = new KleeHandler();
+printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
+  Interpreter *interpreter = Interpreter::create(IOpts, handler);
+  handler->setInterpreter(interpreter);
+  const Module *finalModule = interpreter->setModule(mainModule, Opts);
+
+printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
+  {
   int pArgc = InputArgv.size() + 1;
   char **pArgv = new char *[pArgc];
   char **pEnvp = envp;
@@ -306,25 +315,9 @@ printf("\n");
     pArg[size - 1] = 0; 
     pArgv[i] = pArg;
   } 
-  Interpreter::InterpreterOptions IOpts;
-  IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
-  KleeHandler *handler = new KleeHandler();
-printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
-  Interpreter *interpreter = Interpreter::create(IOpts, handler);
-  handler->setInterpreter(interpreter);
-  const Module *finalModule = interpreter->setModule(mainModule, Opts);
-
-printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
   interpreter->runFunctionAsMain(mainFn, pArgc, pArgv, pEnvp);
+  }
 printf("[%s:%d] after runFunctionAsMain\n", __FUNCTION__, __LINE__);
-
-  // Free all the args.
-  for (unsigned i=0; i<InputArgv.size()+1; i++)
-    delete[] pArgv[i];
-  delete[] pArgv;
-
-  delete interpreter;
-
   uint64_t queries = *theStatisticManager->getStatisticByName("Queries");
   uint64_t queriesValid = *theStatisticManager->getStatisticByName("QueriesValid");
   uint64_t queriesInvalid = *theStatisticManager->getStatisticByName("QueriesInvalid");
@@ -343,9 +336,6 @@ printf("[%s:%d] after runFunctionAsMain\n", __FUNCTION__, __LINE__);
     << "KLEE: done: valid queries = " << queriesValid << "\n"
     << "KLEE: done: invalid queries = " << queriesInvalid << "\n"
     << "KLEE: done: query cex = " << queryCounterexamples << "\n";
-
-  llvm::outs() << "\n";
-  llvm::outs() << "KLEE: done: total instructions = " << instructions << "\n";
-  delete handler;
+  llvm::outs() << "\nKLEE: done: total instructions = " << instructions << "\n";
   return 0;
 }
