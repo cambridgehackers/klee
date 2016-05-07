@@ -66,7 +66,6 @@
 using namespace llvm;
 using namespace klee;
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
 /// Based on GetAllUndefinedSymbols() from LLVM3.2
 ///
 /// GetAllUndefinedSymbols - calculates the set of undefined symbols that still
@@ -81,8 +80,9 @@ using namespace klee;
 ///  UndefinedSymbols - A set of C++ strings containing the name of all
 ///                     undefined symbols.
 ///
-static void
-GetAllUndefinedSymbols(Module *M, std::set<std::string> &UndefinedSymbols) {
+void
+klee::GetAllUndefinedSymbols(llvm::Module *M, std::set<std::string> &UndefinedSymbols) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   static const std::string llvmIntrinsicPrefix="llvm.";
   std::set<std::string> DefinedSymbols;
   UndefinedSymbols.clear();
@@ -94,11 +94,7 @@ GetAllUndefinedSymbols(Module *M, std::set<std::string> &UndefinedSymbols) {
       if (I->isDeclaration())
         UndefinedSymbols.insert(I->getName());
       else if (!I->hasLocalLinkage()) {
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
-            assert(!I->hasDLLImportLinkage() && "Found dllimported non-external symbol!");
-#else
             assert(!I->hasDLLImportStorageClass() && "Found dllimported non-external symbol!");
-#endif
         DefinedSymbols.insert(I->getName());
       }
     }
@@ -109,11 +105,7 @@ GetAllUndefinedSymbols(Module *M, std::set<std::string> &UndefinedSymbols) {
       if (I->isDeclaration())
         UndefinedSymbols.insert(I->getName());
       else if (!I->hasLocalLinkage()) {
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
-            assert(!I->hasDLLImportLinkage() && "Found dllimported non-external symbol!");
-#else
             assert(!I->hasDLLImportStorageClass() && "Found dllimported non-external symbol!");
-#endif
         DefinedSymbols.insert(I->getName());
       }
     }
@@ -199,6 +191,7 @@ static bool linkBCA(object::Archive* archive, Module* composite, std::string& er
   llvm::raw_string_ostream SS(errorMessage);
   std::vector<Module*> archiveModules;
 
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   // Is this efficient? Could we use StringRef instead?
   std::set<std::string> undefinedSymbols;
   GetAllUndefinedSymbols(composite, undefinedSymbols);
@@ -392,163 +385,51 @@ static bool linkBCA(object::Archive* archive, Module* composite, std::string& er
   return true;
 
 }
-#endif // LLVM 3.3+
 
-Module *klee::linkWithLibrary(Module *module, 
-                              const std::string &libraryName) {
+Module *klee::linkWithLibrary(Module *module, const std::string &libraryName) {
   KLEE_DEBUG_WITH_TYPE("klee_linker", dbgs() << "Linking file " << libraryName << "\n");
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
   if (!sys::fs::exists(libraryName)) {
-    klee_error("Link with library %s failed. No such file.",
-        libraryName.c_str());
+    klee_error("Link with library %s failed. No such file.", libraryName.c_str());
   }
-#endif
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-  ErrorOr<std::unique_ptr<MemoryBuffer> > Buffer =
-      MemoryBuffer::getFile(libraryName);
+  ErrorOr<std::unique_ptr<MemoryBuffer> > Buffer = MemoryBuffer::getFile(libraryName);
   std::error_code ec;
   if ((ec = Buffer.getError())) {
-    klee_error("Link with library %s failed: %s", libraryName.c_str(),
-               ec.message().c_str());
+    klee_error("Link with library %s failed: %s", libraryName.c_str(), ec.message().c_str());
   }
 
   sys::fs::file_magic magic =
       sys::fs::identify_magic(Buffer.get()->getBuffer());
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
   MemoryBufferRef buff = Buffer.get()->getMemBufferRef();
-#else // LLVM 3.5
-  MemoryBuffer *buff = Buffer->get();
-#endif
   LLVMContext &Context = getGlobalContext();
   std::string ErrorMessage;
 
   if (magic == sys::fs::file_magic::bitcode) {
-
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
     ErrorOr<std::unique_ptr<Module> > Result = parseBitcodeFile(buff, Context);
-
     if ((ec = Buffer.getError()) || Linker::LinkModules(module, Result->get()))
-      klee_error("Link with library %s failed: %s", libraryName.c_str(),
-                 ec.message().c_str());
-#else // LLVM 3.5, 3.6
-    ErrorOr<Module *> Result = parseBitcodeFile(buff, Context);
-#if LLVM_VERSION_CODE == LLVM_VERSION(3, 6)
-    if ((ec = Buffer.getError()) || Linker::LinkModules(module, Result.get()))
-#else // LLVM 3.5
-    if ((ec = Buffer.getError()) ||
-        Linker::LinkModules(module, Result.get(), Linker::DestroySource,
-                            &ErrorMessage))
-#endif
-      klee_error("Link with library %s failed: %s", libraryName.c_str(),
-                 ec.message().c_str());
-// unique_ptr owns the Module, we don't have to delete it
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 7)
-    delete Result.get();
-#endif
-#endif
-
+      klee_error("Link with library %s failed: %s", libraryName.c_str(), ec.message().c_str());
   } else if (magic == sys::fs::file_magic::archive) {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-    ErrorOr<std::unique_ptr<object::Binary> > arch =
-        object::createBinary(buff, &Context);
-#else // LLVM 3.5
-    ErrorOr<object::Binary *> arch =
-        object::createBinary(std::move(Buffer.get()), &Context);
-#endif
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+    ErrorOr<std::unique_ptr<object::Binary> > arch = object::createBinary(buff, &Context);
     if ((ec = arch.getError()))
-      klee_error("Link with library %s failed: %s", libraryName.c_str(),
-                 arch.getError().message().c_str());
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
+      klee_error("Link with library %s failed: %s", libraryName.c_str(), arch.getError().message().c_str());
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     if (object::Archive *a = dyn_cast<object::Archive>(arch->get())) {
-#else // LLVM 3.5
-    if (object::Archive *a = dyn_cast<object::Archive>(arch.get())) {
-#endif
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       // Handle in helper
       if (!linkBCA(a, module, ErrorMessage))
-        klee_error("Link with library %s failed: %s", libraryName.c_str(),
-                   ErrorMessage.c_str());
+        klee_error("Link with library %s failed: %s", libraryName.c_str(), ErrorMessage.c_str());
     } else {
-      klee_error("Link with library %s failed: Cast to archive failed",
-                 libraryName.c_str());
+      klee_error("Link with library %s failed: Cast to archive failed", libraryName.c_str());
     }
-
   } else if (magic.is_object()) {
     std::unique_ptr<object::Binary> obj;
     if (object::ObjectFile *o = dyn_cast<object::ObjectFile>(obj.get())) {
-      klee_warning("Link with library: Object file %s in archive %s found. "
-                   "Currently not supported.",
-                   o->getFileName().data(), libraryName.c_str());
+      klee_warning("Link with library: Object file %s in archive %s found. " "Currently not supported.", o->getFileName().data(), libraryName.c_str());
     }
   } else {
-    klee_error("Link with library %s failed: Unrecognized file type.",
-               libraryName.c_str());
+    klee_error("Link with library %s failed: Unrecognized file type.", libraryName.c_str());
   }
   return module;
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
-  error_code ec;
-  OwningPtr<MemoryBuffer> Buffer;
-  if (ec = MemoryBuffer::getFile(libraryName, Buffer)) {
-    klee_error("Link with library %s failed: %s", libraryName.c_str(),
-               ec.message().c_str());
-  }
-
-  sys::fs::file_magic magic = sys::fs::identify_magic(Buffer->getBuffer());
-
-  LLVMContext &Context = getGlobalContext();
-  std::string ErrorMessage;
-
-  if (magic == sys::fs::file_magic::bitcode) {
-    Module *Result = 0;
-    Result = ParseBitcodeFile(Buffer.get(), Context, &ErrorMessage);
-
-    if (!Result || Linker::LinkModules(module, Result, Linker::DestroySource,
-                                       &ErrorMessage))
-      klee_error("Link with library %s failed: %s", libraryName.c_str(),
-                 ErrorMessage.c_str());
-
-    delete Result;
-
-  } else if (magic == sys::fs::file_magic::archive) {
-    OwningPtr<object::Binary> arch;
-    if (ec = object::createBinary(Buffer.take(), arch))
-      klee_error("Link with library %s failed: %s", libraryName.c_str(),
-                 ec.message().c_str());
-
-    if (object::Archive *a = dyn_cast<object::Archive>(arch.get())) {
-      // Handle in helper
-      if (!linkBCA(a, module, ErrorMessage))
-        klee_error("Link with library %s failed: %s", libraryName.c_str(),
-                   ErrorMessage.c_str());
-    } else {
-      klee_error("Link with library %s failed: Cast to archive failed",
-                 libraryName.c_str());
-    }
-
-  } else if (magic.is_object()) {
-    OwningPtr<object::Binary> obj;
-    if (object::ObjectFile *o = dyn_cast<object::ObjectFile>(obj.get())) {
-      klee_warning("Link with library: Object file %s in archive %s found. "
-                   "Currently not supported.",
-                   o->getFileName().data(), libraryName.c_str());
-    }
-  } else {
-    klee_error("Link with library %s failed: Unrecognized file type.",
-               libraryName.c_str());
-  }
-
-  return module;
-#else // LLVM 3.2-
-  Linker linker("klee", module, false);
-
-  llvm::sys::Path libraryPath(libraryName);
-  bool native = false;
-
-  if (linker.LinkInFile(libraryPath, native)) {
-    klee_error("Linking library %s failed", libraryName.c_str());
-  }
-
-  return linker.releaseModule();
-#endif
 }
 
 

@@ -47,6 +47,7 @@
 #include "klee/Internal/System/Time.h"
 #include "klee/Internal/System/MemoryUsage.h"
 #include "klee/SolverStats.h"
+#include "klee/Internal/Support/ModuleUtil.h"
 
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
 #include "llvm/IR/Function.h"
@@ -331,10 +332,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   specialFunctionHandler->bind();
 
   if (StatsTracker::useStatistics()) {
-    statsTracker = 
-      new StatsTracker(*this,
-                       interpreterHandler->getOutputFilename("assembly.ll"),
-                       userSearcherRequiresMD2U());
+printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
+    statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly.ll"), userSearcherRequiresMD2U());
   }
   
   return module;
@@ -1692,7 +1691,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   case Instruction::SDiv: {
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = SDivExpr::create(left, right);
+    ref<Expr> result = right; //jca SDivExpr::create(left, right);
     bindLocal(ki, state, result);
     break;
   }
@@ -2557,6 +2556,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      const llvm::Twine &messaget,
                                      const char *suffix,
                                      const llvm::Twine &info) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::string message = messaget.str();
   static std::set< std::pair<Instruction*, std::string> > emittedErrors;
   Instruction * lastInst;
@@ -2650,8 +2650,9 @@ void Executor::callExternalFunction(ExecutionState &state,
 
   state.addressSpace.copyOutConcretes();
 
-  if (!SuppressExternalWarnings) {
-
+  {
+printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
+function->dump();
     std::string TmpStr;
     llvm::raw_string_ostream os(TmpStr);
     os << "calling external: " << function->getName().str() << "(";
@@ -2667,16 +2668,12 @@ void Executor::callExternalFunction(ExecutionState &state,
     else
       klee_warning_once(function, "%s", os.str().c_str());
   }
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
   // MCJIT needs unique module, so we create quick external dispatcher for call.
   // reference:
   // http://blog.llvm.org/2013/07/using-mcjit-with-kaleidoscope-tutorial.html
   ExternalDispatcher *e = new ExternalDispatcher();
   bool success = e->executeCall(function, target->inst, args);
   delete e;
-#else
-  bool success = externalDispatcher->executeCall(function, target->inst, args);
-#endif
   if (!success) {
     terminateStateOnError(state, "failed external call: " + function->getName(),
                           "external.err");
@@ -3129,6 +3126,7 @@ void Executor::runFunctionAsMain(Function *f,
 				 char **argv,
 				 char **envp) {
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
+f->dump();
   std::vector<ref<Expr> > arguments;
 
   // force deterministic initialization of memory objects
@@ -3167,6 +3165,8 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       }
     }
   }
+printf("[%s:%d] newwwww\n", __FUNCTION__, __LINE__);
+kf->function->dump();
 
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
   
@@ -3209,9 +3209,11 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
 
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
-printf("[%s:%d] before run\n", __FUNCTION__, __LINE__);
+printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
+    std::set<std::string> undefinedSymbols;
+    GetAllUndefinedSymbols(kf->function->getParent(), undefinedSymbols);
   run(*state);
-printf("[%s:%d] after run\n", __FUNCTION__, __LINE__);
+printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   delete processTree;
   processTree = 0;
 

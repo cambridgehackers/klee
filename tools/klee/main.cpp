@@ -67,9 +67,6 @@ namespace {
   OptimizeModule("optimize", cl::desc("Optimize before execution"), cl::init(false));
 
   cl::opt<bool>
-  CheckDivZero("check-div-zero", cl::desc("Inject checks for division-by-zero"), cl::init(true));
-
-  cl::opt<bool>
   CheckOvershift("check-overshift", cl::desc("Inject checks for overshift"), cl::init(true));
 
   cl::list<std::string>
@@ -78,8 +75,14 @@ namespace {
   cl::opt<unsigned>
   MakeConcreteSymbolic("make-concrete-symbolic", cl::desc("Probabilistic rate at which to make concrete reads symbolic, " "i.e. approximately 1 in n concrete reads will be made symbolic (0=off, 1=all).  " "Used for testing."), cl::init(0));
 }
+  static bool CheckDivZero = true;
 
 /***/
+extern "C" void zzklee_div_zero_check(long long z) {
+  if (z == 0)
+    printf(__FILE__ ": divide by zero div.err\n");
+    //klee_report_error(__FILE__, __LINE__, "divide by zero", "div.err");
+}
 
 class KleeHandler : public InterpreterHandler {
 private:
@@ -174,7 +177,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   bool success = m_interpreter->getSymbolicSolution(state, out);
 
     if (!success)
-      klee_warning("unable to get symbolic solution, losing test case");
+      klee_error("unable to get symbolic solution, losing test case");
     unsigned id = ++m_testIndex;
 printf("[%s:%d] outsize %d\n", __FUNCTION__, __LINE__, (int)out.size());
     for (unsigned i=0; i<out.size(); i++)
@@ -317,7 +320,10 @@ printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
   } 
   interpreter->runFunctionAsMain(mainFn, pArgc, pArgv, pEnvp);
   }
-printf("[%s:%d] after runFunctionAsMain\n", __FUNCTION__, __LINE__);
+  Function *zcfun = mainModule->getFunction("klee_div_zero_check");
+printf("[%s:%d] after runFunctionAsMain %p\n", __FUNCTION__, __LINE__, zcfun);
+if (zcfun)
+   zcfun->dump();
   uint64_t queries = *theStatisticManager->getStatisticByName("Queries");
   uint64_t queriesValid = *theStatisticManager->getStatisticByName("QueriesValid");
   uint64_t queriesInvalid = *theStatisticManager->getStatisticByName("QueriesInvalid");

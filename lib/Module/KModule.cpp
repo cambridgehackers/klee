@@ -106,11 +106,7 @@ namespace {
 
 KModule::KModule(Module *_module) 
   : module(_module),
-#if LLVM_VERSION_CODE <= LLVM_VERSION(3, 1)
-    targetData(new TargetData(module)),
-#else
     targetData(new DataLayout(module)),
-#endif
     kleeMergeFn(0),
     infos(0),
     constantTable(0) {
@@ -159,15 +155,9 @@ static Function *getStubFunctionForCtorList(Module *m,
   if (arr) {
     for (unsigned i=0; i<arr->getNumOperands(); i++) {
       ConstantStruct *cs = cast<ConstantStruct>(arr->getOperand(i));
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
-      assert(cs->getNumOperands() == 2 &&
-             "unexpected element in ctor initializer list");
-#else
-      // There is a third *optional* element in global_ctor elements (``i8
-      // @data``).
+      // There is a third *optional* element in global_ctor elements (``i8 // @data``).
       assert((cs->getNumOperands() == 2 || cs->getNumOperands() == 3) &&
              "unexpected element in ctor initializer list");
-#endif
       Constant *fp = cs->getOperand(1);      
       if (!fp->isNullValue()) {
         if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(fp))
@@ -210,54 +200,23 @@ static void injectStaticConstructorsAndDestructors(Module *m) {
   }
 }
 
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 3)
-static void forceImport(Module *m, const char *name, LLVM_TYPE_Q Type *retType,
-                        ...) {
-  // If module lacks an externally visible symbol for the name then we
-  // need to create one. We have to look in the symbol table because
-  // we want to check everything (global variables, functions, and
-  // aliases).
-
-  Value *v = m->getValueSymbolTable().lookup(name);
-  GlobalValue *gv = dyn_cast_or_null<GlobalValue>(v);
-
-  if (!gv || gv->hasInternalLinkage()) {
-    va_list ap;
-
-    va_start(ap, retType);
-    std::vector<LLVM_TYPE_Q Type *> argTypes;
-    while (LLVM_TYPE_Q Type *t = va_arg(ap, LLVM_TYPE_Q Type*))
-      argTypes.push_back(t);
-    va_end(ap);
-
-    m->getOrInsertFunction(name, FunctionType::get(retType, argTypes, false));
-  }
-}
-#endif
-
-
 void KModule::addInternalFunction(const char* functionName){
   Function* internalFunction = module->getFunction(functionName);
   if (!internalFunction) {
-    KLEE_DEBUG(klee_warning(
-        "Failed to add internal function %s. Not found.", functionName));
+    KLEE_DEBUG(klee_warning( "Failed to add internal function %s. Not found.", functionName));
     return ;
   }
   KLEE_DEBUG(klee_message("Added function %s.",functionName));
   internalFunctions.insert(internalFunction);
 }
 
-void KModule::prepare(const Interpreter::ModuleOptions &opts,
-                      InterpreterHandler *ih) {
+void KModule::prepare(const Interpreter::ModuleOptions &opts, InterpreterHandler *ih) {
+printf("[%s:%d] before\n", __FUNCTION__, __LINE__);
   if (!MergeAtExit.empty()) {
     Function *mergeFn = module->getFunction("klee_merge");
     if (!mergeFn) {
-      LLVM_TYPE_Q llvm::FunctionType *Ty = 
-        FunctionType::get(Type::getVoidTy(getGlobalContext()), 
-                          std::vector<LLVM_TYPE_Q Type*>(), false);
-      mergeFn = Function::Create(Ty, GlobalVariable::ExternalLinkage,
-				 "klee_merge",
-				 module);
+      LLVM_TYPE_Q llvm::FunctionType *Ty = FunctionType::get(Type::getVoidTy(getGlobalContext()), std::vector<LLVM_TYPE_Q Type*>(), false);
+      mergeFn = Function::Create(Ty, GlobalVariable::ExternalLinkage, "klee_merge", module);
     }
 
     for (cl::list<std::string>::iterator it = MergeAtExit.begin(), 
@@ -265,21 +224,15 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
       std::string &name = *it;
       Function *f = module->getFunction(name);
       if (!f) {
-        klee_error("cannot insert merge-at-exit for: %s (cannot find)",
-                   name.c_str());
+        klee_error("cannot insert merge-at-exit for: %s (cannot find)", name.c_str());
       } else if (f->isDeclaration()) {
-        klee_error("cannot insert merge-at-exit for: %s (external)",
-                   name.c_str());
+        klee_error("cannot insert merge-at-exit for: %s (external)", name.c_str());
       }
 
       BasicBlock *exit = BasicBlock::Create(getGlobalContext(), "exit", f);
       PHINode *result = 0;
       if (f->getReturnType() != Type::getVoidTy(getGlobalContext()))
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 0)
         result = PHINode::Create(f->getReturnType(), 0, "retval", exit);
-#else
-		result = PHINode::Create(f->getReturnType(), "retval", exit);
-#endif
       CallInst::Create(mergeFn, "", exit);
       ReturnInst::Create(getGlobalContext(), result, exit);
 
@@ -304,11 +257,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   // invariant transformations that we will end up doing later so that
   // optimize is seeing what is as close as possible to the final
   // module.
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
   legacy::PassManager pm;
-#else
-  PassManager pm;
-#endif
   pm.add(new RaiseAsmPass());
   if (opts.CheckDivZero) pm.add(new DivCheckPass());
   if (opts.CheckOvershift) pm.add(new OvershiftCheckPass());
@@ -317,32 +266,12 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   // deleted (via RAUW). This can be removed once LLVM fixes this
   // issue.
   pm.add(new IntrinsicCleanerPass(*targetData, false));
+printf("[%s:%d] before run newstufffffff\n", __FUNCTION__, __LINE__);
   pm.run(*module);
+printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 
   if (opts.Optimize)
     Optimize(module);
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 3)
-  // Force importing functions required by intrinsic lowering. Kind of
-  // unfortunate clutter when we don't need them but we won't know
-  // that until after all linking and intrinsic lowering is
-  // done. After linking and passes we just try to manually trim these
-  // by name. We only add them if such a function doesn't exist to
-  // avoid creating stale uses.
-
-  LLVM_TYPE_Q llvm::Type *i8Ty = Type::getInt8Ty(getGlobalContext());
-  forceImport(module, "memcpy", PointerType::getUnqual(i8Ty),
-              PointerType::getUnqual(i8Ty),
-              PointerType::getUnqual(i8Ty),
-              targetData->getIntPtrType(getGlobalContext()), (Type*) 0);
-  forceImport(module, "memmove", PointerType::getUnqual(i8Ty),
-              PointerType::getUnqual(i8Ty),
-              PointerType::getUnqual(i8Ty),
-              targetData->getIntPtrType(getGlobalContext()), (Type*) 0);
-  forceImport(module, "memset", PointerType::getUnqual(i8Ty),
-              PointerType::getUnqual(i8Ty),
-              Type::getInt32Ty(getGlobalContext()),
-              targetData->getIntPtrType(getGlobalContext()), (Type*) 0);
-#endif
   // FIXME: Missing force import for various math functions.
 
   // FIXME: Find a way that we can test programs without requiring
@@ -351,13 +280,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
 
 #if 0 //jca
   SmallString<128> LibPath(opts.LibraryDir);
-  llvm::sys::path::append(LibPath,
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3,3)
-      "kleeRuntimeIntrinsic.bc"
-#else
-      "libkleeRuntimeIntrinsic.bca"
-#endif
-    );
+  llvm::sys::path::append(LibPath, "kleeRuntimeIntrinsic.bc");
   module = linkWithLibrary(module, LibPath.str());
 #endif
 
@@ -378,11 +301,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   // linked in something with intrinsics but any external calls are
   // going to be unresolved. We really need to handle the intrinsics
   // directly I think?
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
   legacy::PassManager pm3;
-#else
-  PassManager pm3;
-#endif
   pm3.add(createCFGSimplificationPass());
   switch(SwitchType) {
   case eSwitchTypeInternal: break;
@@ -393,22 +312,12 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   pm3.add(new IntrinsicCleanerPass(*targetData));
   pm3.add(new PhiCleanerPass());
   pm3.run(*module);
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 3)
-  // For cleanliness see if we can discard any of the functions we
-  // forced to import.
-  Function *f;
-  f = module->getFunction("memcpy");
-  if (f && f->use_empty()) f->eraseFromParent();
-  f = module->getFunction("memmove");
-  if (f && f->use_empty()) f->eraseFromParent();
-  f = module->getFunction("memset");
-  if (f && f->use_empty()) f->eraseFromParent();
-#endif
 
   // Write out the .ll assembly file. We truncate long lines to work
   // around a kcachegrind parsing bug (it puts them on new lines), so
   // that source browsing works.
   if (OutputSource) {
+printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
     llvm::raw_fd_ostream *os = ih->openOutputFile("assembly.ll");
     assert(os && !os->has_error() && "unable to open source output");
 
@@ -527,12 +436,8 @@ static int getOperandNum(Value *v,
     return registerMap[inst];
   } else if (Argument *a = dyn_cast<Argument>(v)) {
     return a->getArgNo();
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
     // Metadata is no longer a Value
   } else if (isa<BasicBlock>(v) || isa<InlineAsm>(v)) {
-#else
-  } else if (isa<BasicBlock>(v) || isa<InlineAsm>(v) || isa<MDNode>(v)) {
-#endif
     return -1;
   } else {
     assert(isa<Constant>(v));

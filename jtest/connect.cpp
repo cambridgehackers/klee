@@ -22,8 +22,8 @@
 int atexit(void (*function)(void)) { return 0; }
 int main(int argc, const char *argv[])
 {
-    int i;
+    int i = 0;
     if (argc == 2)
-        i = argv[1][0];
-    return 0;
+        i = 23 / (argv[1][0] - 'A');
+    return i;
 }

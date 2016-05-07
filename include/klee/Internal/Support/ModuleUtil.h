@@ -11,6 +11,7 @@
 #define KLEE_TRANSFORM_UTIL_H
 
 #include <string>
+#include <set>
 
 namespace llvm {
   class Function;
@@ -35,6 +36,7 @@ namespace klee {
   /// other than a direct call (or a constant expression that
   /// terminates in a direct call).
   bool functionEscapes(const llvm::Function *f);
+  void GetAllUndefinedSymbols(llvm::Module *M, std::set<std::string> &UndefinedSymbols);
 
 }
 

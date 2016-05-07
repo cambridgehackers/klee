@@ -311,7 +311,9 @@ void Optimize(Module* M) {
     Passes.add(createVerifierPass());
 
   // Run our queue of passes all at once now, efficiently.
+printf("[%s:%d] optimizebeforerun\n", __FUNCTION__, __LINE__);
   Passes.run(*M);
+printf("[%s:%d] optimizeafterrun\n", __FUNCTION__, __LINE__);
 }
 
 }
