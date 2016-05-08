@@ -82,7 +82,6 @@ using namespace klee;
 ///
 void
 klee::GetAllUndefinedSymbols(llvm::Module *M, std::set<std::string> &UndefinedSymbols) {
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
   static const std::string llvmIntrinsicPrefix="llvm.";
   std::set<std::string> DefinedSymbols;
   UndefinedSymbols.clear();
@@ -147,7 +146,6 @@ printf("[%s:%d] UNDEFFFFF %s count %d\n", __FUNCTION__, __LINE__, (*I).c_str(), 
   for (SpecialFunctionHandler::const_iterator sf = SpecialFunctionHandler::begin(),
        se = SpecialFunctionHandler::end(); sf != se; ++sf)
   {
-printf("[%s:%d] symbol %s notfou %d\n", __FUNCTION__, __LINE__, sf->name, (UndefinedSymbols.find(sf->name) == UndefinedSymbols.end()));
     if (UndefinedSymbols.find(sf->name) == UndefinedSymbols.end())
       continue;
 
@@ -192,7 +190,6 @@ static bool linkBCA(object::Archive* archive, Module* composite, std::string& er
   llvm::raw_string_ostream SS(errorMessage);
   std::vector<Module*> archiveModules;
 
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   // Is this efficient? Could we use StringRef instead?
   std::set<std::string> undefinedSymbols;
   GetAllUndefinedSymbols(composite, undefinedSymbols);
@@ -409,13 +406,10 @@ Module *klee::linkWithLibrary(Module *module, const std::string &libraryName) {
     if ((ec = Buffer.getError()) || Linker::LinkModules(module, Result->get()))
       klee_error("Link with library %s failed: %s", libraryName.c_str(), ec.message().c_str());
   } else if (magic == sys::fs::file_magic::archive) {
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     ErrorOr<std::unique_ptr<object::Binary> > arch = object::createBinary(buff, &Context);
     if ((ec = arch.getError()))
       klee_error("Link with library %s failed: %s", libraryName.c_str(), arch.getError().message().c_str());
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     if (object::Archive *a = dyn_cast<object::Archive>(arch->get())) {
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       // Handle in helper
       if (!linkBCA(a, module, ErrorMessage))
         klee_error("Link with library %s failed: %s", libraryName.c_str(), ErrorMessage.c_str());
