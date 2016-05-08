@@ -9,6 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Support/Debug.h"
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
 #include "klee/Interpreter.h"
@@ -251,6 +252,7 @@ static void parseArguments(int argc, char **argv)
 
 int main(int argc, char **argv, char **envp)
 {
+DebugFlag = true;
 printf("[%s:%d]klee: ", __FUNCTION__, __LINE__);
 for (int i = 0; i < argc; i++)
     printf("; %s", argv[i]);

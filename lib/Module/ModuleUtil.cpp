@@ -82,7 +82,7 @@ using namespace klee;
 ///
 void
 klee::GetAllUndefinedSymbols(llvm::Module *M, std::set<std::string> &UndefinedSymbols) {
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
   static const std::string llvmIntrinsicPrefix="llvm.";
   std::set<std::string> DefinedSymbols;
   UndefinedSymbols.clear();
@@ -122,6 +122,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   for (std::set<std::string>::iterator I = UndefinedSymbols.begin();
        I != UndefinedSymbols.end(); ++I )
   {
+printf("[%s:%d] UNDEFFFFF %s count %d\n", __FUNCTION__, __LINE__, (*I).c_str(), (int)DefinedSymbols.count(*I));
     if (DefinedSymbols.count(*I))
     {
       SymbolsToRemove.push_back(*I);
@@ -139,14 +140,14 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     }
 
     // Symbol really is undefined
-    KLEE_DEBUG_WITH_TYPE("klee_linker",
-                         dbgs() << "Symbol " << *I << " is undefined.\n");
+    KLEE_DEBUG_WITH_TYPE("klee_linker", dbgs() << "Symbol " << *I << " is undefined.\n");
   }
 
   // Remove KLEE intrinsics from set of undefined symbols
   for (SpecialFunctionHandler::const_iterator sf = SpecialFunctionHandler::begin(),
        se = SpecialFunctionHandler::end(); sf != se; ++sf)
   {
+printf("[%s:%d] symbol %s notfou %d\n", __FUNCTION__, __LINE__, sf->name, (UndefinedSymbols.find(sf->name) == UndefinedSymbols.end()));
     if (UndefinedSymbols.find(sf->name) == UndefinedSymbols.end())
       continue;
 

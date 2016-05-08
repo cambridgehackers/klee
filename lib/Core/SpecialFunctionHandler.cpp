@@ -131,6 +131,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__ubsan_handle_sub_overflow", handleSubOverflow, false),
   add("__ubsan_handle_mul_overflow", handleMulOverflow, false),
   add("__ubsan_handle_divrem_overflow", handleDivRemOverflow, false),
+  add("klee_div_zero_check", handleDivZeroCheck, false),
 
 #undef addDNR
 #undef add  
@@ -773,4 +774,16 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
   executor.terminateStateOnError(state,
                                  "overflow on division or remainder",
                                  "overflow.err");
+}
+void SpecialFunctionHandler::handleDivZeroCheck(ExecutionState &state,
+                                               KInstruction *target,
+                                               std::vector<ref<Expr> > &arguments) {
+  //if (z == 0)
+    //klee_report_error(__FILE__, __LINE__, "divide by zero", "div.err");
+  assert(arguments.size()==1 && "invalid number of arguments to DIVVVV");
+printf("[%s:%d] %p\n", __FUNCTION__, __LINE__, &arguments[0]); // void klee_div_zero_check(long long z)
+
+  executor.terminateStateOnError(state, "dividebyzero", "overflow.err");
+				 //readStringAtAddress(state, arguments[2]),
+				 //readStringAtAddress(state, arguments[3]).c_str());
 }
