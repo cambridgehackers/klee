@@ -161,9 +161,6 @@ private:
   bool inhibitForking; 
   /// Signals the executor to halt execution at the next instruction /// step.
   bool haltExecution;  
-  /// Whether implied-value concretization is enabled. Currently
-  /// false, it is buggy (it needs to validate its writes).
-  bool ivcEnabled;
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
 
@@ -294,10 +291,7 @@ private:
   /// constant values.
   void bindInstructionConstants(KInstruction *KI); 
   void handlePointsToObj(ExecutionState &state, KInstruction *target, const std::vector<ref<Expr> > &arguments); 
-  void doImpliedValueConcretization(ExecutionState &state, ref<Expr> e, ref<ConstantExpr> value); 
-  /// Add a timer to be executed periodically.  ///
-  /// \param timer The timer object to run on firings.
-  /// \param rate The approximate delay (in seconds) between firings.
+  /// Add a timer to be executed periodically.  /// /// \param timer The timer object to run on firings.  /// \param rate The approximate delay (in seconds) between firings.
   void addTimer(Timer *timer, double rate); 
   void initTimers();
   void processTimers(ExecutionState *current, double maxInstTime); 
