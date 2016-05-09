@@ -346,7 +346,6 @@ Executor::StatePair
 Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&current);
-  bool isSeeding = it != seedMap.end(); 
   solver->setTimeout(0);
   bool success = solver->evaluate(current, condition, res);
   solver->setTimeout(0);
@@ -445,8 +444,7 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
   if (it != seedMap.end()) {
     bool warn = false;
-    for (std::vector<SeedInfo>::iterator siit = it->second.begin(), 
-           siie = it->second.end(); siit != siie; ++siit) {
+    for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       bool res;
       bool success = solver->mustBeFalse(state, siit->assignment.evaluate(condition), res);
       assert(success && "FIXME: Unhandled solver failure");
@@ -589,15 +587,13 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     bindLocal(target, state, value);
   } else {
     std::set< ref<Expr> > values;
-    for (std::vector<SeedInfo>::iterator siit = it->second.begin(), 
-           siie = it->second.end(); siit != siie; ++siit) {
+    for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
       bool success = solver->getValue(state, siit->assignment.evaluate(e), value);
       assert(success && "FIXME: Unhandled solver failure");
       (void) success;
       values.insert(value);
-    }
-    
+    } 
     std::vector< ref<Expr> > conditions;
     for (std::set< ref<Expr> >::iterator vit = values.begin(), vie = values.end(); vit != vie; ++vit)
       conditions.push_back(EqExpr::create(e, *vit)); 
@@ -1905,7 +1901,6 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
 
   {
 printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
-function->dump();
     std::string TmpStr;
     llvm::raw_string_ostream os(TmpStr);
     os << "calling external: " << function->getName().str() << "(";

@@ -45,11 +45,7 @@ public:
   struct ModuleOptions {
     std::string LibraryDir;
     bool Optimize;
-    bool CheckDivZero;
-    bool CheckOvershift; 
-    ModuleOptions(const std::string& _LibraryDir, bool _Optimize, bool _CheckDivZero, bool _CheckOvershift)
-      : LibraryDir(_LibraryDir), Optimize(_Optimize), 
-        CheckDivZero(_CheckDivZero), CheckOvershift(_CheckOvershift) {}
+    ModuleOptions(const std::string& _LibraryDir, bool _Optimize) : LibraryDir(_LibraryDir), Optimize(_Optimize) {}
   }; 
   enum LogType {
 	  STP, //.CVC (STP's native language)

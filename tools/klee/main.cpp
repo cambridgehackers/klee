@@ -60,23 +60,15 @@ using namespace klee;
 namespace {
   cl::opt<std::string>
   InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"));
-
   cl::list<std::string>
   InputArgv(cl::ConsumeAfter, cl::desc("<program arguments>..."));
-
   cl::opt<bool>
   OptimizeModule("optimize", cl::desc("Optimize before execution"), cl::init(false));
-
-  cl::opt<bool>
-  CheckOvershift("check-overshift", cl::desc("Inject checks for overshift"), cl::init(true));
-
   cl::list<std::string>
   LinkLibraries("link-llvm-lib", cl::desc("Link the given libraries before execution"), cl::value_desc("library file"));
-
   cl::opt<unsigned>
   MakeConcreteSymbolic("make-concrete-symbolic", cl::desc("Probabilistic rate at which to make concrete reads symbolic, " "i.e. approximately 1 in n concrete reads will be made symbolic (0=off, 1=all).  " "Used for testing."), cl::init(0));
 }
-  static bool CheckDivZero = true;
 
 /***/
 extern "C" void zzklee_div_zero_check(long long z) {
@@ -281,7 +273,7 @@ printf("\n");
   }
 
   std::string LibraryDir = KleeHandler::getRunTimeLibraryPath(argv[0]);
-  Interpreter::ModuleOptions Opts(LibraryDir.c_str(), OptimizeModule, CheckDivZero, CheckOvershift); 
+  Interpreter::ModuleOptions Opts(LibraryDir.c_str(), OptimizeModule); 
 
   std::vector<std::string>::iterator libs_it;
   std::vector<std::string>::iterator libs_ie;

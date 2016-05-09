@@ -211,7 +211,6 @@ void KModule::addInternalFunction(const char* functionName){
 }
 
 void KModule::prepare(const Interpreter::ModuleOptions &opts, InterpreterHandler *ih) {
-printf("[%s:%d] before\n", __FUNCTION__, __LINE__);
   if (!MergeAtExit.empty()) {
     Function *mergeFn = module->getFunction("klee_merge");
     if (!mergeFn) {
@@ -259,12 +258,10 @@ printf("[%s:%d] before\n", __FUNCTION__, __LINE__);
   // module.
   legacy::PassManager pm;
   pm.add(new RaiseAsmPass());
-  if (opts.CheckDivZero) pm.add(new DivCheckPass());
-  if (opts.CheckOvershift) pm.add(new OvershiftCheckPass());
-  // FIXME: This false here is to work around a bug in
-  // IntrinsicLowering which caches values which may eventually be
-  // deleted (via RAUW). This can be removed once LLVM fixes this
-  // issue.
+  pm.add(new DivCheckPass());
+  pm.add(new OvershiftCheckPass());
+  // FIXME: This false here is to work around a bug in // IntrinsicLowering which caches values which may eventually be
+  // deleted (via RAUW). This can be removed once LLVM fixes this // issue.
   pm.add(new IntrinsicCleanerPass(*targetData, false));
 printf("[%s:%d] before run newstufffffff\n", __FUNCTION__, __LINE__);
   pm.run(*module);
@@ -286,9 +283,7 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 
   // Add internal functions which are not used to check if instructions
   // have been already visited
-  if (opts.CheckDivZero)
     addInternalFunction("klee_div_zero_check");
-  if (opts.CheckOvershift)
     addInternalFunction("klee_overshift_check");
 
 
