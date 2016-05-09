@@ -87,9 +87,6 @@ using namespace llvm;
 using namespace klee;
 
 
-
-
-
 namespace {
   cl::opt<bool>
   DumpStatesOnHalt("dump-states-on-halt", cl::init(true), cl::desc("Dump test cases for all active states on exit (default=on)")); 
@@ -575,11 +572,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     } else if (res==Solver::Unknown) {
       assert(!replayKTest && "in replay mode, only one branch can be true."); 
-      if ((MaxMemoryInhibit && atMemoryLimit) || current.forkDisabled || inhibitForking || 
-          (MaxForks!=~0u && stats::forks >= MaxForks)) { 
-	if (MaxMemoryInhibit && atMemoryLimit)
-	  klee_warning_once(0, "skipping fork (memory cap exceeded)");
-	else if (current.forkDisabled)
+      if (current.forkDisabled || inhibitForking || (MaxForks!=~0u && stats::forks >= MaxForks)) { 
+	if (current.forkDisabled)
 	  klee_warning_once(0, "skipping fork (fork disabled on current path)");
 	else if (inhibitForking)
 	  klee_warning_once(0, "skipping fork (fork disabled globally)");
@@ -2160,39 +2154,6 @@ void Executor::bindModuleConstants() {
   }
 }
 
-void Executor::checkMemoryUsage() {
-  if (!MaxMemory)
-    return;
-  if ((stats::instructions & 0xFFFF) == 0) {
-    // We need to avoid calling GetTotalMallocUsage() often because it
-    // is O(elts on freelist). This is really bad since we start
-    // to pummel the freelist once we hit the memory cap.
-    unsigned mbs = util::GetTotalMallocUsage() >> 20;
-    if (mbs > MaxMemory) {
-      if (mbs > MaxMemory + 100) {
-        // just guess at how many to kill
-        unsigned numStates = states.size();
-        unsigned toKill = std::max(1U, numStates - numStates * MaxMemory / mbs);
-        klee_warning("killing %d states (over memory cap)", toKill);
-        std::vector<ExecutionState *> arr(states.begin(), states.end());
-        for (unsigned i = 0, N = arr.size(); N && i < toKill; ++i, --N) {
-          unsigned idx = rand() % N;
-          // Make two pulls to try and not hit a state that
-          // covered new code.
-          if (arr[idx]->coveredNew)
-            idx = rand() % N;
-
-          std::swap(arr[idx], arr[N - 1]);
-          terminateStateEarly(*arr[N - 1], "Memory limit exceeded.");
-        }
-      }
-      atMemoryLimit = true;
-    } else {
-      atMemoryLimit = false;
-    }
-  }
-}
-
 void Executor::run(ExecutionState &initialState) {
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   bindModuleConstants();
@@ -2211,7 +2172,6 @@ exit(-1);
     stepInstruction(state);
     executeInstruction(state, ki);
     processTimers(&state, MaxInstructionTime);
-    checkMemoryUsage();
     updateStates(&state);
   }
   delete searcher;
