@@ -221,49 +221,14 @@ void Executor::initializeGlobals(ExecutionState &state) {
   // since reading/writing via a function pointer is unsupported anyway.
   for (Module::iterator i = m->begin(), ie = m->end(); i != ie; ++i) {
     Function *f = i;
-    ref<ConstantExpr> addr(0);
-
-    // If the symbol has external weak linkage then it is implicitly
-    // not defined in this module; if it isn't resolvable then it
-    // should be null.
-    if (f->hasExternalWeakLinkage() && !externalDispatcher->resolveSymbol(f->getName())) {
-      addr = Expr::createPointer(0);
-    } else {
-      addr = Expr::createPointer((unsigned long) (void*) f);
-      legalFunctions.insert((uint64_t) (unsigned long) (void*) f);
-    }
-    
+    ref<ConstantExpr> addr(0); 
+    addr = Expr::createPointer((unsigned long) (void*) f);
+    legalFunctions.insert((uint64_t) (unsigned long) (void*) f);
     globalAddresses.insert(std::make_pair(f, addr));
   }
 
-  // Disabled, we don't want to promote use of live externals.
-#ifdef HAVE_CTYPE_EXTERNALS
-#ifndef WINDOWS
-#ifndef DARWIN
-  /* From /usr/include/errno.h: it [errno] is a per-thread variable. */
-  int *errno_addr = __errno_location();
-  addExternalObject(state, (void *)errno_addr, sizeof *errno_addr, false);
-
-  /* from /usr/include/ctype.h:
-       These point into arrays of 384, so they can be indexed by any `unsigned
-       char' value [0,255]; by EOF (-1); or by any `signed char' value
-       [-128,-1).  ISO C requires that the ctype functions work for `unsigned */
-  const uint16_t **addr = __ctype_b_loc();
-  addExternalObject(state, const_cast<uint16_t*>(*addr-128), 384 * sizeof **addr, true);
-  addExternalObject(state, addr, sizeof(*addr), true); 
-  const int32_t **lower_addr = __ctype_tolower_loc();
-  addExternalObject(state, const_cast<int32_t*>(*lower_addr-128), 384 * sizeof **lower_addr, true);
-  addExternalObject(state, lower_addr, sizeof(*lower_addr), true); 
-  const int32_t **upper_addr = __ctype_toupper_loc();
-  addExternalObject(state, const_cast<int32_t*>(*upper_addr-128), 384 * sizeof **upper_addr, true);
-  addExternalObject(state, upper_addr, sizeof(*upper_addr), true);
-#endif
-#endif
-#endif
-
   // allocate and initialize globals, done in two passes since we may
   // need address of a global in order to initialize some other one.
-
   // allocate memory objects for all globals
   for (Module::const_global_iterator i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     if (i->isDeclaration()) {
@@ -828,11 +793,6 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       }
 
       MemoryObject *mo = sf.varargs = memory->allocate(size, true, false, state.prevPC->inst);
-      if (!mo) {
-        terminateStateOnExecError(state, "out of memory (varargs)");
-        return;
-      }
-
       if ((WordSize == Expr::Int64) && (mo->address & 15)) {
         // Both 64bit Linux/Glibc and 64bit MacOSX should align to 16 bytes.
         klee_warning_once(0, "While allocating varargs: malloc did not align to 16 bytes.");
@@ -942,14 +902,10 @@ static bool isDebugIntrinsic(const Function *f, KModule *KM) {
 
 static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
   switch(width) {
-  case Expr::Int32:
-    return &llvm::APFloat::IEEEsingle;
-  case Expr::Int64:
-    return &llvm::APFloat::IEEEdouble;
-  case Expr::Fl80:
-    return &llvm::APFloat::x87DoubleExtended;
-  default:
-    return 0;
+  case Expr::Int32: return &llvm::APFloat::IEEEsingle;
+  case Expr::Int64: return &llvm::APFloat::IEEEdouble;
+  case Expr::Fl80:  return &llvm::APFloat::x87DoubleExtended;
+  default:          return 0;
   }
 }
 
@@ -990,8 +946,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         if (t != Type::getVoidTy(getGlobalContext())) {
           // may need to do coercion due to bitcasts
           Expr::Width from = result->getWidth();
-          Expr::Width to = getWidthForLLVMType(t);
-            
+          Expr::Width to = getWidthForLLVMType(t); 
           if (from != to) {
             CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller)));
 
@@ -1002,14 +957,11 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
             } else {
               result = ZExtExpr::create(result, to);
             }
-          }
-
+          } 
           bindLocal(kcaller, state, result);
         }
       } else {
-        // We check that the return value has no users instead of
-        // checking the type, since C defaults to returning int for
-        // undeclared functions.
+        // We check that the return value has no users instead of // checking the type, since C defaults to returning int for // undeclared functions.
         if (!caller->use_empty()) {
           terminateStateOnExecError(state, "return void when caller expected a result");
         }
@@ -1075,15 +1027,12 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       assert(success && "FIXME: Unhandled solver failure");
       (void)success;
       if (res)
-        targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
-
+        targets.insert(std::make_pair(si->getDefaultDest(), isDefault)); 
       std::vector<ref<Expr> > conditions;
       for (std::map<BasicBlock *, ref<Expr> >::iterator it = targets.begin(), ie = targets.end(); it != ie; ++it)
-        conditions.push_back(it->second);
-
+        conditions.push_back(it->second); 
       std::vector<ExecutionState *> branches;
-      branch(state, conditions, branches);
-
+      branch(state, conditions, branches); 
       std::vector<ExecutionState *>::iterator bit = branches.begin();
       for (std::map<BasicBlock *, ref<Expr> >::iterator it = targets.begin(), ie = targets.end(); it != ie; ++it) {
         ExecutionState *es = *bit;
@@ -1104,27 +1053,22 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   case Instruction::Invoke:
   case Instruction::Call: {
-    CallSite cs(i);
-
+    CallSite cs(i); 
     unsigned numArgs = cs.arg_size();
     Value *fp = cs.getCalledValue();
-    Function *f = getTargetFunction(fp, state);
-
+    Function *f = getTargetFunction(fp, state); 
     // Skip debug intrinsics, we can't evaluate their metadata arguments.
     if (f && isDebugIntrinsic(f, kmodule))
-      break;
-
+      break; 
     if (isa<InlineAsm>(fp)) {
       terminateStateOnExecError(state, "inline assembly is unsupported");
       break;
     }
     // evaluate arguments
     std::vector< ref<Expr> > arguments;
-    arguments.reserve(numArgs);
-
+    arguments.reserve(numArgs); 
     for (unsigned j=0; j<numArgs; ++j)
-      arguments.push_back(eval(ki, j+1, state).value);
-
+      arguments.push_back(eval(ki, j+1, state).value); 
     if (f) {
       const FunctionType *fType = dyn_cast<FunctionType>(cast<PointerType>(f->getType())->getElementType());
       const FunctionType *fpType = dyn_cast<FunctionType>(cast<PointerType>(fp->getType())->getElementType());
@@ -1149,8 +1093,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
                 arguments[i] = ZExtExpr::create(arguments[i], to);
               }
             }
-          }
-            
+          } 
           i++;
         }
       }
@@ -2118,9 +2061,6 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
     MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, state.prevPC->inst);
-    if (!mo) {
-      bindLocal(target, state, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
-    } else {
       ObjectState *os = bindObjectInState(state, mo, isLocal);
       if (zeroMemory) {
         os->initializeToZero();
@@ -2134,7 +2074,6 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
           os->write(i, reallocFrom->read8(i));
         state.addressSpace.unbindObject(reallocFrom->getObject());
       }
-    }
   } else {
     // XXX For now we just pick a size. Ideally we would support
     // symbolic sizes fully but even if we don't it would be better to
@@ -2337,8 +2276,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
 
 void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name) {
   // Create a new object state for the memory object (instead of a copy).
-    // Find a unique name for this array.  First try the original name,
-    // or if that fails try adding a unique identifier.
+    // Find a unique name for this array.  First try the original name, // or if that fails try adding a unique identifier.
     unsigned id = 0;
     std::string uniqueName = name;
     while (!state.arrayNames.insert(uniqueName).second) {
