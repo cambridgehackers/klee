@@ -74,16 +74,11 @@ public:
   /// Register the module to be executed.  ///
   /// \return The final module after it has been optimized, checks /// inserted, and modified for interpretation.
   virtual const llvm::Module * setModule(llvm::Module *module, const ModuleOptions &opts) = 0; 
-  // supply a tree stream writer which the interpreter will use
-  // to record the concrete path (as a stream of '0' and '1' bytes).
+  // supply a tree stream writer which the interpreter will use // to record the concrete path (as a stream of '0' and '1' bytes).
   virtual void setPathWriter(TreeStreamWriter *tsw) = 0; 
-  // supply a tree stream writer which the interpreter will use
-  // to record the symbolic path (as a stream of '0' and '1' bytes).
+  // supply a tree stream writer which the interpreter will use // to record the symbolic path (as a stream of '0' and '1' bytes).
   virtual void setSymbolicPathWriter(TreeStreamWriter *tsw) = 0; 
   virtual void runFunctionAsMain(llvm::Function *f, int argc, char **argv, char **envp) = 0; 
-  /*** Runtime options ***/
-  virtual void setHaltExecution(bool value) = 0; 
-  /*** State accessor methods ***/
   virtual unsigned getPathStreamID(const ExecutionState &state) = 0;
   virtual unsigned getSymbolicPathStreamID(const ExecutionState &state) = 0;
   virtual void getConstraintLog(const ExecutionState &state, std::string &res, LogType logFormat = STP) = 0; 

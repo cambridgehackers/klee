@@ -105,9 +105,7 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
     pathWriter(0),
     symPathWriter(0),
     specialFunctionHandler(0),
-    processTree(0),
-    atMemoryLimit(false),
-    haltExecution(false) {
+    processTree(0) {
 printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
@@ -1793,7 +1791,7 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   states.insert(&initialState);
   searcher = constructUserSearcher(*this);
   searcher->update(0, states, std::set<ExecutionState*>());
-  while (!states.empty() && !haltExecution) {
+  while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
     KInstruction *ki = state.pc;
     stepInstruction(state);

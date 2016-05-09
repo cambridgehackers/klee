@@ -36,29 +36,6 @@
 
 using namespace llvm;
 using namespace klee;
-
-cl::opt<double>
-MaxTime("max-time",
-        cl::desc("Halt execution after the specified number of seconds (default=0 (off))"),
-        cl::init(0));
-
-///
-
-class HaltTimer : public Executor::Timer {
-  Executor *executor;
-
-public:
-  HaltTimer(Executor *_executor) : executor(_executor) {}
-  ~HaltTimer() {}
-
-  void run() {
-    llvm::errs() << "KLEE: HaltTimer invoked\n";
-    executor->setHaltExecution(true);
-  }
-};
-
-///
-
 static const double kSecondsPerTick = .1;
 static volatile unsigned timerTicks = 0;
 
@@ -90,10 +67,6 @@ void Executor::initTimers() {
   if (first) {
     first = false;
     setupHandler();
-  }
-
-  if (MaxTime) {
-    addTimer(new HaltTimer(this), MaxTime.getValue());
   }
 }
 

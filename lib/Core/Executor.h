@@ -134,10 +134,6 @@ private:
   /// The set of legal function addresses, used to validate function
   /// pointers. We use the actual Function* address as the function address.
   std::set<uint64_t> legalFunctions; 
-  /// Disables forking, instead a random path is chosen. Enabled as /// needed to control memory usage. \see fork()
-  bool atMemoryLimit; 
-  /// Signals the executor to halt execution at the next instruction /// step.
-  bool haltExecution;  
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
 
@@ -268,10 +264,6 @@ public:
   virtual const llvm::Module *
   setModule(llvm::Module *module, const ModuleOptions &opts);
   virtual void runFunctionAsMain(llvm::Function *f, int argc, char **argv, char **envp); 
-  /*** Runtime options ***/ 
-  virtual void setHaltExecution(bool value) {
-    haltExecution = value;
-  }
   /*** State accessor methods ***/ 
   virtual unsigned getPathStreamID(const ExecutionState &state); 
   virtual unsigned getSymbolicPathStreamID(const ExecutionState &state); 
