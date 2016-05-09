@@ -106,11 +106,7 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
     symPathWriter(0),
     specialFunctionHandler(0),
     processTree(0),
-    replayKTest(0),
-    replayPath(0),    
-    usingSeeds(0),
     atMemoryLimit(false),
-    inhibitForking(false),
     haltExecution(false) {
 printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
@@ -205,8 +201,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 }
 
 MemoryObject * Executor::addExternalObject(ExecutionState &state, void *addr, unsigned size, bool isReadOnly) {
-  MemoryObject *mo = memory->allocateFixed((uint64_t) (unsigned long) addr, 
-                                           size, 0);
+  MemoryObject *mo = memory->allocateFixed((uint64_t) (unsigned long) addr, size, 0);
   ObjectState *os = bindObjectInState(state, mo, false);
   for(unsigned i = 0; i < size; i++)
     os->write8(i, ((uint8_t*)addr)[i]);
@@ -337,9 +332,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
   }
 
   // once all objects are allocated, do the actual initialization
-  for (Module::const_global_iterator i = m->global_begin(),
-         e = m->global_end();
-       i != e; ++i) {
+  for (Module::const_global_iterator i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     if (i->hasInitializer()) {
       MemoryObject *mo = globalObjects.find(i)->second;
       const ObjectState *os = state.addressSpace.findObject(mo);
@@ -424,31 +417,9 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   }
 
   if (!isSeeding) {
-    if (replayPath && !isInternal) {
-      assert(replayPosition<replayPath->size() && "ran out of branches in replay path mode");
-      bool branch = (*replayPath)[replayPosition++];
-      
-      if (res==Solver::True) {
-        assert(branch && "hit invalid branch in replay path mode");
-      } else if (res==Solver::False) {
-        assert(!branch && "hit invalid branch in replay path mode");
-      } else {
-        // add constraints
-        if(branch) {
-          res = Solver::True;
-          addConstraint(current, condition);
-        } else  {
-          res = Solver::False;
-          addConstraint(current, Expr::createIsZero(condition));
-        }
-      }
-    } else if (res==Solver::Unknown) {
-      assert(!replayKTest && "in replay mode, only one branch can be true."); 
-      if (current.forkDisabled || inhibitForking) { 
-	if (current.forkDisabled)
-	  klee_warning_once(0, "skipping fork (fork disabled on current path)");
-	else
-	  klee_warning_once(0, "skipping fork (fork disabled globally)");
+    if (res==Solver::Unknown) {
+      if (current.forkDisabled) { 
+	klee_warning_once(0, "skipping fork (fork disabled on current path)");
         TimerStatIncrementer timer(stats::forkTime);
         if (theRNG.getBool()) {
           addConstraint(current, condition);
@@ -1915,10 +1886,6 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   // Delay init till now so that ticks don't accrue during optimization and such.
   initTimers();
   states.insert(&initialState);
-  if (usingSeeds) {
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-exit(-1);
-  }
   searcher = constructUserSearcher(*this);
   searcher->update(0, states, std::set<ExecutionState*>());
   while (!states.empty() && !haltExecution) {
@@ -1989,10 +1956,6 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
 }
 
 void Executor::terminateState(ExecutionState &state) {
-  if (replayKTest && replayPosition!=replayKTest->numObjects) {
-    klee_warning_once(replayKTest, "replay did not consume all objects in test input.");
-  }
-
   interpreterHandler->incPathsExplored();
 
   std::set<ExecutionState*>::iterator it = addedStates.find(&state);
@@ -2013,8 +1976,7 @@ void Executor::terminateState(ExecutionState &state) {
 void Executor::terminateStateEarly(ExecutionState &state, 
                                    const Twine &message) {
   if (!OnlyOutputStatesCoveringNew || state.coveredNew || (seedMap.count(&state)))
-    interpreterHandler->processTestCase(state, (message + "\n").str().c_str(),
-                                        "early");
+    interpreterHandler->processTestCase(state, (message + "\n").str().c_str(), "early");
   terminateState(state);
 }
 
@@ -2162,7 +2124,7 @@ function->dump();
 /***/
 ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e) {
   unsigned n = interpreterOpts.MakeConcreteSymbolic;
-  if (!n || replayKTest || replayPath)
+  if (!n)
     return e;
 
   // right now, we don't replace symbolics (is there any reason to?)
@@ -2201,11 +2163,9 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state, const MemoryObje
 void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal, KInstruction *target, bool zeroMemory, const ObjectState *reallocFrom) {
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
-    MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, 
-                                        state.prevPC->inst);
+    MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, state.prevPC->inst);
     if (!mo) {
-      bindLocal(target, state, 
-                ConstantExpr::alloc(0, Context::get().getPointerWidth()));
+      bindLocal(target, state, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
     } else {
       ObjectState *os = bindObjectInState(state, mo, isLocal);
       if (zeroMemory) {
@@ -2265,8 +2225,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       assert(success && "FIXME: Unhandled solver failure");      
       (void) success;
       if (res) {
-        executeAlloc(*fixedSize.second, tmp, isLocal,
-                     target, zeroMemory, reallocFrom);
+        executeAlloc(*fixedSize.second, tmp, isLocal, target, zeroMemory, reallocFrom);
       } else {
         // See if a *really* big value is possible. If so assume
         // malloc will fail for it, so lets fork and return 0.
@@ -2386,14 +2345,10 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       return;
     }
   } 
-
-  // we are on an error path (no resolution, multiple resolution, one
-  // resolution with out of bounds)
-  
+  // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds) 
   ResolutionList rl;  
   solver->setTimeout(0);
-  bool incomplete = state.addressSpace.resolve(state, solver, address, rl,
-                                               0, 0);
+  bool incomplete = state.addressSpace.resolve(state, solver, address, rl, 0, 0);
   solver->setTimeout(0);
   
   // XXX there is some query wasteage here. who cares?
@@ -2402,11 +2357,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   for (ResolutionList::iterator i = rl.begin(), ie = rl.end(); i != ie; ++i) {
     const MemoryObject *mo = i->first;
     const ObjectState *os = i->second;
-    ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
-    
+    ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes); 
     StatePair branches = fork(*unbound, inBounds, true);
-    ExecutionState *bound = branches.first;
-
+    ExecutionState *bound = branches.first; 
     // bound can be 0 on failure or overlapped 
     if (bound) {
       if (isWrite) {
@@ -2439,7 +2392,6 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
 
 void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name) {
   // Create a new object state for the memory object (instead of a copy).
-  if (!replayKTest) {
     // Find a unique name for this array.  First try the original name,
     // or if that fails try adding a unique identifier.
     unsigned id = 0;
@@ -2453,8 +2405,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
     
     std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
     if (it!=seedMap.end()) { // In seed mode we need to add this as a // binding.
-      for (std::vector<SeedInfo>::iterator siit = it->second.begin(), 
-             siie = it->second.end(); siit != siie; ++siit) {
+      for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
         SeedInfo &si = *siit;
         KTestObject *obj = si.getNextInput(mo, false);
 
@@ -2474,20 +2425,6 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
         }
       }
     }
-  } else {
-    ObjectState *os = bindObjectInState(state, mo, false);
-    if (replayPosition >= replayKTest->numObjects) {
-      terminateStateOnError(state, "replay count mismatch", "user.err");
-    } else {
-      KTestObject *obj = &replayKTest->objects[replayPosition++];
-      if (obj->numBytes != mo->size) {
-        terminateStateOnError(state, "replay size mismatch", "user.err");
-      } else {
-        for (unsigned i=0; i<mo->size; i++)
-          os->write8(i, obj->bytes[i]);
-      }
-    }
-  }
 }
 
 /***/
@@ -2642,8 +2579,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
     for (; pi != pie; ++pi) {
       bool mustBeTrue;
       // Attempt to bound byte to constraints held in cexPreferences
-      bool success = solver->mustBeTrue(tmp, Expr::createIsZero(*pi), 
-					mustBeTrue);
+      bool success = solver->mustBeTrue(tmp, Expr::createIsZero(*pi), mustBeTrue);
       // If it isn't possible to constrain this particular byte in the desired
       // way (normally this would mean that the byte can't be constrained to
       // be between 0 and 127 without making the entire constraint list UNSAT)

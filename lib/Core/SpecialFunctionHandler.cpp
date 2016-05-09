@@ -101,7 +101,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_posix_prefer_cex", handlePosixPreferCex, false),
   add("klee_print_expr", handlePrintExpr, false),
   add("klee_print_range", handlePrintRange, false),
-  add("klee_set_forking", handleSetForking, false),
   add("klee_stack_trace", handleStackTrace, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
@@ -454,22 +453,6 @@ void SpecialFunctionHandler::handlePrintExpr(ExecutionState &state,
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
   llvm::errs() << msg_str << ":" << arguments[1] << "\n";
-}
-
-void SpecialFunctionHandler::handleSetForking(ExecutionState &state,
-                                              KInstruction *target,
-                                              std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size()==1 &&
-         "invalid number of arguments to klee_set_forking");
-  ref<Expr> value = executor.toUnique(state, arguments[0]);
-  
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(value)) {
-    state.forkDisabled = CE->isZero();
-  } else {
-    executor.terminateStateOnError(state, 
-                                   "klee_set_forking requires a constant arg",
-                                   "user.err");
-  }
 }
 
 void SpecialFunctionHandler::handleStackTrace(ExecutionState &state,
