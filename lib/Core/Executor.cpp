@@ -139,19 +139,9 @@ namespace {
   cl::opt<double>
   MaxStaticCPSolvePct("max-static-cpsolve-pct", cl::init(1.), cl::desc("(default=1.0)")); 
   cl::opt<double>
-  MaxInstructionTime("max-instruction-time", cl::desc("Only allow a single instruction to take this much time (default=0s (off)). Enables --use-forked-solver"), cl::init(0)); 
-  cl::opt<double>
   SeedTime("seed-time", cl::desc("Amount of time to dedicate to seeds, before normal search (default=0 (off))"), cl::init(0)); 
   cl::opt<unsigned int>
   StopAfterNInstructions("stop-after-n-instructions", cl::desc("Stop execution after specified number of instructions (default=0 (off))"), cl::init(0)); 
-  cl::opt<unsigned>
-  MaxForks("max-forks", cl::desc("Only fork this many times (default=-1 (off))"), cl::init(~0u)); 
-  cl::opt<unsigned>
-  MaxDepth("max-depth", cl::desc("Only allow this many symbolic branches (default=0 (off))"), cl::init(0)); 
-  cl::opt<unsigned>
-  MaxMemory("max-memory", cl::desc("Refuse to fork when above this amount of memory (in MB, default=2000)"), cl::init(2000)); 
-  cl::opt<bool>
-  MaxMemoryInhibit("max-memory-inhibit", cl::desc("Inhibit forking at memory cap (vs. random terminate) (default=on)"), cl::init(true));
 }
 
 
@@ -176,13 +166,8 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
     atMemoryLimit(false),
     inhibitForking(false),
     haltExecution(false),
-    ivcEnabled(false),
-    coreSolverTimeout(MaxCoreSolverTime != 0 && MaxInstructionTime != 0
-      ? std::min(MaxCoreSolverTime,MaxInstructionTime)
-      : std::max(MaxCoreSolverTime,MaxInstructionTime)) {
-      
-printf("[%s:%d] constructor timeout %d\n", __FUNCTION__, __LINE__, (int)coreSolverTimeout);
-  if (coreSolverTimeout) UseForkedCoreSolver = true;
+    ivcEnabled(false) {
+printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
     llvm::errs() << "Failed to create core solver\n";
@@ -439,16 +424,6 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
   unsigned N = conditions.size();
   assert(N);
 
-  if (MaxForks!=~0u && stats::forks >= MaxForks) {
-    unsigned next = theRNG.getInt32() % N;
-    for (unsigned i=0; i<N; ++i) {
-      if (i == next) {
-        result.push_back(&state);
-      } else {
-        result.push_back(NULL);
-      }
-    }
-  } else {
     stats::forks += N-1;
 
     // XXX do proper balance or keep random?
@@ -463,8 +438,6 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
       ns->ptreeNode = res.first;
       es->ptreeNode = res.second;
     }
-  }
-
   // If necessary redistribute seeds to match conditions, killing
   // states if necessary due to OnlyReplaySeeds (inefficient but
   // simple).  
@@ -539,7 +512,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     }
   }
 
-  double timeout = coreSolverTimeout;
+  double timeout = 0;
   if (isSeeding)
     timeout *= it->second.size();
   solver->setTimeout(timeout);
@@ -572,14 +545,11 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     } else if (res==Solver::Unknown) {
       assert(!replayKTest && "in replay mode, only one branch can be true."); 
-      if (current.forkDisabled || inhibitForking || (MaxForks!=~0u && stats::forks >= MaxForks)) { 
+      if (current.forkDisabled || inhibitForking) { 
 	if (current.forkDisabled)
 	  klee_warning_once(0, "skipping fork (fork disabled on current path)");
-	else if (inhibitForking)
+	else
 	  klee_warning_once(0, "skipping fork (fork disabled globally)");
-	else 
-	  klee_warning_once(0, "skipping fork (max-forks reached)");
-
         TimerStatIncrementer timer(stats::forkTime);
         if (theRNG.getBool()) {
           addConstraint(current, condition);
@@ -704,17 +674,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         falseState->symPathOS << "0";
       }
     }
-
     addConstraint(*trueState, condition);
     addConstraint(*falseState, Expr::createIsZero(condition));
-
-    // Kinda gross, do we even really still want this option?
-    if (MaxDepth && MaxDepth<=trueState->depth) {
-      terminateStateEarly(*trueState, "max-depth exceeded.");
-      terminateStateEarly(*falseState, "max-depth exceeded.");
-      return StatePair(0, 0);
-    }
-
     return StatePair(trueState, falseState);
   }
 }
@@ -846,7 +807,7 @@ ref<Expr> Executor::toUnique(const ExecutionState &state,
     ref<ConstantExpr> value;
     bool isTrue = false;
 
-    solver->setTimeout(coreSolverTimeout);      
+    solver->setTimeout(0);      
     if (solver->getValue(state, e, value) &&
         solver->mustBeTrue(state, EqExpr::create(e, value), isTrue) &&
         isTrue)
@@ -2171,7 +2132,7 @@ exit(-1);
     KInstruction *ki = state.pc;
     stepInstruction(state);
     executeInstruction(state, ki);
-    processTimers(&state, MaxInstructionTime);
+    processTimers(&state, 0);
     updateStates(&state);
   }
   delete searcher;
@@ -2689,7 +2650,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   // fast path: single in-bounds resolution
   ObjectPair op;
   bool success;
-  solver->setTimeout(coreSolverTimeout);
+  solver->setTimeout(0);
   if (!state.addressSpace.resolveOne(state, solver, address, op, success)) {
     address = toConstant(state, address, "resolveOne failure");
     success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
@@ -2706,7 +2667,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     ref<Expr> offset = mo->getOffsetExpr(address);
 
     bool inBounds;
-    solver->setTimeout(coreSolverTimeout);
+    solver->setTimeout(0);
     bool success = solver->mustBeTrue(state, 
                                       mo->getBoundsCheckOffset(offset, bytes),
                                       inBounds);
@@ -2745,9 +2706,9 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   // resolution with out of bounds)
   
   ResolutionList rl;  
-  solver->setTimeout(coreSolverTimeout);
+  solver->setTimeout(0);
   bool incomplete = state.addressSpace.resolve(state, solver, address, rl,
-                                               0, coreSolverTimeout);
+                                               0, 0);
   solver->setTimeout(0);
   
   // XXX there is some query wasteage here. who cares?
@@ -3026,7 +2987,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
                                    std::pair<std::string,
                                    std::vector<unsigned char> > >
                                    &res) {
-  solver->setTimeout(coreSolverTimeout);
+  solver->setTimeout(0);
 
   ExecutionState tmp(state);
 

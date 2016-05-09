@@ -154,26 +154,16 @@ private:
   /// When non-null a list of "seed" inputs which will be used to
   /// drive execution.
   const std::vector<struct KTest *> *usingSeeds;  
-
   /// Disables forking, instead a random path is chosen. Enabled as
   /// needed to control memory usage. \see fork()
-  bool atMemoryLimit;
-
+  bool atMemoryLimit; 
   /// Disables forking, set by client. \see setInhibitForking()
-  bool inhibitForking;
-
-  /// Signals the executor to halt execution at the next instruction
-  /// step.
+  bool inhibitForking; 
+  /// Signals the executor to halt execution at the next instruction /// step.
   bool haltExecution;  
-
   /// Whether implied-value concretization is enabled. Currently
   /// false, it is buggy (it needs to validate its writes).
   bool ivcEnabled;
-
-  /// The maximum time to allow for a single core solver query.
-  /// (e.g. for a single STP query)
-  double coreSolverTimeout;
-
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
 
