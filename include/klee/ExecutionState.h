@@ -123,10 +123,6 @@ public:
 
   /// @brief Whether a new instruction was covered in this state
   bool coveredNew;
-
-  /// @brief Disables forking for this state. Set by user code
-  bool forkDisabled;
-
   /// @brief Set containing which lines in which files are covered by this state
   std::map<const std::string *, std::set<unsigned> > coveredLines;
 

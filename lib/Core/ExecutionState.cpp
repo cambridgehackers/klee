@@ -76,7 +76,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
 
     instsSinceCovNew(0),
     coveredNew(false),
-    forkDisabled(false),
     ptreeNode(0) {
   pushFrame(0, kf);
 }
@@ -102,21 +101,16 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     pc(state.pc),
     prevPC(state.prevPC),
     stack(state.stack),
-    incomingBBIndex(state.incomingBBIndex),
-
+    incomingBBIndex(state.incomingBBIndex), 
     addressSpace(state.addressSpace),
-    constraints(state.constraints),
-
+    constraints(state.constraints), 
     queryCost(state.queryCost),
     weight(state.weight),
-    depth(state.depth),
-
+    depth(state.depth), 
     pathOS(state.pathOS),
-    symPathOS(state.symPathOS),
-
+    symPathOS(state.symPathOS), 
     instsSinceCovNew(state.instsSinceCovNew),
     coveredNew(state.coveredNew),
-    forkDisabled(state.forkDisabled),
     coveredLines(state.coveredLines),
     ptreeNode(state.ptreeNode),
     symbolics(state.symbolics),

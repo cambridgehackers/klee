@@ -86,11 +86,6 @@
 using namespace llvm;
 using namespace klee;
 
-namespace {
-  cl::opt<bool>
-  OnlyOutputStatesCoveringNew("only-output-states-covering-new", cl::init(false), cl::desc("Only output test cases covering new code (default=off).")); 
-}
-
 namespace klee {
   RNG theRNG;
 }
@@ -352,10 +347,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&current);
   bool isSeeding = it != seedMap.end(); 
-  double timeout = 0;
-  if (isSeeding)
-    timeout *= it->second.size();
-  solver->setTimeout(timeout);
+  solver->setTimeout(0);
   bool success = solver->evaluate(current, condition, res);
   solver->setTimeout(0);
   if (!success) {
@@ -364,79 +356,28 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     return StatePair(0, 0);
   }
 
-  if (!isSeeding) {
-    if (res==Solver::Unknown) {
-      if (current.forkDisabled) { 
-	klee_warning_once(0, "skipping fork (fork disabled on current path)");
-        TimerStatIncrementer timer(stats::forkTime);
-        if (theRNG.getBool()) {
-          addConstraint(current, condition);
-          res = Solver::True;        
-        } else {
-          addConstraint(current, Expr::createIsZero(condition));
-          res = Solver::False;
-        }
-      }
-    }
-  }
-
-  // Fix branch in only-replay-seed mode, if we don't have both true
-  // and false seeds.
-  if (isSeeding && (current.forkDisabled) && res == Solver::Unknown) {
-    bool trueSeed=false, falseSeed=false;
-    // Is seed extension still ok here?
-    for (std::vector<SeedInfo>::iterator siit = it->second.begin(), 
-           siie = it->second.end(); siit != siie; ++siit) {
-      ref<ConstantExpr> res;
-      bool success = solver->getValue(current, siit->assignment.evaluate(condition), res);
-      assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
-      if (res->isTrue()) {
-        trueSeed = true;
-      } else {
-        falseSeed = true;
-      }
-      if (trueSeed && falseSeed)
-        break;
-    }
-    if (!(trueSeed && falseSeed)) {
-      assert(trueSeed || falseSeed);
-      
-      res = trueSeed ? Solver::True : Solver::False;
-      addConstraint(current, trueSeed ? condition : Expr::createIsZero(condition));
-    }
-  }
-
-
-  // XXX - even if the constraint is provable one way or the other we
-  // can probably benefit by adding this constraint and allowing it to
-  // reduce the other constraints. For example, if we do a binary
-  // search on a particular value, and then see a comparison against
-  // the value it has been fixed at, we should take this as a nice
-  // hint to just use the single constraint instead of all the binary
+  // XXX - even if the constraint is provable one way or the other we can probably benefit by adding this constraint and allowing it to
+  // reduce the other constraints. For example, if we do a binary search on a particular value, and then see a comparison against
+  // the value it has been fixed at, we should take this as a nice hint to just use the single constraint instead of all the binary
   // search ones. If that makes sense.
   if (res==Solver::True) {
     if (!isInternal) {
       if (pathWriter) {
         current.pathOS << "1";
       }
-    }
-
+    } 
     return StatePair(&current, 0);
   } else if (res==Solver::False) {
     if (!isInternal) {
       if (pathWriter) {
         current.pathOS << "0";
       }
-    }
-
+    } 
     return StatePair(0, &current);
   } else {
     TimerStatIncrementer timer(stats::forkTime);
-    ExecutionState *falseState, *trueState = &current;
-
-    ++stats::forks;
-
+    ExecutionState *falseState, *trueState = &current; 
+    ++stats::forks; 
     falseState = trueState->branch();
     addedStates.insert(falseState);
     if (it != seedMap.end()) {
@@ -469,8 +410,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         std::swap(trueState->coveredNew, falseState->coveredNew);
         std::swap(trueState->coveredLines, falseState->coveredLines);
       }
-    }
-
+    } 
     current.ptreeNode->data = 0;
     std::pair<PTree::Node*, PTree::Node*> res = processTree->split(current.ptreeNode, falseState, trueState);
     falseState->ptreeNode = res.first;
@@ -857,12 +797,10 @@ void Executor::printFileLine(ExecutionState &state, KInstruction *ki) {
 /// Compute the true target of a function call, resolving LLVM and KLEE aliases
 /// and bitcasts.
 Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
-  SmallPtrSet<const GlobalValue*, 3> Visited;
-
+  SmallPtrSet<const GlobalValue*, 3> Visited; 
   Constant *c = dyn_cast<Constant>(calledVal);
   if (!c)
-    return 0;
-
+    return 0; 
   while (true) {
     if (GlobalValue *gv = dyn_cast<GlobalValue>(c)) {
       if (!Visited.insert(gv).second)
@@ -891,11 +829,6 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
     } else
       return 0;
   }
-}
-
-/// TODO remove?
-static bool isDebugIntrinsic(const Function *f, KModule *KM) {
-  return false;
 }
 
 static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
@@ -1055,9 +988,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     unsigned numArgs = cs.arg_size();
     Value *fp = cs.getCalledValue();
     Function *f = getTargetFunction(fp, state); 
-    // Skip debug intrinsics, we can't evaluate their metadata arguments.
-    if (f && isDebugIntrinsic(f, kmodule))
-      break; 
     if (isa<InlineAsm>(fp)) {
       terminateStateOnExecError(state, "inline assembly is unsupported");
       break;
@@ -1877,14 +1807,12 @@ void Executor::terminateState(ExecutionState &state) {
 }
 
 void Executor::terminateStateEarly(ExecutionState &state, const Twine &message) {
-  if (!OnlyOutputStatesCoveringNew || state.coveredNew || (seedMap.count(&state)))
-    interpreterHandler->processTestCase(state, (message + "\n").str().c_str(), "early");
+  interpreterHandler->processTestCase(state, (message + "\n").str().c_str(), "early");
   terminateState(state);
 }
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
-  if (!OnlyOutputStatesCoveringNew || state.coveredNew || (seedMap.count(&state)))
-    interpreterHandler->processTestCase(state, 0, 0);
+  interpreterHandler->processTestCase(state, 0, 0);
   terminateState(state);
 }
 
@@ -1909,16 +1837,13 @@ const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const Execut
   for (;it != itE; ++it) {
     // check calling instruction and if it is contained in a KLEE internal function
     const Function * f = (*it->caller).inst->getParent()->getParent();
-    if (kmodule->internalFunctions.count(f)){
+    if (kmodule->internalFunctions.count(f))
       ii = 0;
-      continue;
-    }
-    if (!ii){
+    else if (!ii){
       ii = (*it->caller).info;
       *lastInstruction = (*it->caller).inst;
     }
   }
-
   if (!ii) {
     // something went wrong, play safe and return the current instruction info
     *lastInstruction = state.prevPC->inst;
@@ -1939,11 +1864,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     std::string MsgString;
     llvm::raw_string_ostream msg(MsgString);
     msg << "Error: " << message << "\n";
-    if (ii.file != "") {
-      msg << "File: " << ii.file << "\n";
-      msg << "Line: " << ii.line << "\n";
-      msg << "assembly.ll line: " << ii.assemblyLine << "\n";
-    }
+    if (ii.file != "")
+      msg << "File: " << ii.file << "\n" << "Line: " << ii.line << "\n" << "assembly.ll line: " << ii.assemblyLine << "\n";
     msg << "Stack: \n";
     state.dumpStack(msg); 
     std::string info_str = info.str();
