@@ -778,12 +778,12 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
 void SpecialFunctionHandler::handleDivZeroCheck(ExecutionState &state,
                                                KInstruction *target,
                                                std::vector<ref<Expr> > &arguments) {
-  //if (z == 0)
-    //klee_report_error(__FILE__, __LINE__, "divide by zero", "div.err");
-  assert(arguments.size()==1 && "invalid number of arguments to DIVVVV");
-printf("[%s:%d] %p\n", __FUNCTION__, __LINE__, &arguments[0]); // void klee_div_zero_check(long long z)
-
-  executor.terminateStateOnError(state, "dividebyzero", "overflow.err");
-				 //readStringAtAddress(state, arguments[2]),
-				 //readStringAtAddress(state, arguments[3]).c_str());
+  assert(arguments.size()==1 && "invalid number of arguments to DivZeroCheck");
+  ref<Expr> value = executor.toUnique(state, arguments[0]);
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(value)) {
+      int64_t val = CE->getZExtValue();
+printf("[%s:%d] %ld\n", __FUNCTION__, __LINE__, (long)val);
+      if (val == 0)
+          executor.terminateStateOnError(state, "dividebyzero", "overflow.err");
+  }
 }
