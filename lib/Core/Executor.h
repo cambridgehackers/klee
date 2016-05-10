@@ -67,13 +67,15 @@ namespace klee {
 
   class TimingSolver {
   public:
-    Solver *solver;
+    Solver *tosolver;
     bool simplifyExprs;
   public:
-    TimingSolver(Solver *_solver, bool _simplifyExprs = true) : solver(_solver), simplifyExprs(_simplifyExprs) {}
-    ~TimingSolver() { delete solver; }
-    void setTimeout(double t) { solver->setCoreSolverTimeout(t); }
-    char *getConstraintLog(const Query& query) { return solver->getConstraintLog(query); }
+    TimingSolver(Solver *_solver) : tosolver(_solver) {
+        simplifyExprs = true;
+        }
+    ~TimingSolver() { delete tosolver; }
+    void setTimeout(double t) { tosolver->setCoreSolverTimeout(t); }
+    char *getConstraintLog(const Query& query) { return tosolver->getConstraintLog(query); }
     bool evaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
     bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
     bool mustBeFalse(const ExecutionState&, ref<Expr>, bool &result);
@@ -81,7 +83,6 @@ namespace klee {
     bool mayBeFalse(const ExecutionState&, ref<Expr>, bool &result);
     bool getValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
     bool getInitialValues(const ExecutionState&, const std::vector<const Array*> &objects, std::vector< std::vector<unsigned char> > &result);
-    std::pair< ref<Expr>, ref<Expr> > getRange(const ExecutionState&, ref<Expr> query);
   };
 
   /// \todo Add a context object to keep track of data only live
@@ -118,6 +119,7 @@ private:
 
   ExternalDispatcher *externalDispatcher;
   TimingSolver *solver;
+  Solver       *osolver;
   MemoryManager *memory;
   std::set<ExecutionState*> states;
   StatsTracker *statsTracker;
@@ -286,6 +288,7 @@ public:
   virtual bool getSymbolicSolution(const ExecutionState &state, std::vector< std::pair<std::string, std::vector<unsigned char> > > &res); 
   virtual void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res); 
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
+  std::pair< ref<Expr>, ref<Expr> > getRange(const ExecutionState&, ref<Expr> query) const;
 }; 
 } // End klee namespace 
 #endif

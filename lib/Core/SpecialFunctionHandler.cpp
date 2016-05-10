@@ -481,8 +481,7 @@ void SpecialFunctionHandler::handlePrintRange(ExecutionState &state,
       llvm::errs() << " == " << value;
     } else { 
       llvm::errs() << " ~= " << value;
-      std::pair< ref<Expr>, ref<Expr> > res =
-        executor.solver->getRange(state, arguments[1]);
+      std::pair< ref<Expr>, ref<Expr> > res = executor.getRange(state, arguments[1]);
       llvm::errs() << " (in [" << res.first << ", " << res.second <<"])";
     }
   }

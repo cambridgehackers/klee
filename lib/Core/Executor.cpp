@@ -88,13 +88,13 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
     llvm::errs() << "Failed to create core solver\n";
     exit(1);
   }
-  Solver *solver = constructSolverChain( coreSolver,
+  osolver = constructSolverChain( coreSolver,
       interpreterHandler->getOutputFilename(ALL_QUERIES_SMT2_FILE_NAME),
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_SMT2_FILE_NAME),
       interpreterHandler->getOutputFilename(ALL_QUERIES_PC_FILE_NAME),
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_PC_FILE_NAME));
 
-  this->solver = new TimingSolver(solver, true);
+  solver = new TimingSolver(osolver);
   memory = new MemoryManager(&arrayCache);
 }
 
@@ -1686,7 +1686,7 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
     (void) success;
     example = value->getZExtValue();
     info << "\texample: " << example << "\n";
-    std::pair< ref<Expr>, ref<Expr> > res = solver->getRange(state, address);
+    std::pair< ref<Expr>, ref<Expr> > res = getRange(state, address);
     info << "\trange: [" << res.first << ", " << res.second <<"]\n";
   }
 
@@ -2350,7 +2350,7 @@ bool TimingSolver::evaluate(const ExecutionState& state, ref<Expr> expr, Solver:
   sys::TimeValue now = util::getWallTimeVal(); 
   if (simplifyExprs)
     expr = state.constraints.simplifyExpr(expr); 
-  bool success = solver->evaluate(Query(state.constraints, expr), result); 
+  bool success = tosolver->evaluate(Query(state.constraints, expr), result); 
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
   stats::solverTime += delta.usec();
@@ -2367,7 +2367,7 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool 
   sys::TimeValue now = util::getWallTimeVal(); 
   if (simplifyExprs)
     expr = state.constraints.simplifyExpr(expr); 
-  bool success = solver->mustBeTrue(Query(state.constraints, expr), result); 
+  bool success = tosolver->mustBeTrue(Query(state.constraints, expr), result); 
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
   stats::solverTime += delta.usec();
@@ -2404,12 +2404,11 @@ bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr, ref<Con
   sys::TimeValue now = util::getWallTimeVal(); 
   if (simplifyExprs)
     expr = state.constraints.simplifyExpr(expr); 
-  bool success = solver->getValue(Query(state.constraints, expr), result); 
+  bool success = tosolver->getValue(Query(state.constraints, expr), result); 
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
   stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.;
-
+  state.queryCost += delta.usec()/1000000.; 
   return success;
 }
 
@@ -2418,7 +2417,7 @@ TimingSolver::getInitialValues(const ExecutionState& state, const std::vector<co
   if (objects.empty())
     return true; 
   sys::TimeValue now = util::getWallTimeVal(); 
-  bool success = solver->getInitialValues(Query(state.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, result); 
+  bool success = tosolver->getInitialValues(Query(state.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, result); 
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
   stats::solverTime += delta.usec();
@@ -2427,6 +2426,6 @@ TimingSolver::getInitialValues(const ExecutionState& state, const std::vector<co
 }
 
 std::pair< ref<Expr>, ref<Expr> >
-TimingSolver::getRange(const ExecutionState& state, ref<Expr> expr) {
-  return solver->getRange(Query(state.constraints, expr));
+Executor::getRange(const ExecutionState& state, ref<Expr> expr) const {
+  return osolver->getRange(Query(state.constraints, expr));
 }
