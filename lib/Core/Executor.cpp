@@ -218,7 +218,6 @@ void Executor::initializeGlobals(ExecutionState &state) {
       ObjectState *os = bindObjectInState(state, mo, false);
       globalObjects.insert(std::make_pair(i, mo));
       globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
-
       // Program already running = object already initialized.  Read // concrete value and write it to our copy.
       if (size) {
         void *addr = externalDispatcher->resolveSymbol(i->getName());
@@ -273,11 +272,9 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
   if (it != seedMap.end()) {
     std::vector<SeedInfo> seeds = it->second;
-    seedMap.erase(it);
-
+    seedMap.erase(it); 
     // Assume each seed only satisfies one condition (necessarily true
-    // when conditions are mutually exclusive and their conjunction is
-    // a tautology).
+    // when conditions are mutually exclusive and their conjunction is // a tautology).
     for (std::vector<SeedInfo>::iterator siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
       unsigned i;
       for (i=0; i<N; ++i) {
@@ -287,21 +284,18 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
         (void) success;
         if (res->isTrue())
           break;
-      }
-
-      // If we didn't find a satisfying condition randomly pick one
-      // (the seed will be patched).
+      } 
+      // If we didn't find a satisfying condition randomly pick one // (the seed will be patched).
       if (i==N)
-        i = theRNG.getInt32() % N;
-
+        i = theRNG.getInt32() % N; 
       // Extra check in case we're replaying seeds with a max-fork
       if (result[i])
         seedMap[result[i]].push_back(*siit);
     }
   }
   for (unsigned i=0; i<N; ++i)
-    if (result[i])
-      addConstraint(*result[i], conditions[i]);
+      if (result[i])
+          addConstraint(*result[i], conditions[i]);
 }
 
 Executor::StatePair
@@ -309,9 +303,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&current);
   solver->setTimeout(0);
-  bool success = solver->evaluate(current, condition, res);
-  solver->setTimeout(0);
-  if (!success) {
+  if (!solver->evaluate(current, condition, res)) {
     current.pc = current.prevPC;
     terminateStateEarly(current, "Query timed out (fork).");
     return StatePair(0, 0);
@@ -1690,9 +1682,9 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
   llvm::raw_string_ostream info(Str);
   info << "\taddress: " << address << "\n";
   uint64_t example;
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address))
     example = CE->getZExtValue();
-  } else {
+  else {
     ref<ConstantExpr> value;
     bool success = solver->getValue(state, address, value);
     assert(success && "FIXME: Unhandled solver failure");
