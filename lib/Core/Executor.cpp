@@ -187,25 +187,23 @@ void Executor::initializeGlobals(ExecutionState &state) {
   // ensures that we won't conflict. we don't need to allocate a memory object
   // since reading/writing via a function pointer is unsupported anyway.
   for (Module::iterator i = m->begin(), ie = m->end(); i != ie; ++i) {
-    Function *f = i;
     ref<ConstantExpr> addr(0);
-    addr = Expr::createPointer((unsigned long) (void*) f);
-    legalFunctions.insert((uint64_t) (unsigned long) (void*) f);
-    globalAddresses.insert(std::make_pair(f, addr));
+    addr = Expr::createPointer((unsigned long) (void*) i);
+    legalFunctions.insert((uint64_t) (unsigned long) (void*) i);
+    globalAddresses.insert(std::make_pair(i, addr));
   }
 
   // allocate and initialize globals, done in two passes since we may
   // need address of a global in order to initialize some other one.
   // allocate memory objects for all globals
   for (Module::const_global_iterator i = m->global_begin(), e = m->global_end(); i != e; ++i) {
+    LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
+    uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
     if (i->isDeclaration()) {
       // FIXME: We have no general way of handling unknown external
       // symbols. If we really cared about making external stuff work
       // better we could support user definition, or use the EXE style
       // hack where we check the object file information.
-
-      LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
-      uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
       // XXX - DWD - hardcode some things until we decide how to fix.
       if (i->getName() == "_ZTVN10__cxxabiv117__class_type_infoE"
        || i->getName() == "_ZTVN10__cxxabiv120__si_class_type_infoE"
@@ -220,16 +218,14 @@ void Executor::initializeGlobals(ExecutionState &state) {
       globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
       // Program already running = object already initialized.  Read // concrete value and write it to our copy.
       if (size) {
-        void *addr = externalDispatcher->resolveSymbol(i->getName());
+        unsigned char *addr = (unsigned char *)externalDispatcher->resolveSymbol(i->getName());
         if (!addr)
           klee_error("unable to load symbol(%s) while initializing globals.", i->getName().data());
         for (unsigned offset=0; offset<mo->size; offset++)
-          os->write8(offset, ((unsigned char*)addr)[offset]);
+          os->write8(offset, addr[offset]);
       }
     } else {
-      LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
-      uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
-      MemoryObject *mo = memory->allocate(size, false, true, &*i);
+      MemoryObject *mo = memory->allocate(size, false, true, i);
       ObjectState *os = bindObjectInState(state, mo, false);
       globalObjects.insert(std::make_pair(i, mo));
       globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
