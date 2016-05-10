@@ -74,7 +74,6 @@ namespace klee {
         simplifyExprs = true;
         }
     ~TimingSolver() { delete tosolver; }
-    void solveSetTimeout(double t) { tosolver->setCoreSolverTimeout(t); }
     char *getConstraintLog(const Query& query) { return tosolver->getConstraintLog(query); }
     bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
     bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
@@ -289,6 +288,7 @@ public:
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
   std::pair< ref<Expr>, ref<Expr> > solveGetRange(const ExecutionState&, ref<Expr> query) const;
   bool solveGetInitialValues(const ExecutionState&, const std::vector<const Array*> &objects, std::vector< std::vector<unsigned char> > &result);
+  void solveSetTimeout(double t) { osolver->setCoreSolverTimeout(t); }
 }; 
 } // End klee namespace 
 #endif
