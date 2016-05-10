@@ -2316,7 +2316,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
   std::vector<const Array*> objects;
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     objects.push_back(state.symbolics[i].second);
-  bool success = solver->getInitialValues(tmp, objects, values);
+  bool success = solveGetInitialValues(tmp, objects, values);
   solver->setTimeout(0);
   if (!success) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
@@ -2413,11 +2413,11 @@ bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr, ref<Con
 }
 
 bool 
-TimingSolver::getInitialValues(const ExecutionState& state, const std::vector<const Array*> &objects, std::vector< std::vector<unsigned char> > &result) {
+Executor::solveGetInitialValues(const ExecutionState& state, const std::vector<const Array*> &objects, std::vector<std::vector<unsigned char>> &result) {
   if (objects.empty())
     return true; 
   sys::TimeValue now = util::getWallTimeVal(); 
-  bool success = tosolver->getInitialValues(Query(state.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, result); 
+  bool success = osolver->getInitialValues(Query(state.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, result); 
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
   stats::solverTime += delta.usec();

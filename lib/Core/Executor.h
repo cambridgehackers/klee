@@ -82,7 +82,6 @@ namespace klee {
     bool mayBeTrue(const ExecutionState&, ref<Expr>, bool &result);
     bool mayBeFalse(const ExecutionState&, ref<Expr>, bool &result);
     bool getValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
-    bool getInitialValues(const ExecutionState&, const std::vector<const Array*> &objects, std::vector< std::vector<unsigned char> > &result);
   };
 
   /// \todo Add a context object to keep track of data only live
@@ -289,6 +288,7 @@ public:
   virtual void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res); 
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
   std::pair< ref<Expr>, ref<Expr> > solveGetRange(const ExecutionState&, ref<Expr> query) const;
+  bool solveGetInitialValues(const ExecutionState&, const std::vector<const Array*> &objects, std::vector< std::vector<unsigned char> > &result);
 }; 
 } // End klee namespace 
 #endif
