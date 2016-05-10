@@ -6,7 +6,6 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
 #include "Executor.h"
 #include "Context.h"
 #include "CoreStats.h"
@@ -22,13 +21,10 @@
 #include "TimingSolver.h"
 #include "UserSearcher.h"
 #include "ExecutorTimerInfo.h"
-
-
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
 #include "klee/Interpreter.h"
 #include "klee/TimerStatIncrementer.h"
-#include "klee/CommandLine.h"
 #include "klee/Common.h"
 #include "klee/util/Assignment.h"
 #include "klee/util/ExprPPrinter.h"
@@ -48,12 +44,10 @@
 #include "klee/Internal/System/MemoryUsage.h"
 #include "klee/SolverStats.h"
 #include "klee/Internal/Support/ModuleUtil.h"
-
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
@@ -66,22 +60,10 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
-
 #include "llvm/IR/CallSite.h"
-
 #include <cassert>
-#include <algorithm>
-#include <iomanip>
-#include <iosfwd>
-#include <fstream>
-#include <sstream>
 #include <vector>
 #include <string>
-
-#include <sys/mman.h>
-
-#include <errno.h>
-#include <cxxabi.h>
 
 using namespace llvm;
 using namespace klee;
@@ -120,22 +102,17 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
 const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts) {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   assert(!kmodule && module && "can only register one module"); // XXX gross
-  
   kmodule = new KModule(module);
-
-  // Initialize the context.
   DataLayout *TD = kmodule->targetData;
   Context::initialize(TD->isLittleEndian(), (Expr::Width) TD->getPointerSizeInBits()); 
   specialFunctionHandler = new SpecialFunctionHandler(*this); 
   specialFunctionHandler->prepare();
   kmodule->prepare(opts, interpreterHandler);
   specialFunctionHandler->bind();
-
   if (StatsTracker::useStatistics()) {
 printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
     statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly.ll"), userSearcherRequiresMD2U());
   }
-  
   return module;
 }
 
@@ -183,12 +160,10 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   } else if (!isa<UndefValue>(c)) {
     unsigned StoreBits = targetData->getTypeStoreSizeInBits(c->getType());
     ref<ConstantExpr> C = evalConstant(c);
-
     // Extend the constant if necessary;
     assert(StoreBits >= C->getWidth() && "Invalid store size!");
     if (StoreBits > C->getWidth())
       C = C->ZExt(StoreBits);
-
     os->write(offset, C);
   }
 }
@@ -205,7 +180,6 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state, void *addr, un
 
 void Executor::initializeGlobals(ExecutionState &state) {
   Module *m = kmodule->module;
-
   if (m->getModuleInlineAsm() != "")
     klee_warning("executable has module level assembly (ignoring)");
   // represent function globals using the address of the actual llvm function
@@ -232,20 +206,14 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
       LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
-
       // XXX - DWD - hardcode some things until we decide how to fix.
-      if (i->getName() == "_ZTVN10__cxxabiv117__class_type_infoE") {
-        size = 0x2C;
-      } else if (i->getName() == "_ZTVN10__cxxabiv120__si_class_type_infoE") {
-        size = 0x2C;
-      } else if (i->getName() == "_ZTVN10__cxxabiv121__vmi_class_type_infoE") {
-        size = 0x2C;
-      }
-
+      if (i->getName() == "_ZTVN10__cxxabiv117__class_type_infoE"
+       || i->getName() == "_ZTVN10__cxxabiv120__si_class_type_infoE"
+       || i->getName() == "_ZTVN10__cxxabiv121__vmi_class_type_infoE")
+          size = 0x2C;
       if (size == 0) {
         llvm::errs() << "Unable to find size for global variable: " << i->getName() << " (use will result in out of bounds access)\n";
       }
-
       MemoryObject *mo = memory->allocate(size, false, true, i);
       ObjectState *os = bindObjectInState(state, mo, false);
       globalObjects.insert(std::make_pair(i, mo));
@@ -272,6 +240,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
   }
   // link aliases to their definitions (if bound)
   for (Module::alias_iterator i = m->alias_begin(), ie = m->alias_end(); i != ie; ++i) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+exit(-1);
     // Map the alias to its aliasee's address. This works because we have
     // addresses for everything, even undefined functions. 
     globalAddresses.insert(std::make_pair(i, evalConstant(i->getAliasee())));
@@ -803,6 +773,8 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
         return 0;
       std::string alias = state.getFnAlias(gv->getName());
       if (alias != "") {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+exit(-1);
         llvm::Module* currModule = kmodule->module;
         GlobalValue *old_gv = gv;
         gv = currModule->getNamedValue(alias);
