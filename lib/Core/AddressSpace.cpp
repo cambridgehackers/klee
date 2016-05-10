@@ -6,12 +6,10 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
 #include "AddressSpace.h"
 #include "CoreStats.h"
 #include "Memory.h"
-#include "TimingSolver.h"
-
+#include "Executor.h"
 #include "klee/Expr.h"
 #include "klee/TimerStatIncrementer.h"
 

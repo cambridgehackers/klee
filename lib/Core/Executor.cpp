@@ -18,7 +18,6 @@
 #include "SeedInfo.h"
 #include "SpecialFunctionHandler.h"
 #include "StatsTracker.h"
-#include "TimingSolver.h"
 #include "UserSearcher.h"
 #include "ExecutorTimerInfo.h"
 #include "klee/ExecutionState.h"
