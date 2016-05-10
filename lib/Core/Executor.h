@@ -218,7 +218,6 @@ private:
     return state.stack.back().locals[target->dest];
   } 
   void bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> value);
-  void bindArgument(KFunction *kf, unsigned index, ExecutionState &state, ref<Expr> value); 
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce); 
   /// Return a unique constant value for the given expression in the
   /// given state, if it has one (i.e. it provably only has a single

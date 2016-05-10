@@ -483,10 +483,6 @@ void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> 
   getDestCell(state, target).value = value;
 }
 
-void Executor::bindArgument(KFunction *kf, unsigned index, ExecutionState &state, ref<Expr> value) {
-  getArgumentCell(state, kf, index).value = value;
-}
-
 ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
   ref<Expr> result = e;
   if (!isa<ConstantExpr>(e)) {
@@ -704,7 +700,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
 
     unsigned numFormals = f->arg_size();
     for (unsigned i=0; i<numFormals; ++i)
-      bindArgument(kf, i, state, arguments[i]);
+      getArgumentCell(state, kf, i).value = arguments[i];
   }
 }
 
@@ -2198,7 +2194,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
     statsTracker->framePushed(*state, 0);
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
   for (unsigned i = 0, e = f->arg_size(); i != e; ++i)
-    bindArgument(kf, i, *state, arguments[i]);
+    getArgumentCell(*state, kf, i).value = arguments[i];
   if (argvMO) {
     ObjectState *argvOS = bindObjectInState(*state, argvMO, false);
     for (int i=0; i<argc+1+envc+1+1; i++) {
