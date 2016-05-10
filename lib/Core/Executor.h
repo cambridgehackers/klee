@@ -74,14 +74,14 @@ namespace klee {
         simplifyExprs = true;
         }
     ~TimingSolver() { delete tosolver; }
-    void setTimeout(double t) { tosolver->setCoreSolverTimeout(t); }
+    void solveSetTimeout(double t) { tosolver->setCoreSolverTimeout(t); }
     char *getConstraintLog(const Query& query) { return tosolver->getConstraintLog(query); }
-    bool evaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
+    bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
     bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
     bool mustBeFalse(const ExecutionState&, ref<Expr>, bool &result);
     bool mayBeTrue(const ExecutionState&, ref<Expr>, bool &result);
     bool mayBeFalse(const ExecutionState&, ref<Expr>, bool &result);
-    bool getValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
+    bool solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
   };
 
   /// \todo Add a context object to keep track of data only live

@@ -80,7 +80,7 @@ bool AddressSpace::resolveOne(ExecutionState &state,
     // try cheap search, will succeed for any inbounds pointer
 
     ref<ConstantExpr> cex;
-    if (!solver->getValue(state, address, cex))
+    if (!solver->solveGetValue(state, address, cex))
       return false;
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
@@ -187,7 +187,7 @@ bool AddressSpace::resolve(ExecutionState &state,
     // just get this by inspection of the expr.
     
     ref<ConstantExpr> cex;
-    if (!solver->getValue(state, p, cex))
+    if (!solver->solveGetValue(state, p, cex))
       return true;
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);

@@ -470,7 +470,7 @@ void SpecialFunctionHandler::handlePrintRange(ExecutionState &state,
   if (!isa<ConstantExpr>(arguments[1])) {
     // FIXME: Pull into a unique value method?
     ref<ConstantExpr> value;
-    bool success __attribute__ ((unused)) = executor.solver->getValue(state, arguments[1], value);
+    bool success __attribute__ ((unused)) = executor.solver->solveGetValue(state, arguments[1], value);
     assert(success && "FIXME: Unhandled solver failure");
     bool res;
     success = executor.solver->mustBeTrue(state, EqExpr::create(arguments[1], value), res);

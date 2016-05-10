@@ -274,7 +274,7 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
       unsigned i;
       for (i=0; i<N; ++i) {
         ref<ConstantExpr> res;
-        bool success = solver->getValue(state, siit->assignment.evaluate(conditions[i]), res);
+        bool success = solver->solveGetValue(state, siit->assignment.evaluate(conditions[i]), res);
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
         if (res->isTrue())
@@ -297,8 +297,8 @@ Executor::StatePair
 Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&current);
-  solver->setTimeout(0);
-  if (!solver->evaluate(current, condition, res)) {
+  solver->solveSetTimeout(0);
+  if (!solver->solveEvaluate(current, condition, res)) {
     current.pc = current.prevPC;
     terminateStateEarly(current, "Query timed out (fork).");
     return StatePair(0, 0);
@@ -335,7 +335,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       std::vector<SeedInfo> &falseSeeds = seedMap[falseState];
       for (std::vector<SeedInfo>::iterator siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
         ref<ConstantExpr> res;
-        bool success = solver->getValue(current, siit->assignment.evaluate(condition), res);
+        bool success = solver->solveGetValue(current, siit->assignment.evaluate(condition), res);
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
         if (res->isTrue()) {
@@ -492,10 +492,10 @@ ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
   if (!isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
     bool isTrue = false;
-    solver->setTimeout(0);
-    if (solver->getValue(state, e, value) && solver->mustBeTrue(state, EqExpr::create(e, value), isTrue) && isTrue)
+    solver->solveSetTimeout(0);
+    if (solver->solveGetValue(state, e, value) && solver->mustBeTrue(state, EqExpr::create(e, value), isTrue) && isTrue)
       result = value;
-    solver->setTimeout(0);
+    solver->solveSetTimeout(0);
   }
   return result;
 }
@@ -510,7 +510,7 @@ Executor::toConstant(ExecutionState &state, ref<Expr> e, const char *reason) {
     return CE;
 
   ref<ConstantExpr> value;
-  bool success = solver->getValue(state, e, value);
+  bool success = solver->solveGetValue(state, e, value);
   assert(success && "FIXME: Unhandled solver failure");
   (void) success;
 
@@ -530,7 +530,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
   if (it==seedMap.end() || isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
-    bool success = solver->getValue(state, e, value);
+    bool success = solver->solveGetValue(state, e, value);
     assert(success && "FIXME: Unhandled solver failure");
     (void) success;
     bindLocal(target, state, value);
@@ -538,7 +538,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     std::set< ref<Expr> > values;
     for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
-      bool success = solver->getValue(state, siit->assignment.evaluate(e), value);
+      bool success = solver->solveGetValue(state, siit->assignment.evaluate(e), value);
       assert(success && "FIXME: Unhandled solver failure");
       (void) success;
       values.insert(value);
@@ -967,7 +967,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
          handle it for us, albeit with some overhead. */
       do {
         ref<ConstantExpr> value;
-        bool success = solver->getValue(*free, v, value);
+        bool success = solver->solveGetValue(*free, v, value);
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
         StatePair res = fork(*free, EqExpr::create(v, value), true);
@@ -1681,7 +1681,7 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
     example = CE->getZExtValue();
   else {
     ref<ConstantExpr> value;
-    bool success = solver->getValue(state, address, value);
+    bool success = solver->solveGetValue(state, address, value);
     assert(success && "FIXME: Unhandled solver failure");
     (void) success;
     example = value->getZExtValue();
@@ -1935,7 +1935,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     // collapses the size expression with a select.
 
     ref<ConstantExpr> example;
-    bool success = solver->getValue(state, size, example);
+    bool success = solver->solveGetValue(state, size, example);
     assert(success && "FIXME: Unhandled solver failure");
     (void) success;
 
@@ -1957,7 +1957,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     if (fixedSize.second) {
       // Check for exactly two values
       ref<ConstantExpr> tmp;
-      bool success = solver->getValue(*fixedSize.second, size, tmp);
+      bool success = solver->solveGetValue(*fixedSize.second, size, tmp);
       assert(success && "FIXME: Unhandled solver failure");
       (void) success;
       bool res;
@@ -2039,19 +2039,19 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   // fast path: single in-bounds resolution
   ObjectPair op;
   bool success;
-  solver->setTimeout(0);
+  solver->solveSetTimeout(0);
   if (!state.addressSpace.resolveOne(state, solver, address, op, success)) {
     address = toConstant(state, address, "resolveOne failure");
     success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
   }
-  solver->setTimeout(0);
+  solver->solveSetTimeout(0);
   if (success) {
     const MemoryObject *mo = op.first;
     ref<Expr> offset = mo->getOffsetExpr(address);
     bool inBounds;
-    solver->setTimeout(0);
+    solver->solveSetTimeout(0);
     bool success = solver->mustBeTrue(state, mo->getBoundsCheckOffset(offset, bytes), inBounds);
-    solver->setTimeout(0);
+    solver->solveSetTimeout(0);
     if (!success) {
       state.pc = state.prevPC;
       terminateStateEarly(state, "Query timed out (bounds check).");
@@ -2079,9 +2079,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   }
   // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds)
   ResolutionList rl;
-  solver->setTimeout(0);
+  solver->solveSetTimeout(0);
   bool incomplete = state.addressSpace.resolve(state, solver, address, rl, 0, 0);
-  solver->setTimeout(0);
+  solver->solveSetTimeout(0);
 
   // XXX there is some query wasteage here. who cares?
   ExecutionState *unbound = &state;
@@ -2283,7 +2283,7 @@ void Executor::getConstraintLog(const ExecutionState &state, std::string &res, I
 }
 
 bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std::pair<std::string, std::vector<unsigned char>>> &res){
-  solver->setTimeout(0);
+  solver->solveSetTimeout(0);
   ExecutionState tmp(state);
 
   // Go through each byte in every test case and attempt to restrict
@@ -2317,7 +2317,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     objects.push_back(state.symbolics[i].second);
   bool success = solveGetInitialValues(tmp, objects, values);
-  solver->setTimeout(0);
+  solver->solveSetTimeout(0);
   if (!success) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
     ExprPPrinter::printQuery(llvm::errs(), state.constraints, ConstantExpr::alloc(0, Expr::Bool));
@@ -2341,7 +2341,25 @@ Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHand
   return new Executor(opts, ih);
 }
 
-bool TimingSolver::evaluate(const ExecutionState& state, ref<Expr> expr, Solver::Validity &result) {
+bool 
+Executor::solveGetInitialValues(const ExecutionState& state, const std::vector<const Array*> &objects, std::vector<std::vector<unsigned char>> &result) {
+  if (objects.empty())
+    return true; 
+  sys::TimeValue now = util::getWallTimeVal(); 
+  bool success = osolver->getInitialValues(Query(state.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, result); 
+  sys::TimeValue delta = util::getWallTimeVal();
+  delta -= now;
+  stats::solverTime += delta.usec();
+  state.queryCost += delta.usec()/1000000.; 
+  return success;
+}
+
+std::pair< ref<Expr>, ref<Expr> >
+Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
+  return osolver->getRange(Query(state.constraints, expr));
+}
+
+bool TimingSolver::solveEvaluate(const ExecutionState& state, ref<Expr> expr, Solver::Validity &result) {
   // Fast path, to avoid timer and OS overhead.
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
     result = CE->isTrue() ? Solver::True : Solver::False;
@@ -2395,7 +2413,7 @@ bool TimingSolver::mayBeFalse(const ExecutionState& state, ref<Expr> expr, bool 
   return true;
 }
 
-bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
+bool TimingSolver::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
   // Fast path, to avoid timer and OS overhead.
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
     result = CE;
@@ -2410,22 +2428,4 @@ bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr, ref<Con
   stats::solverTime += delta.usec();
   state.queryCost += delta.usec()/1000000.; 
   return success;
-}
-
-bool 
-Executor::solveGetInitialValues(const ExecutionState& state, const std::vector<const Array*> &objects, std::vector<std::vector<unsigned char>> &result) {
-  if (objects.empty())
-    return true; 
-  sys::TimeValue now = util::getWallTimeVal(); 
-  bool success = osolver->getInitialValues(Query(state.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, result); 
-  sys::TimeValue delta = util::getWallTimeVal();
-  delta -= now;
-  stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.; 
-  return success;
-}
-
-std::pair< ref<Expr>, ref<Expr> >
-Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
-  return osolver->getRange(Query(state.constraints, expr));
 }
