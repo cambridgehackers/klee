@@ -198,7 +198,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
   for (Module::const_global_iterator i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
     uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
-    if (i->isDeclaration()) {
+    bool isDecl = i->isDeclaration();
+    if (isDecl) {
       // FIXME: We have no general way of handling unknown external
       // symbols. If we really cared about making external stuff work
       // better we could support user definition, or use the EXE style
@@ -211,10 +212,12 @@ void Executor::initializeGlobals(ExecutionState &state) {
       if (size == 0) {
         llvm::errs() << "Unable to find size for global variable: " << i->getName() << " (use will result in out of bounds access)\n";
       }
-      MemoryObject *mo = memory->allocate(size, false, true, i);
-      ObjectState *os = bindObjectInState(state, mo, false);
-      globalObjects.insert(std::make_pair(i, mo));
-      globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
+    }
+    MemoryObject *mo = memory->allocate(size, false, true, i);
+    ObjectState *os = bindObjectInState(state, mo, false);
+    globalObjects.insert(std::make_pair(i, mo));
+    globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
+    if (isDecl) {
       // Program already running = object already initialized.  Read // concrete value and write it to our copy.
       if (size) {
         unsigned char *addr = (unsigned char *)externalDispatcher->resolveSymbol(i->getName());
@@ -223,11 +226,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
         for (unsigned offset=0; offset<mo->size; offset++)
           os->write8(offset, addr[offset]);
       }
-    } else {
-      MemoryObject *mo = memory->allocate(size, false, true, i);
-      ObjectState *os = bindObjectInState(state, mo, false);
-      globalObjects.insert(std::make_pair(i, mo));
-      globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
+    }
+    else {
       if (!i->hasInitializer())
           os->initializeToRandom();
     }
