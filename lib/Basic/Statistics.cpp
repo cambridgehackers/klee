@@ -14,8 +14,7 @@
 using namespace klee;
 
 StatisticManager::StatisticManager()
-  : enabled(true),
-    globalStats(0),
+  : globalStats(0),
     indexedStats(0),
     contextStats(0),
     index(0) {
@@ -32,39 +31,15 @@ void StatisticManager::useIndexedStats(unsigned totalIndices) {
   memset(indexedStats, 0, sizeof(*indexedStats) * totalIndices * stats.size());
 }
 
-void StatisticManager::registerStatistic(Statistic &s) {
-  if (globalStats) delete[] globalStats;
-  s.id = stats.size();
-  stats.push_back(&s);
-  globalStats = new uint64_t[stats.size()];
-  memset(globalStats, 0, sizeof(*globalStats)*stats.size());
-}
-
-StatisticManager *klee::theStatisticManager = 0;
+static StatisticManager sm;
+StatisticManager *klee::theStatisticManager = &sm;
 
 static StatisticManager &getStatisticManager() {
-  static StatisticManager sm;
-  theStatisticManager = &sm;
+  //theStatisticManager = &sm;
   return sm;
 }
 
-/* *** */
+Statistic::Statistic(const std::string &_name, const std::string &_shortName) 
+  : name(_name), shortName(_shortName) { }
 
-Statistic::Statistic(const std::string &_name, 
-                     const std::string &_shortName) 
-  : name(_name), 
-    shortName(_shortName) {
-  getStatisticManager().registerStatistic(*this);
-}
-
-Statistic::~Statistic() {
-}
-
-Statistic &Statistic::operator +=(const uint64_t addend) {
-  theStatisticManager->incrementStatistic(*this, addend);
-  return *this;
-}
-
-uint64_t Statistic::getValue() const {
-  return theStatisticManager->getValue(*this);
-}
+Statistic::~Statistic() { }

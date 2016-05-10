@@ -529,9 +529,9 @@ void StatsTracker::writeIStats() {
           }
           of << ii.assemblyLine << " ";
           of << ii.line << " ";
-          for (unsigned i=0; i<nStats; i++)
-            if (istatsMask&(1<<i))
-              of << sm.getIndexedValue(sm.getStatistic(i), index) << " ";
+          //for (unsigned i=0; i<nStats; i++)
+            //if (istatsMask&(1<<i))
+              //of << sm.getIndexedValue(sm.getStatistic(i), index) << " ";
           of << "\n";
 
           if (UseCallPaths && 
@@ -557,7 +557,7 @@ void StatsTracker::writeIStats() {
                 of << ii.line << " ";
                 for (unsigned i=0; i<nStats; i++) {
                   if (istatsMask&(1<<i)) {
-                    Statistic &s = sm.getStatistic(i);
+                    //Statistic &s = sm.getStatistic(i);
                     uint64_t value;
 
                     // Hack, ignore things that don't make sense on

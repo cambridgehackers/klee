@@ -60,19 +60,18 @@ CallPathManager::~CallPathManager() {
 void CallPathManager::getSummaryStatistics(CallSiteSummaryTable &results) {
   results.clear();
 
-  for (std::vector<CallPathNode*>::iterator it = paths.begin(),
-         ie = paths.end(); it != ie; ++it)
-    (*it)->summaryStatistics = (*it)->statistics;
+  //for (std::vector<CallPathNode*>::iterator it = paths.begin(), ie = paths.end(); it != ie; ++it)
+    //(*it)->summaryStatistics = (*it)->statistics;
 
   // compute summary bottom up, while building result table
   for (std::vector<CallPathNode*>::reverse_iterator it = paths.rbegin(),
          ie = paths.rend(); it != ie; ++it) {
     CallPathNode *cp = *it;
-    cp->parent->summaryStatistics += cp->summaryStatistics;
+    //cp->parent->summaryStatistics += cp->summaryStatistics;
 
     CallSiteInfo &csi = results[cp->callSite][cp->function];
     csi.count += cp->count;
-    csi.statistics += cp->summaryStatistics;
+    //csi.statistics += cp->summaryStatistics;
   }
 }
 
