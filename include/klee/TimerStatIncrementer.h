@@ -17,10 +17,10 @@ namespace klee {
   class TimerStatIncrementer {
   private:
     WallTimer timer;
-    Statistic &statistic;
+    uint64_t &statistic;
 
   public:
-    TimerStatIncrementer(Statistic &_statistic) : statistic(_statistic) {}
+    TimerStatIncrementer(uint64_t &_statistic) : statistic(_statistic) {}
     ~TimerStatIncrementer() {
       statistic += timer.check(); 
     }

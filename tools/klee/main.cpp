@@ -9,7 +9,9 @@
 //
 //===----------------------------------------------------------------------===//
 #include "llvm/Support/Debug.h"
+#include "../lib/Core/CoreStats.h"
 #include "klee/ExecutionState.h"
+#include "klee/SolverStats.h"
 #include "klee/Expr.h"
 #include "klee/Interpreter.h"
 #include "klee/Statistics.h"
@@ -249,18 +251,18 @@ printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
     pArgv[i] = pArg;
   } 
   interpreter->runFunctionAsMain(mainFn, InputArgv.size() + 1, pArgv, envp);
-  uint64_t queries = *theStatisticManager->getStatisticByName("Queries");
-  llvm::outs() << "KLEE: done: explored paths = " << 1 + *theStatisticManager->getStatisticByName("Forks") << "\n";
+  uint64_t queries = stats::queries;
+  llvm::outs() << "KLEE: done: explored paths = " << 1 + stats::forks << "\n";
 
   // Write some extra information in the info file which users won't
   // necessarily care about or understand.
   if (queries)
-    llvm::outs() << "KLEE: done: avg. constructs per query = " << *theStatisticManager->getStatisticByName("QueriesConstructs") / queries << "\n";
+    llvm::outs() << "KLEE: done: avg. constructs per query = " << stats::queryConstructs / queries << "\n";
   llvm::outs()
     << "KLEE: done: total queries = " << queries << "\n"
-    << "KLEE: done: valid queries = " << *theStatisticManager->getStatisticByName("QueriesValid") << "\n"
-    << "KLEE: done: invalid queries = " << *theStatisticManager->getStatisticByName("QueriesInvalid") << "\n"
-    << "KLEE: done: query cex = " << *theStatisticManager->getStatisticByName("QueriesCEX") << "\n"
-    << "KLEE: done: total instructions = " << *theStatisticManager->getStatisticByName("Instructions") << "\n";
+    << "KLEE: done: valid queries = " << stats::queriesValid << "\n"
+    << "KLEE: done: invalid queries = " << stats::queriesInvalid << "\n"
+    << "KLEE: done: query cex = " << stats::queryCounterexamples << "\n"
+    << "KLEE: done: total instructions = " << stats::instructions << "\n";
   return 0;
 }

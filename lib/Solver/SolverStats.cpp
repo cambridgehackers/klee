@@ -11,19 +11,19 @@
 
 using namespace klee;
 
-Statistic stats::cexCacheTime("CexCacheTime", "CCtime");
-Statistic stats::queries("Queries", "Q");
-Statistic stats::queriesInvalid("QueriesInvalid", "Qiv");
-Statistic stats::queriesValid("QueriesValid", "Qv");
-Statistic stats::queryCacheHits("QueryCacheHits", "QChits") ;
-Statistic stats::queryCacheMisses("QueryCacheMisses", "QCmisses");
-Statistic stats::queryCexCacheHits("QueryCexCacheHits", "QCexHits") ;
-Statistic stats::queryCexCacheMisses("QueryCexCacheMisses", "QCexMisses");
-Statistic stats::queryConstructTime("QueryConstructTime", "QBtime") ;
-Statistic stats::queryConstructs("QueriesConstructs", "QB");
-Statistic stats::queryCounterexamples("QueriesCEX", "Qcex");
-Statistic stats::queryTime("QueryTime", "Qtime");
+uint64_t stats::cexCacheTime;
+uint64_t stats::queries;
+uint64_t stats::queriesInvalid;
+uint64_t stats::queriesValid;
+uint64_t stats::queryCacheHits;
+uint64_t stats::queryCacheMisses;
+uint64_t stats::queryCexCacheHits;
+uint64_t stats::queryCexCacheMisses;
+uint64_t stats::queryConstructTime;
+uint64_t stats::queryConstructs;
+uint64_t stats::queryCounterexamples;
+uint64_t stats::queryTime;
 
 #ifdef DEBUG
-Statistic stats::arrayHashTime("ArrayHashTime", "AHtime");
+uint64_t stats::arrayHashTime;
 #endif

@@ -40,20 +40,6 @@ void StatisticManager::registerStatistic(Statistic &s) {
   memset(globalStats, 0, sizeof(*globalStats)*stats.size());
 }
 
-int StatisticManager::getStatisticID(const std::string &name) const {
-  for (unsigned i=0; i<stats.size(); i++)
-    if (stats[i]->getName() == name)
-      return i;
-  return -1;
-}
-
-Statistic *StatisticManager::getStatisticByName(const std::string &name) const {
-  for (unsigned i=0; i<stats.size(); i++)
-    if (stats[i]->getName() == name)
-      return stats[i];
-  return 0;
-}
-
 StatisticManager *klee::theStatisticManager = 0;
 
 static StatisticManager &getStatisticManager() {

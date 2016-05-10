@@ -436,7 +436,7 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
     const InstructionInfo &ii = *state.pc->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
     if (UseCallPaths)
-      state.stack.back().callPathNode->statistics.incrementValue(stats::states, addend);
+      stats::states += addend;
   }
 }
 
@@ -460,40 +460,39 @@ void StatsTracker::writeIStats() {
   unsigned nStats = sm.getNumStatistics();
 
   // Max is 13, sadly
-  istatsMask |= 1<<sm.getStatisticID("Queries");
-  istatsMask |= 1<<sm.getStatisticID("QueriesValid");
-  istatsMask |= 1<<sm.getStatisticID("QueriesInvalid");
-  istatsMask |= 1<<sm.getStatisticID("QueryTime");
-  istatsMask |= 1<<sm.getStatisticID("ResolveTime");
-  istatsMask |= 1<<sm.getStatisticID("Instructions");
-  istatsMask |= 1<<sm.getStatisticID("InstructionTimes");
-  istatsMask |= 1<<sm.getStatisticID("InstructionRealTimes");
-  istatsMask |= 1<<sm.getStatisticID("Forks");
-  istatsMask |= 1<<sm.getStatisticID("CoveredInstructions");
-  istatsMask |= 1<<sm.getStatisticID("UncoveredInstructions");
-  istatsMask |= 1<<sm.getStatisticID("States");
-  istatsMask |= 1<<sm.getStatisticID("MinDistToUncovered");
+  //istatsMask |= 1<<sm.getStatisticID("Queries");
+  //istatsMask |= 1<<sm.getStatisticID("QueriesValid");
+  //istatsMask |= 1<<sm.getStatisticID("QueriesInvalid");
+  //istatsMask |= 1<<sm.getStatisticID("QueryTime");
+  //istatsMask |= 1<<sm.getStatisticID("ResolveTime");
+  //istatsMask |= 1<<sm.getStatisticID("Instructions");
+  //istatsMask |= 1<<sm.getStatisticID("InstructionTimes");
+  //istatsMask |= 1<<sm.getStatisticID("InstructionRealTimes");
+  //istatsMask |= 1<<sm.getStatisticID("Forks");
+  //istatsMask |= 1<<sm.getStatisticID("CoveredInstructions");
+  //istatsMask |= 1<<sm.getStatisticID("UncoveredInstructions");
+  //istatsMask |= 1<<sm.getStatisticID("States");
+  //istatsMask |= 1<<sm.getStatisticID("MinDistToUncovered");
 
   of << "positions: instr line\n";
 
-  for (unsigned i=0; i<nStats; i++) {
-    if (istatsMask & (1<<i)) {
-      Statistic &s = sm.getStatistic(i);
-      of << "event: " << s.getShortName() << " : " 
-         << s.getName() << "\n";
-    }
-  }
+  //for (unsigned i=0; i<nStats; i++) {
+    //if (istatsMask & (1<<i)) {
+      //Statistic &s = sm.getStatistic(i);
+      //of << "event: " << s.getShortName() << " : " << s.getName() << "\n";
+    //}
+  //}
 
   of << "events: ";
-  for (unsigned i=0; i<nStats; i++) {
-    if (istatsMask & (1<<i))
-      of << sm.getStatistic(i).getShortName() << " ";
-  }
+  //for (unsigned i=0; i<nStats; i++) {
+    //if (istatsMask & (1<<i))
+      //of << sm.getStatistic(i).getShortName() << " ";
+  //}
   of << "\n";
   
   // set state counts, decremented after we process so that we don't
   // have to zero all records each time.
-  if (istatsMask & (1<<stats::states.getID()))
+  //if (istatsMask & (1<<stats::states.getID()))
     updateStateStatistics(1);
 
   std::string sourceFile = "";
@@ -563,11 +562,11 @@ void StatsTracker::writeIStats() {
 
                     // Hack, ignore things that don't make sense on
                     // call paths.
-                    if (&s == &stats::uncoveredInstructions) {
+                    //if (&s == &stats::uncoveredInstructions) {
                       value = 0;
-                    } else {
-                      value = csi.statistics.getValue(s);
-                    }
+                    //} else {
+                      //value = csi.statistics.getValue(s);
+                    //}
 
                     of << value << " ";
                   }
@@ -581,7 +580,7 @@ void StatsTracker::writeIStats() {
     }
   }
 
-  if (istatsMask & (1<<stats::states.getID()))
+  //if (istatsMask & (1<<stats::states.getID()))
     updateStateStatistics((uint64_t)-1);
   
   // Clear then end of the file if necessary (no truncate op?).

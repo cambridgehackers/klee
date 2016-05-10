@@ -15,37 +15,37 @@
 namespace klee {
 namespace stats {
 
-  extern Statistic allocations;
-  extern Statistic resolveTime;
-  extern Statistic instructions;
-  extern Statistic instructionTime;
-  extern Statistic instructionRealTime;
-  extern Statistic coveredInstructions;
-  extern Statistic uncoveredInstructions;  
-  extern Statistic trueBranches;
-  extern Statistic falseBranches;
-  extern Statistic forkTime;
-  extern Statistic solverTime;
+  extern uint64_t allocations;
+  extern uint64_t resolveTime;
+  extern uint64_t instructions;
+  extern uint64_t instructionTime;
+  extern uint64_t instructionRealTime;
+  extern uint64_t coveredInstructions;
+  extern uint64_t uncoveredInstructions;  
+  extern uint64_t trueBranches;
+  extern uint64_t falseBranches;
+  extern uint64_t forkTime;
+  extern uint64_t solverTime;
 
   /// The number of process forks.
-  extern Statistic forks;
+  extern uint64_t forks;
 
   /// Number of states, this is a "fake" statistic used by istats, it
   /// isn't normally up-to-date.
-  extern Statistic states;
+  extern uint64_t states;
 
   /// Instruction level statistic for tracking number of reachable
   /// uncovered instructions.
-  extern Statistic reachableUncovered;
+  extern uint64_t reachableUncovered;
 
   /// Instruction level statistic tracking the minimum intraprocedural
   /// distance to an uncovered instruction; this is only periodically
   /// updated.
-  extern Statistic minDistToUncovered;
+  extern uint64_t minDistToUncovered;
 
   /// Instruction level statistic tracking the minimum intraprocedural
   /// distance to a function return.
-  extern Statistic minDistToReturn;
+  extern uint64_t minDistToReturn;
 
 }
 }

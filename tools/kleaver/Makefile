@@ -14,7 +14,7 @@ include $(LEVEL)/Makefile.config
 
 # FIXME: Ideally we wouldn't have any LLVM dependencies here, which
 # means kicking out klee's Support.
-USEDLIBS = kleeBasic.a kleaverSolver.a kleaverExpr.a kleeSupport.a 
+USEDLIBS = kleeBasic.a kleaverSolver.a kleeCore.a kleaverExpr.a kleeSupport.a 
 LINK_COMPONENTS = support
 
 include $(LEVEL)/Makefile.common

@@ -11,19 +11,19 @@
 
 using namespace klee;
 
-Statistic stats::allocations("Allocations", "Alloc");
-Statistic stats::coveredInstructions("CoveredInstructions", "Icov");
-Statistic stats::falseBranches("FalseBranches", "Bf");
-Statistic stats::forkTime("ForkTime", "Ftime");
-Statistic stats::forks("Forks", "Forks");
-Statistic stats::instructionRealTime("InstructionRealTimes", "Ireal");
-Statistic stats::instructionTime("InstructionTimes", "Itime");
-Statistic stats::instructions("Instructions", "I");
-Statistic stats::minDistToReturn("MinDistToReturn", "Rdist");
-Statistic stats::minDistToUncovered("MinDistToUncovered", "UCdist");
-Statistic stats::reachableUncovered("ReachableUncovered", "IuncovReach");
-Statistic stats::resolveTime("ResolveTime", "Rtime");
-Statistic stats::solverTime("SolverTime", "Stime");
-Statistic stats::states("States", "States");
-Statistic stats::trueBranches("TrueBranches", "Bt");
-Statistic stats::uncoveredInstructions("UncoveredInstructions", "Iuncov");
+uint64_t stats::allocations;
+uint64_t stats::coveredInstructions;
+uint64_t stats::falseBranches;
+uint64_t stats::forkTime;
+uint64_t stats::forks;
+uint64_t stats::instructionRealTime;
+uint64_t stats::instructionTime;
+uint64_t stats::instructions;
+uint64_t stats::minDistToReturn;
+uint64_t stats::minDistToUncovered;
+uint64_t stats::reachableUncovered;
+uint64_t stats::resolveTime;
+uint64_t stats::solverTime;
+uint64_t stats::states;
+uint64_t stats::trueBranches;
+uint64_t stats::uncoveredInstructions;

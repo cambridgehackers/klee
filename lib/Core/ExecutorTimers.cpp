@@ -127,11 +127,9 @@ void Executor::processTimers(ExecutionState *current,
           *os << "], ";
 
           StackFrame &sf = es->stack.back();
-          uint64_t md2u = computeMinDistToUncovered(es->pc,
-                                                    sf.minDistToUncoveredOnReturn);
-          uint64_t icnt = theStatisticManager->getIndexedValue(stats::instructions,
-                                                               es->pc->info->id);
-          uint64_t cpicnt = sf.callPathNode->statistics.getValue(stats::instructions);
+          uint64_t md2u = computeMinDistToUncovered(es->pc, sf.minDistToUncoveredOnReturn);
+          uint64_t icnt = theStatisticManager->getIndexedValue(stats::instructions, es->pc->info->id);
+          uint64_t cpicnt = stats::instructions;
 
           *os << "{";
           *os << "'depth' : " << es->depth << ", ";

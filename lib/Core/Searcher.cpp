@@ -200,7 +200,7 @@ double WeightedRandomSearcher::getWeight(ExecutionState *es) {
   }
   case CPInstCount: {
     StackFrame &sf = es->stack.back();
-    uint64_t count = sf.callPathNode->statistics.getValue(stats::instructions);
+    uint64_t count = stats::instructions;
     double inv = 1. / std::max((uint64_t) 1, count);
     return inv;
   }

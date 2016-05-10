@@ -9,6 +9,8 @@
 
 #include "expr/Lexer.h"
 #include "expr/Parser.h"
+#include "../lib/Core/CoreStats.h"
+#include "klee/SolverStats.h"
 
 #include "klee/Config/Version.h"
 #include "klee/Constraints.h"
@@ -306,18 +308,13 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   delete S;
 
-  if (uint64_t queries = *theStatisticManager->getStatisticByName("Queries")) {
-    llvm::outs()
-      << "--\n"
+  if (uint64_t queries = stats::queries) {
+    llvm::outs() << "--\n"
       << "total queries = " << queries << "\n"
-      << "total queries constructs = " 
-      << *theStatisticManager->getStatisticByName("QueriesConstructs") << "\n"
-      << "valid queries = " 
-      << *theStatisticManager->getStatisticByName("QueriesValid") << "\n"
-      << "invalid queries = " 
-      << *theStatisticManager->getStatisticByName("QueriesInvalid") << "\n"
-      << "query cex = " 
-      << *theStatisticManager->getStatisticByName("QueriesCEX") << "\n";
+      << "total queries constructs = " << stats::queryConstructs << "\n"
+      << "valid queries = " << stats::queriesValid << "\n"
+      << "invalid queries = " << stats::queriesInvalid << "\n"
+      << "query cex = " << stats::queryCounterexamples << "\n";
   }
 
   return success;

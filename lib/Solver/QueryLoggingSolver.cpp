@@ -9,6 +9,8 @@
 #include "QueryLoggingSolver.h"
 #include "klee/Internal/System/Time.h"
 #include "klee/Statistics.h"
+#include "../lib/Core/CoreStats.h"
+//#include "klee/SolverStats.h"
 
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
 #include "llvm/Support/FileSystem.h"
@@ -54,12 +56,8 @@ void QueryLoggingSolver::flushBufferConditionally(bool writeToFile) {
 void QueryLoggingSolver::startQuery(const Query &query, const char *typeName,
                                     const Query *falseQuery,
                                     const std::vector<const Array *> *objects) {
-  Statistic *S = theStatisticManager->getStatisticByName("Instructions");
-  uint64_t instructions = S ? S->getValue() : 0;
-
   logBuffer << queryCommentSign << " Query " << queryCount++ << " -- "
-            << "Type: " << typeName << ", "
-            << "Instructions: " << instructions << "\n";
+            << "Type: " << typeName << ", " << "Instructions: " << stats::instructions << "\n";
 
   printQuery(query, falseQuery, objects);
 

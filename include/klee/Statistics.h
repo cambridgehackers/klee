@@ -48,27 +48,20 @@ namespace klee {
 
   public:
     StatisticManager();
-    ~StatisticManager();
-
-    void useIndexedStats(unsigned totalIndices);
-
+    ~StatisticManager(); 
+    void useIndexedStats(unsigned totalIndices); 
     StatisticRecord *getContext();
-    void setContext(StatisticRecord *sr); /* null to reset */
-
+    void setContext(StatisticRecord *sr); /* null to reset */ 
     void setIndex(unsigned i) { index = i; }
     unsigned getIndex() { return index; }
     unsigned getNumStatistics() { return stats.size(); }
-    Statistic &getStatistic(unsigned i) { return *stats[i]; }
-    
+    Statistic &getStatistic(unsigned i) { return *stats[i]; } 
     void registerStatistic(Statistic &s);
     void incrementStatistic(Statistic &s, uint64_t addend);
     uint64_t getValue(const Statistic &s) const;
-    void incrementIndexedValue(const Statistic &s, unsigned index, 
-                               uint64_t addend) const;
-    uint64_t getIndexedValue(const Statistic &s, unsigned index) const;
-    void setIndexedValue(const Statistic &s, unsigned index, uint64_t value);
-    int getStatisticID(const std::string &name) const;
-    Statistic *getStatisticByName(const std::string &name) const;
+    void incrementIndexedValue(const uint64_t &s, unsigned index, uint64_t addend) const;
+    uint64_t getIndexedValue(const uint64_t &s, unsigned index) const;
+    void setIndexedValue(const uint64_t &s, unsigned index, uint64_t value);
   };
 
   extern StatisticManager *theStatisticManager;
@@ -97,7 +90,11 @@ namespace klee {
   }
 
   inline StatisticRecord::StatisticRecord() 
-    : data(new uint64_t[theStatisticManager->getNumStatistics()]) {
+    {
+    long mysize = theStatisticManager->getNumStatistics();
+printf("[%s:%d] mysize %ld\n", __FUNCTION__, __LINE__, mysize);
+    data = new uint64_t[mysize];
+printf("[%s:%d] data %p\n", __FUNCTION__, __LINE__, data);
     zero();
   }
 
@@ -133,21 +130,21 @@ namespace klee {
     return globalStats[s.id];
   }
 
-  inline void StatisticManager::incrementIndexedValue(const Statistic &s, 
+  inline void StatisticManager::incrementIndexedValue(const uint64_t &s, 
                                                       unsigned index,
                                                       uint64_t addend) const {
-    indexedStats[index*stats.size() + s.id] += addend;
+    //indexedStats[index*stats.size() + s.id] += addend;
   }
 
-  inline uint64_t StatisticManager::getIndexedValue(const Statistic &s, 
+  inline uint64_t StatisticManager::getIndexedValue(const uint64_t &s, 
                                                     unsigned index) const {
-    return indexedStats[index*stats.size() + s.id];
+    return 0; //indexedStats[index*stats.size() + s.id];
   }
 
-  inline void StatisticManager::setIndexedValue(const Statistic &s, 
+  inline void StatisticManager::setIndexedValue(const uint64_t &s, 
                                                 unsigned index,
                                                 uint64_t value) {
-    indexedStats[index*stats.size() + s.id] = value;
+    //indexedStats[index*stats.size() + s.id] = value;
   }
 }
 
