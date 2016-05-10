@@ -71,18 +71,11 @@ namespace {
 }
 
 /***/
-extern "C" void zzklee_div_zero_check(long long z) {
-  if (z == 0)
-    printf(__FILE__ ": divide by zero div.err\n");
-    //klee_report_error(__FILE__, __LINE__, "divide by zero", "div.err");
-}
-
 class KleeHandler : public InterpreterHandler {
 private:
   Interpreter *m_interpreter;
   TreeStreamWriter *m_pathWriter, *m_symPathWriter;
   llvm::raw_ostream *m_infoFile; 
-  unsigned m_testIndex;  // number of tests written so far
   unsigned m_pathsExplored; // number of paths explored so far
 public:
   KleeHandler();
@@ -103,7 +96,6 @@ KleeHandler::KleeHandler()
     m_pathWriter(0),
     m_symPathWriter(0),
     m_infoFile(0),
-    m_testIndex(0),
     m_pathsExplored(0) {
   klee_warning_file = stdout;
   klee_message_file = stdout;
@@ -117,19 +109,13 @@ KleeHandler::~KleeHandler() {
 }
 
 void KleeHandler::setInterpreter(Interpreter *i) {
-  m_interpreter = i;
-
-  if (1) {
+    m_interpreter = i;
     m_pathWriter = new TreeStreamWriter(getOutputFilename("paths.ts"));
     assert(m_pathWriter->good());
     m_interpreter->setPathWriter(m_pathWriter);
-  }
-
-  if (1) {
     m_symPathWriter = new TreeStreamWriter(getOutputFilename("symPaths.ts"));
     assert(m_symPathWriter->good());
     m_interpreter->setSymbolicPathWriter(m_symPathWriter);
-  }
 }
 
 std::string KleeHandler::getOutputFilename(const std::string &filename) {
@@ -171,21 +157,18 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
 
     if (!success)
       klee_error("unable to get symbolic solution, losing test case");
-    unsigned id = ++m_testIndex;
 printf("[%s:%d] outsize %d\n", __FUNCTION__, __LINE__, (int)out.size());
     for (unsigned i=0; i<out.size(); i++)
        printf("[%s:%d] [%d] = '%s'\n", __FUNCTION__, __LINE__, i, const_cast<char*>(out[i].first.c_str()));
-    if (errorMessage) {
+    if (errorMessage)
        llvm::outs() << "TESTERROR:\n" << errorMessage << "\n";
-    }
     if (m_pathWriter) {
+printf("[%s:%d] PATH\n", __FUNCTION__, __LINE__);
       std::vector<unsigned char> concreteBranches;
       m_pathWriter->readStream(m_interpreter->getPathStreamID(state), concreteBranches);
-      llvm::raw_fd_ostream *f = openTestFile("path", id);
       for (std::vector<unsigned char>::iterator I = concreteBranches.begin(), E = concreteBranches.end(); I != E; ++I) {
-        *f << *I << "\n";
+        llvm::outs() << *I << "\n";
       }
-      delete f;
     }
     std::string constraints;
     m_interpreter->getConstraintLog(state, constraints,Interpreter::KQUERY);
@@ -199,21 +182,19 @@ printf("[%s:%d] outsize %d\n", __FUNCTION__, __LINE__, (int)out.size());
     if (m_symPathWriter) {
       std::vector<unsigned char> symbolicBranches;
       m_symPathWriter->readStream(m_interpreter->getSymbolicPathStreamID(state), symbolicBranches);
-      llvm::raw_fd_ostream *f = openTestFile("sym.path", id);
+printf("[%s:%d] SYMPATH\n", __FUNCTION__, __LINE__);
       for (std::vector<unsigned char>::iterator I = symbolicBranches.begin(), E = symbolicBranches.end(); I!=E; ++I) {
-        *f << *I << "\n";
+        llvm::outs() << *I << "\n";
       }
-      delete f;
     }
-    if (1) {
+    {
+printf("[%s:%d] COVERED\n", __FUNCTION__, __LINE__);
       std::map<const std::string*, std::set<unsigned> > cov;
       m_interpreter->getCoveredLines(state, cov);
-      llvm::raw_ostream *f = openTestFile("cov", id);
       for (std::map<const std::string*, std::set<unsigned> >::iterator it = cov.begin(), ie = cov.end(); it != ie; ++it) {
         for (std::set<unsigned>::iterator it2 = it->second.begin(), ie = it->second.end(); it2 != ie; ++it2)
-          *f << *it->first << ":" << *it2 << "\n";
+          llvm::outs() << *it->first << ":" << *it2 << "\n";
       }
-      delete f;
     }
 printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
 }
@@ -262,9 +243,8 @@ printf("\n");
   if (!Buffer)
     klee_error("error loading program '%s': %s", InputFile.c_str(), Buffer.getError().message().c_str());
   auto mainModuleOrError = getLazyBitcodeModule(std::move(Buffer.get()), getGlobalContext());
-  if (!mainModuleOrError) {
+  if (!mainModuleOrError)
     klee_error("error loading program '%s': %s", InputFile.c_str(), mainModuleOrError.getError().message().c_str());
-  }
   // The module has taken ownership of the MemoryBuffer so release it from the std::unique_ptr
   Buffer->release();
   mainModule = mainModuleOrError->release();
@@ -275,18 +255,14 @@ printf("\n");
   std::string LibraryDir = KleeHandler::getRunTimeLibraryPath(argv[0]);
   Interpreter::ModuleOptions Opts(LibraryDir.c_str(), OptimizeModule); 
 
-  std::vector<std::string>::iterator libs_it;
-  std::vector<std::string>::iterator libs_ie;
-  for (libs_it = LinkLibraries.begin(), libs_ie = LinkLibraries.end(); libs_it != libs_ie; ++libs_it) {
+  for (auto libs_it = LinkLibraries.begin(), libs_ie = LinkLibraries.end(); libs_it != libs_ie; ++libs_it) {
     const char * libFilename = libs_it->c_str();
     klee_message("Linking in library: %s.\n", libFilename);
     mainModule = klee::linkWithLibrary(mainModule, libFilename);
   }
-  // Get the desired main function.  klee_main initializes uClibc
-  // locale and other data and then calls main.
   Function *mainFn = mainModule->getFunction("main");
   if (!mainFn) {
-    llvm::outs() << "'" << "main" << "' function not found in module.\n";
+    llvm::outs() << "'main' function not found in module.\n";
     return -1;
   }
 
@@ -299,10 +275,7 @@ printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
   const Module *finalModule = interpreter->setModule(mainModule, Opts);
 
 printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
-  {
-  int pArgc = InputArgv.size() + 1;
-  char **pArgv = new char *[pArgc];
-  char **pEnvp = envp;
+  char **pArgv = new char *[InputArgv.size() + 1];
 
   for (unsigned i=0; i<InputArgv.size()+1; i++) {
     std::string &arg = (i==0 ? InputFile : InputArgv[i-1]);
@@ -312,18 +285,9 @@ printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
     pArg[size - 1] = 0; 
     pArgv[i] = pArg;
   } 
-  interpreter->runFunctionAsMain(mainFn, pArgc, pArgv, pEnvp);
-  }
-  Function *zcfun = mainModule->getFunction("klee_div_zero_check");
-printf("[%s:%d] after runFunctionAsMain %p\n", __FUNCTION__, __LINE__, zcfun);
-if (zcfun)
-   zcfun->dump();
+  interpreter->runFunctionAsMain(mainFn, InputArgv.size() + 1, pArgv, envp);
   uint64_t queries = *theStatisticManager->getStatisticByName("Queries");
-  uint64_t queriesValid = *theStatisticManager->getStatisticByName("QueriesValid");
-  uint64_t queriesInvalid = *theStatisticManager->getStatisticByName("QueriesInvalid");
-  uint64_t queryCounterexamples = *theStatisticManager->getStatisticByName("QueriesCEX");
   uint64_t queryConstructs = *theStatisticManager->getStatisticByName("QueriesConstructs");
-  uint64_t instructions = *theStatisticManager->getStatisticByName("Instructions");
   uint64_t forks = *theStatisticManager->getStatisticByName("Forks"); 
   llvm::outs() << "KLEE: done: explored paths = " << 1 + forks << "\n";
 
@@ -333,9 +297,9 @@ if (zcfun)
     llvm::outs() << "KLEE: done: avg. constructs per query = " << queryConstructs / queries << "\n";
   llvm::outs()
     << "KLEE: done: total queries = " << queries << "\n"
-    << "KLEE: done: valid queries = " << queriesValid << "\n"
-    << "KLEE: done: invalid queries = " << queriesInvalid << "\n"
-    << "KLEE: done: query cex = " << queryCounterexamples << "\n";
-  llvm::outs() << "\nKLEE: done: total instructions = " << instructions << "\n";
+    << "KLEE: done: valid queries = " << *theStatisticManager->getStatisticByName("QueriesValid") << "\n"
+    << "KLEE: done: invalid queries = " << *theStatisticManager->getStatisticByName("QueriesInvalid") << "\n"
+    << "KLEE: done: query cex = " << *theStatisticManager->getStatisticByName("QueriesCEX") << "\n"
+    << "KLEE: done: total instructions = " << *theStatisticManager->getStatisticByName("Instructions") << "\n";
   return 0;
 }
