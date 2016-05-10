@@ -146,29 +146,25 @@ llvm::raw_fd_ostream *KleeHandler::openTestFile(const std::string &suffix, unsig
 void KleeHandler::processTestCase(const ExecutionState &state, const char *errorMessage, const char *errorSuffix)
 {
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
-  std::vector< std::pair<std::string, std::vector<unsigned char> > > out;
-  bool success = m_interpreter->getSymbolicSolution(state, out);
-
-    if (!success)
-      klee_error("unable to get symbolic solution, losing test case");
+    std::vector< std::pair<std::string, std::vector<unsigned char> > > out;
+    if (!m_interpreter->getSymbolicSolution(state, out))
+        klee_error("unable to get symbolic solution, losing test case");
 printf("[%s:%d] outsize %d\n", __FUNCTION__, __LINE__, (int)out.size());
     for (unsigned i=0; i<out.size(); i++)
-       printf("[%s:%d] [%d] = '%s'\n", __FUNCTION__, __LINE__, i, const_cast<char*>(out[i].first.c_str()));
+        printf("[%s:%d] [%d] = '%s'\n", __FUNCTION__, __LINE__, i, const_cast<char*>(out[i].first.c_str()));
     if (errorMessage)
-       llvm::outs() << "TESTERROR:\n" << errorMessage << "\n";
+        llvm::outs() << "TESTERROR:\n" << errorMessage << "\n";
     if (m_pathWriter) {
 printf("[%s:%d] PATH\n", __FUNCTION__, __LINE__);
       std::vector<unsigned char> concreteBranches;
       m_pathWriter->readStream(m_interpreter->getPathStreamID(state), concreteBranches);
-      for (std::vector<unsigned char>::iterator I = concreteBranches.begin(), E = concreteBranches.end(); I != E; ++I) {
+      for (auto I = concreteBranches.begin(), E = concreteBranches.end(); I != E; ++I)
         llvm::outs() << *I << "\n";
-      }
     }
     std::string constraints;
     m_interpreter->getConstraintLog(state, constraints,Interpreter::KQUERY);
     printf("[%s:%d] KQUERY '%s'\n", __FUNCTION__, __LINE__, constraints.c_str());
-      // FIXME: If using Z3 as the core solver the emitted file is actually
-      // SMT-LIBv2 not CVC which is a bit confusing
+      // FIXME: If using Z3 as the core solver the emitted file is actually SMT-LIBv2 not CVC which is a bit confusing
     m_interpreter->getConstraintLog(state, constraints, Interpreter::STP);
     printf("[%s:%d] STP '%s'\n", __FUNCTION__, __LINE__, constraints.c_str());
     m_interpreter->getConstraintLog(state, constraints, Interpreter::SMTLIB2);
@@ -177,19 +173,15 @@ printf("[%s:%d] PATH\n", __FUNCTION__, __LINE__);
       std::vector<unsigned char> symbolicBranches;
       m_symPathWriter->readStream(m_interpreter->getSymbolicPathStreamID(state), symbolicBranches);
 printf("[%s:%d] SYMPATH\n", __FUNCTION__, __LINE__);
-      for (std::vector<unsigned char>::iterator I = symbolicBranches.begin(), E = symbolicBranches.end(); I!=E; ++I) {
+      for (auto I = symbolicBranches.begin(), E = symbolicBranches.end(); I!=E; ++I)
         llvm::outs() << *I << "\n";
-      }
     }
-    {
 printf("[%s:%d] COVERED\n", __FUNCTION__, __LINE__);
       std::map<const std::string*, std::set<unsigned> > cov;
       m_interpreter->getCoveredLines(state, cov);
-      for (std::map<const std::string*, std::set<unsigned> >::iterator it = cov.begin(), ie = cov.end(); it != ie; ++it) {
-        for (std::set<unsigned>::iterator it2 = it->second.begin(), ie = it->second.end(); it2 != ie; ++it2)
-          llvm::outs() << *it->first << ":" << *it2 << "\n";
-      }
-    }
+      for (auto it = cov.begin(), ie = cov.end(); it != ie; ++it)
+          for (auto it2 = it->second.begin(), ie = it->second.end(); it2 != ie; ++it2)
+              llvm::outs() << *it->first << ":" << *it2 << "\n";
 printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
 }
 
@@ -210,37 +202,25 @@ std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
 
 int main(int argc, char **argv, char **envp)
 {
-DebugFlag = true;
-printf("[%s:%d]klee: ", __FUNCTION__, __LINE__);
-for (int i = 0; i < argc; i++)
-    printf("; %s", argv[i]);
-printf("\n");
+  std::string ErrorMsg;
+  DebugFlag = true;
   atexit(llvm_shutdown);  // Call llvm_shutdown() on exit.
-
   llvm::InitializeNativeTarget();
   cl::SetVersionPrinter(klee::printVersion); 
   cl::ParseCommandLineOptions(argc, (char **)argv, " klee\n"); // removes // warning
   sys::PrintStackTraceOnErrorSignal();
-
-  // Load the bytecode...
-  std::string ErrorMsg;
-  Module *mainModule = 0;
   auto Buffer = MemoryBuffer::getFileOrSTDIN(InputFile.c_str());
   if (!Buffer)
     klee_error("error loading program '%s': %s", InputFile.c_str(), Buffer.getError().message().c_str());
   auto mainModuleOrError = getLazyBitcodeModule(std::move(Buffer.get()), getGlobalContext());
   if (!mainModuleOrError)
     klee_error("error loading program '%s': %s", InputFile.c_str(), mainModuleOrError.getError().message().c_str());
-  // The module has taken ownership of the MemoryBuffer so release it from the std::unique_ptr
   Buffer->release();
-  mainModule = mainModuleOrError->release();
-  if (auto ec = mainModule->materializeAllPermanently()) {
+  Module *mainModule = mainModuleOrError->release();
+  if (auto ec = mainModule->materializeAllPermanently())
     klee_error("error loading program '%s': %s", InputFile.c_str(), ec.message().c_str());
-  }
-
   std::string LibraryDir = KleeHandler::getRunTimeLibraryPath(argv[0]);
   Interpreter::ModuleOptions Opts(LibraryDir.c_str(), OptimizeModule); 
-
   for (auto libs_it = LinkLibraries.begin(), libs_ie = LinkLibraries.end(); libs_it != libs_ie; ++libs_it) {
     const char * libFilename = libs_it->c_str();
     klee_message("Linking in library: %s.\n", libFilename);
@@ -251,7 +231,6 @@ printf("\n");
     llvm::outs() << "'main' function not found in module.\n";
     return -1;
   }
-
   Interpreter::InterpreterOptions IOpts;
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
   KleeHandler *handler = new KleeHandler();
@@ -259,10 +238,8 @@ printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
   Interpreter *interpreter = Interpreter::create(IOpts, handler);
   handler->setInterpreter(interpreter);
   const Module *finalModule = interpreter->setModule(mainModule, Opts);
-
 printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
   char **pArgv = new char *[InputArgv.size() + 1];
-
   for (unsigned i=0; i<InputArgv.size()+1; i++) {
     std::string &arg = (i==0 ? InputFile : InputArgv[i-1]);
     unsigned size = arg.size() + 1;
@@ -273,14 +250,12 @@ printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
   } 
   interpreter->runFunctionAsMain(mainFn, InputArgv.size() + 1, pArgv, envp);
   uint64_t queries = *theStatisticManager->getStatisticByName("Queries");
-  uint64_t queryConstructs = *theStatisticManager->getStatisticByName("QueriesConstructs");
-  uint64_t forks = *theStatisticManager->getStatisticByName("Forks"); 
-  llvm::outs() << "KLEE: done: explored paths = " << 1 + forks << "\n";
+  llvm::outs() << "KLEE: done: explored paths = " << 1 + *theStatisticManager->getStatisticByName("Forks") << "\n";
 
   // Write some extra information in the info file which users won't
   // necessarily care about or understand.
   if (queries)
-    llvm::outs() << "KLEE: done: avg. constructs per query = " << queryConstructs / queries << "\n";
+    llvm::outs() << "KLEE: done: avg. constructs per query = " << *theStatisticManager->getStatisticByName("QueriesConstructs") / queries << "\n";
   llvm::outs()
     << "KLEE: done: total queries = " << queries << "\n"
     << "KLEE: done: valid queries = " << *theStatisticManager->getStatisticByName("QueriesValid") << "\n"
