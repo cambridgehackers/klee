@@ -297,7 +297,7 @@ Executor::StatePair
 Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&current);
-  solveSetTimeout(0);
+  osolver->setCoreSolverTimeout(0);
   if (!solver->solveEvaluate(current, condition, res)) {
     current.pc = current.prevPC;
     terminateStateEarly(current, "Query timed out (fork).");
@@ -492,10 +492,10 @@ ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
   if (!isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
     bool isTrue = false;
-    solveSetTimeout(0);
+    osolver->setCoreSolverTimeout(0);
     if (solver->solveGetValue(state, e, value) && solver->mustBeTrue(state, EqExpr::create(e, value), isTrue) && isTrue)
       result = value;
-    solveSetTimeout(0);
+    osolver->setCoreSolverTimeout(0);
   }
   return result;
 }
@@ -2039,19 +2039,19 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   // fast path: single in-bounds resolution
   ObjectPair op;
   bool success;
-  solveSetTimeout(0);
+  osolver->setCoreSolverTimeout(0);
   if (!state.addressSpace.resolveOne(state, solver, address, op, success)) {
     address = toConstant(state, address, "resolveOne failure");
     success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
   }
-  solveSetTimeout(0);
+  osolver->setCoreSolverTimeout(0);
   if (success) {
     const MemoryObject *mo = op.first;
     ref<Expr> offset = mo->getOffsetExpr(address);
     bool inBounds;
-    solveSetTimeout(0);
+    osolver->setCoreSolverTimeout(0);
     bool success = solver->mustBeTrue(state, mo->getBoundsCheckOffset(offset, bytes), inBounds);
-    solveSetTimeout(0);
+    osolver->setCoreSolverTimeout(0);
     if (!success) {
       state.pc = state.prevPC;
       terminateStateEarly(state, "Query timed out (bounds check).");
@@ -2079,9 +2079,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   }
   // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds)
   ResolutionList rl;
-  solveSetTimeout(0);
+  osolver->setCoreSolverTimeout(0);
   bool incomplete = state.addressSpace.resolve(state, solver, address, rl, 0, 0);
-  solveSetTimeout(0);
+  osolver->setCoreSolverTimeout(0);
 
   // XXX there is some query wasteage here. who cares?
   ExecutionState *unbound = &state;
@@ -2283,7 +2283,7 @@ void Executor::getConstraintLog(const ExecutionState &state, std::string &res, I
 }
 
 bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std::pair<std::string, std::vector<unsigned char>>> &res){
-  solveSetTimeout(0);
+  osolver->setCoreSolverTimeout(0);
   ExecutionState tmp(state);
 
   // Go through each byte in every test case and attempt to restrict
@@ -2317,7 +2317,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     objects.push_back(state.symbolics[i].second);
   bool success = solveGetInitialValues(tmp, objects, values);
-  solveSetTimeout(0);
+  osolver->setCoreSolverTimeout(0);
   if (!success) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
     ExprPPrinter::printQuery(llvm::errs(), state.constraints, ConstantExpr::alloc(0, Expr::Bool));
