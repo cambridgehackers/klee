@@ -1686,7 +1686,7 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
     (void) success;
     example = value->getZExtValue();
     info << "\texample: " << example << "\n";
-    std::pair< ref<Expr>, ref<Expr> > res = getRange(state, address);
+    std::pair< ref<Expr>, ref<Expr> > res = solveGetRange(state, address);
     info << "\trange: [" << res.first << ", " << res.second <<"]\n";
   }
 
@@ -2426,6 +2426,6 @@ TimingSolver::getInitialValues(const ExecutionState& state, const std::vector<co
 }
 
 std::pair< ref<Expr>, ref<Expr> >
-Executor::getRange(const ExecutionState& state, ref<Expr> expr) const {
+Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
   return osolver->getRange(Query(state.constraints, expr));
 }

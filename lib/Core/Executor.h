@@ -288,7 +288,7 @@ public:
   virtual bool getSymbolicSolution(const ExecutionState &state, std::vector< std::pair<std::string, std::vector<unsigned char> > > &res); 
   virtual void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res); 
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
-  std::pair< ref<Expr>, ref<Expr> > getRange(const ExecutionState&, ref<Expr> query) const;
+  std::pair< ref<Expr>, ref<Expr> > solveGetRange(const ExecutionState&, ref<Expr> query) const;
 }; 
 } // End klee namespace 
 #endif

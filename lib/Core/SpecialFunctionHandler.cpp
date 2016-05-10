@@ -473,24 +473,20 @@ void SpecialFunctionHandler::handlePrintRange(ExecutionState &state,
     bool success __attribute__ ((unused)) = executor.solver->getValue(state, arguments[1], value);
     assert(success && "FIXME: Unhandled solver failure");
     bool res;
-    success = executor.solver->mustBeTrue(state, 
-                                          EqExpr::create(arguments[1], value), 
-                                          res);
+    success = executor.solver->mustBeTrue(state, EqExpr::create(arguments[1], value), res);
     assert(success && "FIXME: Unhandled solver failure");
     if (res) {
       llvm::errs() << " == " << value;
     } else { 
       llvm::errs() << " ~= " << value;
-      std::pair< ref<Expr>, ref<Expr> > res = executor.getRange(state, arguments[1]);
+      std::pair< ref<Expr>, ref<Expr> > res = executor.solveGetRange(state, arguments[1]);
       llvm::errs() << " (in [" << res.first << ", " << res.second <<"])";
     }
   }
   llvm::errs() << "\n";
 }
 
-void SpecialFunctionHandler::handleGetObjSize(ExecutionState &state,
-                                  KInstruction *target,
-                                  std::vector<ref<Expr> > &arguments) {
+void SpecialFunctionHandler::handleGetObjSize(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
   // XXX should type check args
   assert(arguments.size()==1 &&
          "invalid number of arguments to klee_get_obj_size");
