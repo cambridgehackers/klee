@@ -8,7 +8,6 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
 #include "llvm/Support/Debug.h"
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
@@ -22,7 +21,6 @@
 #include "klee/Internal/System/Time.h"
 #include "klee/Internal/Support/PrintVersion.h"
 #include "klee/Internal/Support/ErrorHandling.h"
-
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
@@ -36,23 +34,19 @@
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
-
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/Path.h"
-
 #include <dirent.h>
 #include <signal.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-
 #include <cerrno>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
 #include <sstream>
-
 
 using namespace llvm;
 using namespace klee;
@@ -214,15 +208,6 @@ std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
   return libDir.str();
 }
 
-//===----------------------------------------------------------------------===//
-// main Driver function
-//
-static void parseArguments(int argc, char **argv)
-{ 
-  cl::SetVersionPrinter(klee::printVersion); 
-  cl::ParseCommandLineOptions(argc, (char **)argv, " klee\n"); // removes // warning
-}
-
 int main(int argc, char **argv, char **envp)
 {
 DebugFlag = true;
@@ -233,7 +218,8 @@ printf("\n");
   atexit(llvm_shutdown);  // Call llvm_shutdown() on exit.
 
   llvm::InitializeNativeTarget();
-  parseArguments(argc, argv);
+  cl::SetVersionPrinter(klee::printVersion); 
+  cl::ParseCommandLineOptions(argc, (char **)argv, " klee\n"); // removes // warning
   sys::PrintStackTraceOnErrorSignal();
 
   // Load the bytecode...
