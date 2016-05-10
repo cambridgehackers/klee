@@ -10,7 +10,8 @@
 #ifndef KLEE_SOLVERSTATS_H
 #define KLEE_SOLVERSTATS_H
 
-#include "klee/Statistic.h"
+#include "klee/Config/Version.h"
+#include "llvm/Support/DataTypes.h"
 
 namespace klee {
 namespace stats {

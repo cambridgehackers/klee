@@ -293,8 +293,6 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
     const InstructionInfo &ii = *es.pc->info;
     StackFrame &sf = es.stack.back();
     theStatisticManager->setIndex(ii.id);
-    if (UseCallPaths)
-      theStatisticManager->setContext(&sf.callPathNode->statistics);
 
     if (es.instsSinceCovNew)
       ++es.instsSinceCovNew;
@@ -457,7 +455,7 @@ void StatsTracker::writeIStats() {
   of << "\n";
   
   StatisticManager &sm = *theStatisticManager;
-  unsigned nStats = sm.getNumStatistics();
+  //unsigned nStats = sm.getNumStatistics();
 
   // Max is 13, sadly
   //istatsMask |= 1<<sm.getStatisticID("Queries");
@@ -522,7 +520,6 @@ void StatsTracker::writeIStats() {
              it != ie; ++it) {
           Instruction *instr = &*it;
           const InstructionInfo &ii = executor.kmodule->infos->getInfo(instr);
-          unsigned index = ii.id;
           if (ii.file!=sourceFile) {
             of << "fl=" << ii.file << "\n";
             sourceFile = ii.file;
@@ -555,22 +552,22 @@ void StatsTracker::writeIStats() {
 
                 of << ii.assemblyLine << " ";
                 of << ii.line << " ";
-                for (unsigned i=0; i<nStats; i++) {
-                  if (istatsMask&(1<<i)) {
+                //for (unsigned i=0; i<nStats; i++) {
+                  //if (istatsMask&(1<<i)) {
                     //Statistic &s = sm.getStatistic(i);
-                    uint64_t value;
+                    //uint64_t value;
 
                     // Hack, ignore things that don't make sense on
                     // call paths.
                     //if (&s == &stats::uncoveredInstructions) {
-                      value = 0;
+                      //value = 0;
                     //} else {
                       //value = csi.statistics.getValue(s);
                     //}
 
-                    of << value << " ";
-                  }
-                }
+                    //of << value << " ";
+                  //}
+                //}
                 of << "\n";
               }
             }

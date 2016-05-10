@@ -71,7 +71,6 @@ using namespace klee;
 namespace klee {
   RNG theRNG;
 }
-static Statistic fooMe("fooLongName", "fooShortName");
 
 Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
   : Interpreter(opts),
