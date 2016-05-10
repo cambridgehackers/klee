@@ -11,21 +11,16 @@
 // interpreter.
 //
 //===----------------------------------------------------------------------===//
-
 #ifndef KLEE_EXECUTOR_H
 #define KLEE_EXECUTOR_H
-
 #include "klee/ExecutionState.h"
 #include "klee/Interpreter.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ArrayCache.h"
-
 #include "llvm/ADT/Twine.h"
-#include "klee/Expr.h"
 #include "klee/Solver.h"
-
 #include <vector>
 #include <string>
 #include <map>
@@ -67,10 +62,9 @@ namespace klee {
   class SpecialFunctionHandler;
   struct StackFrame;
   class StatsTracker;
-  class TimingSolver;
   class TreeStreamWriter;
   template<class T> class ref;
-  class Solver;
+
   class TimingSolver {
   public:
     Solver *solver;
