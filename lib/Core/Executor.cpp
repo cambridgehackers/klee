@@ -2316,7 +2316,14 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
   std::vector<const Array*> objects;
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     objects.push_back(state.symbolics[i].second);
-  bool success = solveGetInitialValues(tmp, objects, values);
+  bool success = true;
+  if (!objects.empty()) {
+      sys::TimeValue now = util::getWallTimeVal(); 
+      success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values); 
+      sys::TimeValue delta = util::getWallTimeVal();
+      delta -= now;
+      stats::solverTime += delta.usec();
+  }
   osolver->setCoreSolverTimeout(0);
   if (!success) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
@@ -2339,19 +2346,6 @@ Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {
 
 Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
   return new Executor(opts, ih);
-}
-
-bool 
-Executor::solveGetInitialValues(const ExecutionState& state, const std::vector<const Array*> &objects, std::vector<std::vector<unsigned char>> &result) {
-  if (objects.empty())
-    return true; 
-  sys::TimeValue now = util::getWallTimeVal(); 
-  bool success = osolver->getInitialValues(Query(state.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, result); 
-  sys::TimeValue delta = util::getWallTimeVal();
-  delta -= now;
-  stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.; 
-  return success;
 }
 
 std::pair< ref<Expr>, ref<Expr> >

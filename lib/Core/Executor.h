@@ -287,7 +287,6 @@ public:
   virtual void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res); 
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
   std::pair< ref<Expr>, ref<Expr> > solveGetRange(const ExecutionState&, ref<Expr> query) const;
-  bool solveGetInitialValues(const ExecutionState&, const std::vector<const Array*> &objects, std::vector< std::vector<unsigned char> > &result);
 }; 
 } // End klee namespace 
 #endif
