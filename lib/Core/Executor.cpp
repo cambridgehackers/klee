@@ -18,7 +18,6 @@
 #include "SeedInfo.h"
 #include "SpecialFunctionHandler.h"
 #include "StatsTracker.h"
-#include "UserSearcher.h"
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
 #include "klee/Interpreter.h"
@@ -68,6 +67,24 @@ using namespace klee;
 
 namespace klee {
   RNG theRNG;
+}
+namespace {
+  cl::list<Searcher::CoreSearchType>
+  CoreSearch("search", cl::desc("Specify the search heuristic (default=random-path interleaved with nurs:covnew)"),
+	     cl::values(clEnumValN(Searcher::DFS, "dfs", "use Depth First Search (DFS)"),
+			clEnumValN(Searcher::BFS, "bfs", "use Breadth First Search (BFS)"),
+			clEnumValN(Searcher::RandomState, "random-state", "randomly select a state to explore"),
+			clEnumValN(Searcher::RandomPath, "random-path", "use Random Path Selection (see OSDI'08 paper)"),
+			clEnumValN(Searcher::NURS_CovNew, "nurs:covnew", "use Non Uniform Random Search (NURS) with Coverage-New"),
+			clEnumValN(Searcher::NURS_MD2U, "nurs:md2u", "use NURS with Min-Dist-to-Uncovered"),
+			clEnumValN(Searcher::NURS_Depth, "nurs:depth", "use NURS with 2^depth"),
+			clEnumValN(Searcher::NURS_ICnt, "nurs:icnt", "use NURS with Instr-Count"),
+			clEnumValN(Searcher::NURS_CPICnt, "nurs:cpicnt", "use NURS with CallPath-Instr-Count"),
+			clEnumValN(Searcher::NURS_QC, "nurs:qc", "use NURS with Query-Cost"),
+			clEnumValEnd)); 
+}
+namespace klee {
+  static bool userSearcherRequiresMD2U();
 }
 
 Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
@@ -1371,6 +1388,30 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
   kgepi->offset = constantOffset->getZExtValue();
 }
 
+static bool klee::userSearcherRequiresMD2U() {
+  return (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end() ||
+	  std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end() ||
+	  std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end() ||
+	  std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end() ||
+	  std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end());
+}
+static Searcher *getNewSearcher(Searcher::CoreSearchType type, Executor &executor) {
+  Searcher *searcher = NULL;
+  switch (type) {
+  case Searcher::DFS: searcher = new DFSSearcher(); break;
+  case Searcher::BFS: searcher = new BFSSearcher(); break;
+  case Searcher::RandomState: searcher = new RandomSearcher(); break;
+  case Searcher::RandomPath: searcher = new RandomPathSearcher(executor); break;
+  case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew); break;
+  case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered); break;
+  case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth); break;
+  case Searcher::NURS_ICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::InstCount); break;
+  case Searcher::NURS_CPICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CPInstCount); break;
+  case Searcher::NURS_QC: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost); break;
+  }
+  return searcher;
+}
+
 void Executor::run(ExecutionState &initialState) {
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
@@ -1396,7 +1437,22 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   }
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(&initialState);
-  Searcher *searcher = constructUserSearcher(*this);
+  if (CoreSearch.size() == 0) {
+    CoreSearch.push_back(Searcher::RandomPath);
+    CoreSearch.push_back(Searcher::NURS_CovNew);
+  } 
+  Searcher *searcher = getNewSearcher(CoreSearch[0], *this); 
+  if (CoreSearch.size() > 1) {
+    std::vector<Searcher *> s;
+    s.push_back(searcher); 
+    for (unsigned i=1; i<CoreSearch.size(); i++)
+      s.push_back(getNewSearcher(CoreSearch[i], *this)); 
+    searcher = new InterleavedSearcher(s);
+  } 
+  llvm::raw_ostream &os = getHandler().getInfoStream(); 
+  os << "BEGIN searcher description\n";
+  searcher->printName(os);
+  os << "END searcher description\n"; 
   searcher->update(0, states, std::set<ExecutionState*>());
   while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
@@ -1417,8 +1473,6 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
     }
     removedStates.clear();
   }
-  delete searcher;
-  searcher = 0;
 printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
 }
 

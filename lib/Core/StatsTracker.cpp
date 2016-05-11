@@ -22,7 +22,7 @@
 #include "CoreStats.h"
 #include "Executor.h"
 #include "MemoryManager.h"
-#include "UserSearcher.h"
+//#include "UserSearcher.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
