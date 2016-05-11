@@ -964,42 +964,24 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     break;
 
     // Arithmetic / logical
-
-  case Instruction::Add: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    bindLocal(ki, state, AddExpr::create(left, right));
-    break;
-  }
-
-  case Instruction::Sub: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    bindLocal(ki, state, SubExpr::create(left, right));
-    break;
-  }
-
-  case Instruction::Mul: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    bindLocal(ki, state, MulExpr::create(left, right));
-    break;
-  }
-
-  case Instruction::UDiv:
-  case Instruction::SDiv:
-  case Instruction::URem:
-  case Instruction::SRem:
-  case Instruction::And:
-  case Instruction::Or:
-  case Instruction::Xor:
-  case Instruction::Shl:
-  case Instruction::LShr:
-  case Instruction::AShr: {
+  case Instruction::Add: case Instruction::Sub: case Instruction::Mul:
+  case Instruction::UDiv: case Instruction::SDiv:
+  case Instruction::URem: case Instruction::SRem:
+  case Instruction::And: case Instruction::Or: case Instruction::Xor:
+  case Instruction::Shl: case Instruction::LShr: case Instruction::AShr: {
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
     ref<Expr> result;
     switch (opcode) {
+    case Instruction::Add:
+        result = AddExpr::create(left, right);
+        break;
+    case Instruction::Sub:
+        result = SubExpr::create(left, right);
+        break;
+    case Instruction::Mul:
+        result = MulExpr::create(left, right);
+        break;
     case Instruction::UDiv:
         result = UDivExpr::create(left, right);
         break;
@@ -1151,6 +1133,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     CastInst *ci = cast<CastInst>(i);
     Expr::Width iType = getWidthForLLVMType(ci->getType());
     ref<Expr> arg = eval(ki, 0, state).value;
+    switch (opcode) {
+    }
     bindLocal(ki, state, ZExtExpr::create(arg, iType));
     break;
   }
