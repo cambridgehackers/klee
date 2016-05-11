@@ -154,12 +154,10 @@ private:
   // Called on [for now] concrete reads, replaces constant with a symbolic // Used for testing.
   ref<Expr> replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e); 
   const Cell& eval(KInstruction *ki, unsigned index, ExecutionState &state) const; 
-  Cell& getArgumentCell(ExecutionState &state, KFunction *kf, unsigned index) {
-    return state.stack.back().locals[kf->getArgRegister(index)];
+  void getArgumentCell(ExecutionState &state, KFunction *kf, unsigned aSize, std::vector<ref<Expr>> &arguments) {
+    for (unsigned i = 0; i < aSize; i++)
+        state.stack.back().locals[kf->getArgRegister(i)].value = arguments[i];
   }
-  Cell& getDestCell(ExecutionState &state, KInstruction *target) {
-    return state.stack.back().locals[target->dest];
-  } 
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce); 
   /// Return a constant value for the given expression, forcing it to
   /// be constant in the given state by adding a constraint if
@@ -171,7 +169,6 @@ private:
   void terminateStateEarly(ExecutionState &state, const llvm::Twine &message);
   template <typename TypeIt>
   void computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie); 
-  void handlePointsToObj(ExecutionState &state, KInstruction *target, const std::vector<ref<Expr> > &arguments); 
 
 public: //friends
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array = 0); 
@@ -232,12 +229,8 @@ public: //friends
   }
   // XXX should just be moved out to utility module
   ref<klee::ConstantExpr> evalConstant(const llvm::Constant *c);
-  virtual void setPathWriter(TreeStreamWriter *tsw) {
-    pathWriter = tsw;
-  }
-  virtual void setSymbolicPathWriter(TreeStreamWriter *tsw) {
-    symPathWriter = tsw;
-  }
+  virtual void setPathWriter(TreeStreamWriter *tsw) { pathWriter = tsw; }
+  virtual void setSymbolicPathWriter(TreeStreamWriter *tsw) { symPathWriter = tsw; }
   virtual const llvm::Module *
   setModule(llvm::Module *module, const ModuleOptions &opts);
   virtual void runFunctionAsMain(llvm::Function *f, int argc, char **argv, char **envp); 

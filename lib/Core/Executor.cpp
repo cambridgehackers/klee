@@ -222,10 +222,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
           os->write8(offset, addr[offset]);
       }
     }
-    else {
-      if (!i->hasInitializer())
-          os->initializeToRandom();
-    }
+    else if (!i->hasInitializer())
+        os->initializeToRandom();
   }
   // once all objects are allocated, do the actual initialization
   for (Module::const_global_iterator i = m->global_begin(), e = m->global_end(); i != e; ++i) {
@@ -458,7 +456,7 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index, ExecutionState &sta
 }
 
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> value) {
-  getDestCell(state, target).value = value;
+  state.stack.back().locals[target->dest].value = value;
 }
 
 ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
@@ -534,7 +532,7 @@ void Executor::stepInstruction(ExecutionState &state) {
   ++state.pc;
 }
 
-void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f, std::vector< ref<Expr> > &arguments) {
+void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f, std::vector<ref<Expr>> &arguments) {
   Instruction *i = ki->inst;
   if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
@@ -647,8 +645,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       }
     } 
     unsigned numFormals = f->arg_size();
-    for (unsigned i=0; i<numFormals; ++i)
-      getArgumentCell(state, kf, i).value = arguments[i];
+    getArgumentCell(state, kf, numFormals, arguments);
   }
 }
 
@@ -1935,8 +1932,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   if (statsTracker)
     statsTracker->framePushed(*state, 0);
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
-  for (unsigned i = 0, e = f->arg_size(); i != e; ++i)
-    getArgumentCell(*state, kf, i).value = arguments[i];
+  getArgumentCell(*state, kf, f->arg_size(), arguments);
   if (argvMO) {
     ObjectState *argvOS = bindObjectInState(*state, argvMO, false);
     for (int i=0; i<argc+1+envc+1+1; i++) {
