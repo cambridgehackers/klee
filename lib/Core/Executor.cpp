@@ -1103,39 +1103,33 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
     // Conversion
-  case Instruction::Trunc: {
-    CastInst *ci = cast<CastInst>(i);
-    ref<Expr> result = ExtractExpr::create(eval(ki, 0, state).value, 0, getWidthForLLVMType(ci->getType()));
-    bindLocal(ki, state, result);
-    break;
-  }
-  case Instruction::ZExt: {
-    CastInst *ci = cast<CastInst>(i);
-    ref<Expr> result = ZExtExpr::create(eval(ki, 0, state).value, getWidthForLLVMType(ci->getType()));
-    bindLocal(ki, state, result);
-    break;
-  }
-  case Instruction::SExt: {
-    CastInst *ci = cast<CastInst>(i);
-    ref<Expr> result = SExtExpr::create(eval(ki, 0, state).value, getWidthForLLVMType(ci->getType()));
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::IntToPtr: {
-    CastInst *ci = cast<CastInst>(i);
-    Expr::Width pType = getWidthForLLVMType(ci->getType());
-    ref<Expr> arg = eval(ki, 0, state).value;
-    bindLocal(ki, state, ZExtExpr::create(arg, pType));
-    break;
-  }
+  case Instruction::Trunc:
+  case Instruction::ZExt:
+  case Instruction::SExt:
+  case Instruction::IntToPtr:
   case Instruction::PtrToInt: {
     CastInst *ci = cast<CastInst>(i);
     Expr::Width iType = getWidthForLLVMType(ci->getType());
     ref<Expr> arg = eval(ki, 0, state).value;
+    ref<Expr> result;
     switch (opcode) {
+    case Instruction::Trunc:
+        result = ExtractExpr::create(arg, 0, iType);
+        break;
+    case Instruction::ZExt:
+        result = ZExtExpr::create(arg, iType);
+        break;
+    case Instruction::SExt:
+        result = SExtExpr::create(arg, iType);
+        break;
+    case Instruction::IntToPtr:
+        result = ZExtExpr::create(arg, iType);
+        break;
+    case Instruction::PtrToInt:
+        result = ZExtExpr::create(arg, iType);
+        break;
     }
-    bindLocal(ki, state, ZExtExpr::create(arg, iType));
+    bindLocal(ki, state, result);
     break;
   }
 
