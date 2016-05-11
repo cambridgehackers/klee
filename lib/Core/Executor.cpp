@@ -81,7 +81,7 @@ namespace {
 			clEnumValN(Searcher::NURS_ICnt, "nurs:icnt", "use NURS with Instr-Count"),
 			clEnumValN(Searcher::NURS_CPICnt, "nurs:cpicnt", "use NURS with CallPath-Instr-Count"),
 			clEnumValN(Searcher::NURS_QC, "nurs:qc", "use NURS with Query-Cost"),
-			clEnumValEnd)); 
+			clEnumValEnd));
 }
 namespace klee {
   static bool userSearcherRequiresMD2U();
@@ -275,7 +275,7 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
   if (it != seedMap.end()) {
     std::vector<SeedInfo> seeds = it->second;
-    seedMap.erase(it); 
+    seedMap.erase(it);
     // Assume each seed only satisfies one condition (necessarily true
     // when conditions are mutually exclusive and their conjunction is // a tautology).
     for (std::vector<SeedInfo>::iterator siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
@@ -286,10 +286,10 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
         assert(success && "FIXME: Unhandled solver failure");
         if (res->isTrue())
           break;
-      } 
+      }
       // If we didn't find a satisfying condition randomly pick one // (the seed will be patched).
       if (i==N)
-        i = theRNG.getInt32() % N; 
+        i = theRNG.getInt32() % N;
       // Extra check in case we're replaying seeds with a max-fork
       if (result[i])
         seedMap[result[i]].push_back(*siit);
@@ -403,7 +403,6 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
     if (warn)
       klee_warning("seeds patched for violating constraint");
   }
-
   state.addConstraint(condition);
 }
 
@@ -434,7 +433,7 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       llvm::SmallVector<ref<Expr>, 4> kids;
       for (unsigned i = cs->getNumOperands(); i != 0; --i) {
         unsigned op = i-1;
-        ref<Expr> kid = evalConstant(cs->getOperand(op)); 
+        ref<Expr> kid = evalConstant(cs->getOperand(op));
         uint64_t thisOffset = sl->getElementOffsetInBits(op),
            nextOffset = (op == cs->getNumOperands() - 1) ? sl->getSizeInBits() : sl->getElementOffsetInBits(op+1);
         if (nextOffset-thisOffset > kid->getWidth()) {
@@ -589,11 +588,11 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC, kf);
-    state.pc = kf->instructions; 
+    state.pc = kf->instructions;
     if (statsTracker)
-      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]); 
+      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
      // TODO: support "byval" parameter attribute
-     // TODO: support zeroext, signext, sret attributes 
+     // TODO: support zeroext, signext, sret attributes
     unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
     if (!f->isVarArg()) {
       if (callingArgs > funcArgs) {
@@ -607,7 +606,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       if (callingArgs < funcArgs) {
         terminateStateOnError(state, "calling function with too few arguments", "user.err");
         return;
-      } 
+      }
       StackFrame &sf = state.stack.back();
       unsigned size = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -625,12 +624,12 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
           }
           size += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
         }
-      } 
+      }
       MemoryObject *mo = sf.varargs = memory->allocate(size, true, false, state.prevPC->inst);
       if ((WordSize == Expr::Int64) && (mo->address & 15)) {
         // Both 64bit Linux/Glibc and 64bit MacOSX should align to 16 bytes.
         klee_warning_once(0, "While allocating varargs: malloc did not align to 16 bytes.");
-      } 
+      }
       ObjectState *os = bindObjectInState(state, mo, true);
       unsigned offset = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -640,7 +639,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
           os->write(offset, arguments[i]);
           offset += Expr::getMinBytesForWidth(arguments[i]->getWidth());
         } else {
-          assert(WordSize == Expr::Int64 && "Unknown word size!"); 
+          assert(WordSize == Expr::Int64 && "Unknown word size!");
           Expr::Width argWidth = arguments[i]->getWidth();
           if (argWidth > Expr::Int64) {
              offset = llvm::RoundUpToAlignment(offset, 16);
@@ -649,7 +648,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
           offset += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
         }
       }
-    } 
+    }
     unsigned numFormals = f->arg_size();
     getArgumentCell(state, kf, numFormals, arguments);
   }
@@ -748,15 +747,15 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       assert(!caller && "caller set on initial stack frame");
       terminateStateOnExit(state);
     } else {
-      state.popFrame(); 
+      state.popFrame();
       if (statsTracker)
-        statsTracker->framePopped(state); 
+        statsTracker->framePopped(state);
       if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
         state.pc = kcaller;
         ++state.pc;
-      } 
+      }
       if (!isVoidReturn) {
         LLVM_TYPE_Q Type *t = caller->getType();
         if (t != Type::getVoidTy(getGlobalContext())) {
@@ -764,7 +763,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
           Expr::Width from = result->getWidth();
           Expr::Width to = getWidthForLLVMType(t);
           if (from != to) {
-            CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller))); 
+            CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller)));
             // XXX need to check other param attrs ?
             if (cs.paramHasAttr(0, llvm::Attribute::SExt)) {
               result = SExtExpr::create(result, to);
@@ -807,7 +806,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   case Instruction::Switch: {
     SwitchInst *si = cast<SwitchInst>(i);
     ref<Expr> cond = eval(ki, 0, state).value;
-    BasicBlock *bb = si->getParent(); 
+    BasicBlock *bb = si->getParent();
     cond = toUnique(state, cond);
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(cond)) {
       // Somewhat gross to create these all the time, but fine till we // switch to an internal rep.
@@ -878,10 +877,10 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       arguments.push_back(eval(ki, j+1, state).value);
     if (f) {
       const FunctionType *fType = dyn_cast<FunctionType>(cast<PointerType>(f->getType())->getElementType());
-      const FunctionType *fpType = dyn_cast<FunctionType>(cast<PointerType>(fp->getType())->getElementType()); 
+      const FunctionType *fpType = dyn_cast<FunctionType>(cast<PointerType>(fp->getType())->getElementType());
       // special case the call with a bitcast case
       if (fType != fpType) {
-        assert(fType && fpType && "unable to get function type"); 
+        assert(fType && fpType && "unable to get function type");
         // XXX check result coercion
         // XXX this really needs thought and validation
         unsigned i=0;
@@ -901,12 +900,12 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
           }
           i++;
         }
-      } 
+      }
       executeCall(state, ki, f, arguments);
     } else {
-      ref<Expr> v = eval(ki, 0, state).value; 
+      ref<Expr> v = eval(ki, 0, state).value;
       ExecutionState *free = &state;
-      bool hasInvalid = false, first = true; 
+      bool hasInvalid = false, first = true;
       /* XXX This is wasteful, no need to do a full evaluate since we
          have already got a value. But in the end the caches should
          handle it for us, albeit with some overhead. */
@@ -918,7 +917,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         if (res.first) {
           uint64_t addr = value->getZExtValue();
           if (legalFunctions.count(addr)) {
-            f = (Function*) addr; 
+            f = (Function*) addr;
             // Don't give warning on unique resolution
             if (res.second || !first)
               klee_warning_once((void*) (unsigned long) addr, "resolved symbolic function pointer to: %s", f->getName().data());
@@ -929,7 +928,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
               hasInvalid = true;
             }
           }
-        } 
+        }
         first = false;
         free = res.second;
       } while (free);
@@ -1440,19 +1439,19 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   if (CoreSearch.size() == 0) {
     CoreSearch.push_back(Searcher::RandomPath);
     CoreSearch.push_back(Searcher::NURS_CovNew);
-  } 
-  Searcher *searcher = getNewSearcher(CoreSearch[0], *this); 
+  }
+  Searcher *searcher = getNewSearcher(CoreSearch[0], *this);
   if (CoreSearch.size() > 1) {
     std::vector<Searcher *> s;
-    s.push_back(searcher); 
+    s.push_back(searcher);
     for (unsigned i=1; i<CoreSearch.size(); i++)
-      s.push_back(getNewSearcher(CoreSearch[i], *this)); 
+      s.push_back(getNewSearcher(CoreSearch[i], *this));
     searcher = new InterleavedSearcher(s);
-  } 
-  llvm::raw_ostream &os = getHandler().getInfoStream(); 
+  }
+  llvm::raw_ostream &os = getHandler().getInfoStream();
   os << "BEGIN searcher description\n";
   searcher->printName(os);
-  os << "END searcher description\n"; 
+  os << "END searcher description\n";
   searcher->update(0, states, std::set<ExecutionState*>());
   while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
@@ -1664,30 +1663,14 @@ printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
   }
 }
 
-/***/
-ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e) {
-  unsigned n = interpreterOpts.MakeConcreteSymbolic;
-  // right now, we don't replace symbolics (is there any reason to?)
-  if (!n || !isa<ConstantExpr>(e) || (n != 1 && random() % n))
-    return e; 
-  // create a new fresh location, assert it is equal to concrete value in e // and return it.  
-  static unsigned id;
-  const Array *array = arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id), Expr::getMinBytesForWidth(e->getWidth()));
-  ref<Expr> res = Expr::createTempRead(array, e->getWidth());
-  ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(e, res));
-  llvm::errs() << "Making symbolic: " << eq << "\n";
-  state.addConstraint(eq);
-  return res;
-}
-
 ObjectState *Executor::bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array) {
   ObjectState *os = array ? new ObjectState(mo, array) : new ObjectState(mo);
-  state.addressSpace.bindObject(mo, os); 
+  state.addressSpace.bindObject(mo, os);
   // Its possible that multiple bindings of the same mo in the state
   // will put multiple copies on this list, but it doesn't really
   // matter because all we use this list for is to unbind the object // on function return.
   if (isLocal)
-    state.stack.back().allocas.push_back(mo); 
+    state.stack.back().allocas.push_back(mo);
   return os;
 }
 
@@ -1733,8 +1716,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       if (!res)
         break;
       example = tmp;
-    } 
-    StatePair fixedSize = stateFork(state, EqExpr::create(example, size), true); 
+    }
+    StatePair fixedSize = stateFork(state, EqExpr::create(example, size), true);
     if (fixedSize.second) {
       // Check for exactly two values
       ref<ConstantExpr> tmp;
@@ -1752,7 +1735,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
         if (hugeSize.first) {
           klee_message("NOTE: found huge malloc, returning 0");
           bindLocal(target, *hugeSize.first, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
-        } 
+        }
         if (hugeSize.second) {
           std::string Str;
           llvm::raw_string_ostream info(Str);
@@ -1846,12 +1829,24 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
         }
       } else {
         ref<Expr> result = os->read(offset, type);
-        if (interpreterOpts.MakeConcreteSymbolic)
-          result = replaceReadWithSymbolic(state, result);
-
+        if (interpreterOpts.MakeConcreteSymbolic) {
+            unsigned n = interpreterOpts.MakeConcreteSymbolic;
+            // right now, we don't replace symbolics (is there any reason to?)
+            if (!n || !isa<ConstantExpr>(result) || (n != 1 && random() % n))
+              {}
+            else {
+                // create a new fresh location, assert it is equal to concrete value in e // and return it.
+                static unsigned id;
+                const Array *array = arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id), Expr::getMinBytesForWidth(result->getWidth()));
+                ref<Expr>res = Expr::createTempRead(array, result->getWidth());
+                ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(result, res));
+                llvm::errs() << "Making symbolic: " << eq << "\n";
+                state.addConstraint(eq);
+                result = res;
+            }
+        }
         bindLocal(target, state, result);
       }
-
       return;
     }
   }
@@ -1859,9 +1854,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   ResolutionList rl;
   osolver->setCoreSolverTimeout(0);
   bool incomplete = state.addressSpace.resolve(state, tsolver, address, rl, 0, 0);
-  osolver->setCoreSolverTimeout(0); 
+  osolver->setCoreSolverTimeout(0);
   // XXX there is some query wasteage here. who cares?
-  ExecutionState *unbound = &state; 
+  ExecutionState *unbound = &state;
   for (ResolutionList::iterator i = rl.begin(), ie = rl.end(); i != ie; ++i) {
     const MemoryObject *mo = i->first;
     const ObjectState *os = i->second;
@@ -1886,7 +1881,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     unbound = branches.second;
     if (!unbound)
       break;
-  } 
+  }
   // XXX should we distinguish out of bounds and overlapped cases?
   if (unbound) {
     if (incomplete)
@@ -2091,8 +2086,8 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
     objects.push_back(state.symbolics[i].second);
   bool success = true;
   if (!objects.empty()) {
-      sys::TimeValue now = util::getWallTimeVal(); 
-      success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values); 
+      sys::TimeValue now = util::getWallTimeVal();
+      success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values);
       sys::TimeValue delta = util::getWallTimeVal();
       delta -= now;
       stats::solverTime += delta.usec();
@@ -2131,15 +2126,15 @@ bool TimingSolver::solveEvaluate(const ExecutionState& state, ref<Expr> expr, So
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
     result = CE->isTrue() ? Solver::True : Solver::False;
     return true;
-  } 
-  sys::TimeValue now = util::getWallTimeVal(); 
+  }
+  sys::TimeValue now = util::getWallTimeVal();
   if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr); 
-  bool success = tosolver->evaluate(Query(state.constraints, expr), result); 
+    expr = state.constraints.simplifyExpr(expr);
+  bool success = tosolver->evaluate(Query(state.constraints, expr), result);
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
   stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.; 
+  state.queryCost += delta.usec()/1000000.;
   return success;
 }
 
@@ -2148,15 +2143,15 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool 
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
     result = CE->isTrue() ? true : false;
     return true;
-  } 
-  sys::TimeValue now = util::getWallTimeVal(); 
+  }
+  sys::TimeValue now = util::getWallTimeVal();
   if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr); 
-  bool success = tosolver->mustBeTrue(Query(state.constraints, expr), result); 
+    expr = state.constraints.simplifyExpr(expr);
+  bool success = tosolver->mustBeTrue(Query(state.constraints, expr), result);
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
   stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.; 
+  state.queryCost += delta.usec()/1000000.;
   return success;
 }
 
@@ -2185,14 +2180,14 @@ bool TimingSolver::solveGetValue(const ExecutionState& state, ref<Expr> expr, re
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
     result = CE;
     return true;
-  } 
-  sys::TimeValue now = util::getWallTimeVal(); 
+  }
+  sys::TimeValue now = util::getWallTimeVal();
   if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr); 
-  bool success = tosolver->getValue(Query(state.constraints, expr), result); 
+    expr = state.constraints.simplifyExpr(expr);
+  bool success = tosolver->getValue(Query(state.constraints, expr), result);
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
   stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.; 
+  state.queryCost += delta.usec()/1000000.;
   return success;
 }

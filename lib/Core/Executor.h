@@ -148,9 +148,6 @@ private:
   /// as one of the results. Note that the output vector may included
   /// NULL pointers for states which were unable to be created.
   void branch(ExecutionState &state, const std::vector< ref<Expr> > &conditions, std::vector<ExecutionState*> &result); 
-
-  // Called on [for now] concrete reads, replaces constant with a symbolic // Used for testing.
-  ref<Expr> replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e); 
   const Cell& eval(KInstruction *ki, unsigned index, ExecutionState &state) const; 
   void getArgumentCell(ExecutionState &state, KFunction *kf, unsigned aSize, std::vector<ref<Expr>> &arguments) {
     for (unsigned i = 0; i < aSize; i++)
