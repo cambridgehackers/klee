@@ -997,8 +997,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
     // Compare
   case Instruction::ICmp: {
-    CmpInst *ci = cast<CmpInst>(i);
-    ICmpInst *ii = cast<ICmpInst>(ci);
+    //CmpInst *ci = cast<CmpInst>(i);
+    ICmpInst *ii = cast<ICmpInst>(i);
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
     ref<Expr> result;
@@ -1083,8 +1083,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     // Conversion
   case Instruction::Trunc: case Instruction::ZExt: case Instruction::SExt:
   case Instruction::IntToPtr: case Instruction::PtrToInt: {
-    CastInst *ci = cast<CastInst>(i);
-    Expr::Width iType = getWidthForLLVMType(ci->getType());
+    Expr::Width iType = getWidthForLLVMType(i->getType());
     ref<Expr> arg = eval(ki, 0, state).value;
     ref<Expr> result;
     switch (opcode) {
@@ -1145,8 +1144,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
   case Instruction::FPTrunc: {
-    FPTruncInst *fi = cast<FPTruncInst>(i);
-    Expr::Width resultType = getWidthForLLVMType(fi->getType());
+    Expr::Width resultType = getWidthForLLVMType(i->getType());
     ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > arg->getWidth())
       return terminateStateOnExecError(state, "Unsupported FPTrunc operation");
@@ -1158,8 +1156,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
   case Instruction::FPExt: {
-    FPExtInst *fi = cast<FPExtInst>(i);
-    Expr::Width resultType = getWidthForLLVMType(fi->getType());
+    Expr::Width resultType = getWidthForLLVMType(i->getType());
     ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || arg->getWidth() > resultType)
       return terminateStateOnExecError(state, "Unsupported FPExt operation");
@@ -1171,8 +1168,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
   case Instruction::FPToUI: {
-    FPToUIInst *fi = cast<FPToUIInst>(i);
-    Expr::Width resultType = getWidthForLLVMType(fi->getType());
+    Expr::Width resultType = getWidthForLLVMType(i->getType());
     ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > 64)
       return terminateStateOnExecError(state, "Unsupported FPToUI operation");
@@ -1185,8 +1181,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
   case Instruction::FPToSI: {
-    FPToSIInst *fi = cast<FPToSIInst>(i);
-    Expr::Width resultType = getWidthForLLVMType(fi->getType());
+    Expr::Width resultType = getWidthForLLVMType(i->getType());
     ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > 64)
       return terminateStateOnExecError(state, "Unsupported FPToSI operation");
@@ -1199,8 +1194,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
   case Instruction::UIToFP: {
-    UIToFPInst *fi = cast<UIToFPInst>(i);
-    Expr::Width resultType = getWidthForLLVMType(fi->getType());
+    Expr::Width resultType = getWidthForLLVMType(i->getType());
     ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
     const llvm::fltSemantics *semantics = fpWidthToSemantics(resultType);
     if (!semantics)
@@ -1212,8 +1206,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
   case Instruction::SIToFP: {
-    SIToFPInst *fi = cast<SIToFPInst>(i);
-    Expr::Width resultType = getWidthForLLVMType(fi->getType());
+    Expr::Width resultType = getWidthForLLVMType(i->getType());
     ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
     const llvm::fltSemantics *semantics = fpWidthToSemantics(resultType);
     if (!semantics)
@@ -1399,37 +1392,29 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
   kgepi->offset = constantOffset->getZExtValue();
 }
 
-void Executor::bindInstructionConstants(KInstruction *KI) {
-  KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
-
-  if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
-    computeOffsets(kgepi, gep_type_begin(gepi), gep_type_end(gepi));
-  } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
-    computeOffsets(kgepi, iv_type_begin(ivi), iv_type_end(ivi));
-    assert(kgepi->indices.empty() && "InsertValue constant offset expected");
-  } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
-    computeOffsets(kgepi, ev_type_begin(evi), ev_type_end(evi));
-    assert(kgepi->indices.empty() && "ExtractValue constant offset expected");
-  }
-}
-
-void Executor::bindModuleConstants() {
-  for (std::vector<KFunction*>::iterator it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
+void Executor::run(ExecutionState &initialState) {
+printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
+  for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
-    for (unsigned i=0; i<kf->numInstructions; ++i)
-      bindInstructionConstants(kf->instructions[i]);
+    for (unsigned i=0; i<kf->numInstructions; ++i) {
+        KInstruction *KI = kf->instructions[i];
+        KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
+        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
+            computeOffsets(kgepi, gep_type_begin(gepi), gep_type_end(gepi));
+        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
+            computeOffsets(kgepi, iv_type_begin(ivi), iv_type_end(ivi));
+            assert(kgepi->indices.empty() && "InsertValue constant offset expected");
+        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
+            computeOffsets(kgepi, ev_type_begin(evi), ev_type_end(evi));
+            assert(kgepi->indices.empty() && "ExtractValue constant offset expected");
+        }
+    }
   }
-
   kmodule->constantTable = new Cell[kmodule->constants.size()];
   for (unsigned i=0; i<kmodule->constants.size(); ++i) {
     Cell &c = kmodule->constantTable[i];
     c.value = evalConstant(kmodule->constants[i]);
   }
-}
-
-void Executor::run(ExecutionState &initialState) {
-printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
-  bindModuleConstants();
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(&initialState);
   searcher = constructUserSearcher(*this);

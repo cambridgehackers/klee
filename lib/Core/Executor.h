@@ -207,7 +207,6 @@ private:
   Cell& getArgumentCell(ExecutionState &state, KFunction *kf, unsigned index) {
     return state.stack.back().locals[kf->getArgRegister(index)];
   }
-
   Cell& getDestCell(ExecutionState &state, KInstruction *target) {
     return state.stack.back().locals[target->dest];
   } 
@@ -227,16 +226,11 @@ private:
   void executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction *target); 
   /// Get textual information regarding a memory address.
   std::string getAddressInfo(ExecutionState &state, ref<Expr> address) const; 
-  // Determines the \param lastInstruction of the \param state which is not KLEE
-  // internal and returns its InstructionInfo
+  // Determines the \param lastInstruction of the \param state which is not KLEE // internal and returns its InstructionInfo
   const InstructionInfo & getLastNonKleeInternalInstruction(const ExecutionState &state, llvm::Instruction** lastInstruction); 
-  // remove state from queue and delete
   void terminateState(ExecutionState &state);
-  // call exit handler and terminate state
   void terminateStateEarly(ExecutionState &state, const llvm::Twine &message);
-  // call exit handler and terminate state
   void terminateStateOnExit(ExecutionState &state);
-  // call error handler and terminate state
   void terminateStateOnError(ExecutionState &state, const llvm::Twine &message, const char *suffix, const llvm::Twine &longMessage=""); 
   // call error handler and terminate state, for execution errors
   // (things that should not be possible, like illegal instruction or
@@ -244,12 +238,8 @@ private:
   void terminateStateOnExecError(ExecutionState &state, const llvm::Twine &message, const llvm::Twine &info="") {
     terminateStateOnError(state, message, "exec.err", info);
   } 
-  /// bindModuleConstants - Initialize the module constant table.
-  void bindModuleConstants(); 
   template <typename TypeIt>
   void computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie); 
-  /// bindInstructionConstants - Initialize any necessary per instruction /// constant values.
-  void bindInstructionConstants(KInstruction *KI); 
   void handlePointsToObj(ExecutionState &state, KInstruction *target, const std::vector<ref<Expr> > &arguments); 
   void initTimers();
   void processTimers(ExecutionState *current, double maxInstTime); 
