@@ -77,7 +77,7 @@ public:
   virtual void runFunctionAsMain(llvm::Function *f, int argc, char **argv, char **envp) = 0; 
   virtual unsigned getPathStreamID(const ExecutionState &state) = 0;
   virtual unsigned getSymbolicPathStreamID(const ExecutionState &state) = 0;
-  virtual void getConstraintLog(const ExecutionState &state, std::string &res, LogType logFormat = STP) = 0; 
+  virtual void getConstraintLog(const ExecutionState &state, std::string &res, LogType logFormat) = 0; 
   virtual bool getSymbolicSolution(const ExecutionState &state, std::vector< std::pair<std::string, std::vector<unsigned char> > > &res) = 0; 
   virtual void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res) = 0;
 };

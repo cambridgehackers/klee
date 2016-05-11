@@ -1992,7 +1992,7 @@ void Executor::getConstraintLog(const ExecutionState &state, std::string &res, I
   switch (logFormat) {
   case STP: {
     Query query(state.constraints, ConstantExpr::alloc(0, Expr::Bool));
-    char *log = solver->getConstraintLog(query);
+    char *log = osolver->getConstraintLog(query);
     res = std::string(log);
     free(log);
   } break;

@@ -74,7 +74,6 @@ namespace klee {
         simplifyExprs = true;
         }
     ~TimingSolver() { delete tosolver; }
-    char *getConstraintLog(const Query& query) { return tosolver->getConstraintLog(query); }
     bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
     bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
     bool mustBeFalse(const ExecutionState&, ref<Expr>, bool &result);
@@ -263,7 +262,7 @@ public:
   /*** State accessor methods ***/ 
   virtual unsigned getPathStreamID(const ExecutionState &state); 
   virtual unsigned getSymbolicPathStreamID(const ExecutionState &state); 
-  virtual void getConstraintLog(const ExecutionState &state, std::string &res, Interpreter::LogType logFormat = Interpreter::STP); 
+  virtual void getConstraintLog(const ExecutionState &state, std::string &res, Interpreter::LogType logFormat); 
   virtual bool getSymbolicSolution(const ExecutionState &state, std::vector< std::pair<std::string, std::vector<unsigned char> > > &res); 
   virtual void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res); 
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
