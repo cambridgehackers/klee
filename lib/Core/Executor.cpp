@@ -93,7 +93,7 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
       interpreterHandler->getOutputFilename(ALL_QUERIES_PC_FILE_NAME),
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_PC_FILE_NAME));
 
-  solver = new TimingSolver(osolver);
+  tsolver = new TimingSolver(osolver);
   memory = new MemoryManager(&arrayCache);
 }
 
@@ -123,7 +123,7 @@ Executor::~Executor() {
     delete specialFunctionHandler;
   if (statsTracker)
     delete statsTracker;
-  delete solver;
+  delete tsolver;
   delete kmodule;
 }
 
@@ -268,7 +268,7 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
       unsigned i;
       for (i=0; i<N; ++i) {
         ref<ConstantExpr> res;
-        bool success = solver->solveGetValue(state, siit->assignment.evaluate(conditions[i]), res);
+        bool success = tsolver->solveGetValue(state, siit->assignment.evaluate(conditions[i]), res);
         assert(success && "FIXME: Unhandled solver failure");
         if (res->isTrue())
           break;
@@ -291,7 +291,7 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
   Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&current);
   osolver->setCoreSolverTimeout(0);
-  if (!solver->solveEvaluate(current, condition, res)) {
+  if (!tsolver->solveEvaluate(current, condition, res)) {
     current.pc = current.prevPC;
     terminateStateEarly(current, "Query timed out (fork).");
     return StatePair(0, 0);
@@ -322,7 +322,7 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
       std::vector<SeedInfo> &falseSeeds = seedMap[falseState];
       for (std::vector<SeedInfo>::iterator siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
         ref<ConstantExpr> res;
-        bool success = solver->solveGetValue(current, siit->assignment.evaluate(condition), res);
+        bool success = tsolver->solveGetValue(current, siit->assignment.evaluate(condition), res);
         assert(success && "FIXME: Unhandled solver failure");
         if (res->isTrue()) {
           trueSeeds.push_back(*siit);
@@ -379,10 +379,10 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
     bool warn = false;
     for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       bool res;
-      bool success = solver->mustBeFalse(state, siit->assignment.evaluate(condition), res);
+      bool success = tsolver->mustBeFalse(state, siit->assignment.evaluate(condition), res);
       assert(success && "FIXME: Unhandled solver failure");
       if (res) {
-        siit->patchSeed(state, condition, solver);
+        siit->patchSeed(state, condition, tsolver);
         warn = true;
       }
     }
@@ -467,7 +467,7 @@ ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
     ref<ConstantExpr> value;
     bool isTrue = false;
     osolver->setCoreSolverTimeout(0);
-    if (solver->solveGetValue(state, e, value) && solver->mustBeTrue(state, EqExpr::create(e, value), isTrue) && isTrue)
+    if (tsolver->solveGetValue(state, e, value) && tsolver->mustBeTrue(state, EqExpr::create(e, value), isTrue) && isTrue)
       result = value;
     osolver->setCoreSolverTimeout(0);
   }
@@ -482,7 +482,7 @@ Executor::toConstant(ExecutionState &state, ref<Expr> e, const char *reason) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(e))
     return CE;
   ref<ConstantExpr> value;
-  bool success = solver->solveGetValue(state, e, value);
+  bool success = tsolver->solveGetValue(state, e, value);
   assert(success && "FIXME: Unhandled solver failure");
   std::string str;
   llvm::raw_string_ostream os(str);
@@ -498,14 +498,14 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
   if (it==seedMap.end() || isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
-    bool success = solver->solveGetValue(state, e, value);
+    bool success = tsolver->solveGetValue(state, e, value);
     assert(success && "FIXME: Unhandled solver failure");
     bindLocal(target, state, value);
   } else {
     std::set< ref<Expr> > values;
     for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
-      bool success = solver->solveGetValue(state, siit->assignment.evaluate(e), value);
+      bool success = tsolver->solveGetValue(state, siit->assignment.evaluate(e), value);
       assert(success && "FIXME: Unhandled solver failure");
       values.insert(value);
     }
@@ -808,7 +808,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         ref<Expr> match = EqExpr::create(cond, value);
         isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
         bool result;
-        bool success = solver->mayBeTrue(state, match, result);
+        bool success = tsolver->mayBeTrue(state, match, result);
         assert(success && "FIXME: Unhandled solver failure");
         (void)success;
         if (result) {
@@ -818,7 +818,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         }
       }
       bool res;
-      bool success = solver->mayBeTrue(state, isDefault, res);
+      bool success = tsolver->mayBeTrue(state, isDefault, res);
       assert(success && "FIXME: Unhandled solver failure");
       (void)success;
       if (res)
@@ -897,7 +897,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
          handle it for us, albeit with some overhead. */
       do {
         ref<ConstantExpr> value;
-        bool success = solver->solveGetValue(*free, v, value);
+        bool success = tsolver->solveGetValue(*free, v, value);
         assert(success && "FIXME: Unhandled solver failure");
         StatePair res = stateFork(*free, EqExpr::create(v, value), true);
         if (res.first) {
@@ -1449,7 +1449,7 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
     example = CE->getZExtValue();
   else {
     ref<ConstantExpr> value;
-    bool success = solver->solveGetValue(state, address, value);
+    bool success = tsolver->solveGetValue(state, address, value);
     assert(success && "FIXME: Unhandled solver failure");
     example = value->getZExtValue();
     info << "\texample: " << example << "\n";
@@ -1684,7 +1684,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     // collapses the size expression with a select.
 
     ref<ConstantExpr> example;
-    bool success = solver->solveGetValue(state, size, example);
+    bool success = tsolver->solveGetValue(state, size, example);
     assert(success && "FIXME: Unhandled solver failure");
 
     // Try and start with a small example.
@@ -1692,7 +1692,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     while (example->Ugt(ConstantExpr::alloc(128, W))->isTrue()) {
       ref<ConstantExpr> tmp = example->LShr(ConstantExpr::alloc(1, W));
       bool res;
-      bool success = solver->mayBeTrue(state, EqExpr::create(tmp, size), res);
+      bool success = tsolver->mayBeTrue(state, EqExpr::create(tmp, size), res);
       assert(success && "FIXME: Unhandled solver failure");
       if (!res)
         break;
@@ -1702,10 +1702,10 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     if (fixedSize.second) {
       // Check for exactly two values
       ref<ConstantExpr> tmp;
-      bool success = solver->solveGetValue(*fixedSize.second, size, tmp);
+      bool success = tsolver->solveGetValue(*fixedSize.second, size, tmp);
       assert(success && "FIXME: Unhandled solver failure");
       bool res;
-      success = solver->mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), res);
+      success = tsolver->mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), res);
       assert(success && "FIXME: Unhandled solver failure");
       if (res) {
         executeAlloc(*fixedSize.second, tmp, isLocal, target, zeroMemory, reallocFrom);
@@ -1759,7 +1759,7 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
 void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name) {
   // XXX we may want to be capping this?
   ResolutionList rl;
-  state.addressSpace.resolve(state, solver, p, rl);
+  state.addressSpace.resolve(state, tsolver, p, rl);
   ExecutionState *unbound = &state;
   for (ResolutionList::iterator it = rl.begin(), ie = rl.end(); it != ie; ++it) {
     ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
@@ -1782,7 +1782,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   ObjectPair op;
   bool success;
   osolver->setCoreSolverTimeout(0);
-  if (!state.addressSpace.resolveOne(state, solver, address, op, success)) {
+  if (!state.addressSpace.resolveOne(state, tsolver, address, op, success)) {
     address = toConstant(state, address, "resolveOne failure");
     success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
   }
@@ -1792,7 +1792,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     ref<Expr> offset = mo->getOffsetExpr(address);
     bool inBounds;
     osolver->setCoreSolverTimeout(0);
-    bool success = solver->mustBeTrue(state, mo->getBoundsCheckOffset(offset, bytes), inBounds);
+    bool success = tsolver->mustBeTrue(state, mo->getBoundsCheckOffset(offset, bytes), inBounds);
     osolver->setCoreSolverTimeout(0);
     if (!success) {
       state.pc = state.prevPC;
@@ -1822,7 +1822,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds)
   ResolutionList rl;
   osolver->setCoreSolverTimeout(0);
-  bool incomplete = state.addressSpace.resolve(state, solver, address, rl, 0, 0);
+  bool incomplete = state.addressSpace.resolve(state, tsolver, address, rl, 0, 0);
   osolver->setCoreSolverTimeout(0); 
   // XXX there is some query wasteage here. who cares?
   ExecutionState *unbound = &state; 
@@ -2037,7 +2037,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
     for (; pi != pie; ++pi) {
       bool mustBeTrue;
       // Attempt to bound byte to constraints held in cexPreferences
-      bool success = solver->mustBeTrue(tmp, Expr::createIsZero(*pi), mustBeTrue);
+      bool success = tsolver->mustBeTrue(tmp, Expr::createIsZero(*pi), mustBeTrue);
       // If it isn't possible to constrain this particular byte in the desired
       // way (normally this would mean that the byte can't be constrained to
       // be between 0 and 127 without making the entire constraint list UNSAT)

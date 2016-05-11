@@ -206,7 +206,7 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state, ref<Expr> add
   if (!state.addressSpace.resolveOne(address, op))
     assert(0 && "XXX out of bounds / multiple resolution unhandled");
   bool res __attribute__ ((unused));
-  assert(executor.solver->mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr()), res) && res && "XXX interior pointer unhandled");
+  assert(executor.tsolver->mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr()), res) && res && "XXX interior pointer unhandled");
   const MemoryObject *mo = op.first;
   const ObjectState *os = op.second;
 
@@ -216,8 +216,7 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state, ref<Expr> add
   for (i = 0; i < mo->size - 1; i++) {
     ref<Expr> cur = os->read8(i);
     cur = executor.toUnique(state, cur);
-    assert(isa<ConstantExpr>(cur) && 
-           "hit symbolic char while reading concrete string");
+    assert(isa<ConstantExpr>(cur) && "hit symbolic char while reading concrete string");
     buf[i] = cast<ConstantExpr>(cur)->getZExtValue(8);
   }
   buf[i] = 0;
@@ -315,7 +314,7 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state, KInstruction *t
   if (e->getWidth() != Expr::Bool)
     e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth())); 
   bool res;
-  bool success __attribute__ ((unused)) = executor.solver->mustBeFalse(state, e, res);
+  bool success __attribute__ ((unused)) = executor.tsolver->mustBeFalse(state, e, res);
   assert(success && "FIXME: Unhandled solver failure");
   if (res) {
     if (SilentKleeAssume) {
@@ -380,10 +379,10 @@ void SpecialFunctionHandler::handlePrintRange(ExecutionState &state, KInstructio
   if (!isa<ConstantExpr>(arguments[1])) {
     // FIXME: Pull into a unique value method?
     ref<ConstantExpr> value;
-    bool success __attribute__ ((unused)) = executor.solver->solveGetValue(state, arguments[1], value);
+    bool success __attribute__ ((unused)) = executor.tsolver->solveGetValue(state, arguments[1], value);
     assert(success && "FIXME: Unhandled solver failure");
     bool res;
-    success = executor.solver->mustBeTrue(state, EqExpr::create(arguments[1], value), res);
+    success = executor.tsolver->mustBeTrue(state, EqExpr::create(arguments[1], value), res);
     assert(success && "FIXME: Unhandled solver failure");
     if (res) {
       llvm::errs() << " == " << value;
@@ -524,7 +523,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state, KInstruct
     // FIXME: Type coercion should be done consistently somewhere.
     bool res;
     bool success __attribute__ ((unused)) =
-      executor.solver->mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1],
+      executor.tsolver->mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1],
                                                                   Context::get().getPointerWidth()),
                                                  mo->getSizeExpr()),
                                   res);

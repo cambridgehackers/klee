@@ -94,7 +94,7 @@ public:
   KModule *kmodule;
   std::set<ExecutionState*> states;
   InterpreterHandler *interpreterHandler;
-  TimingSolver *solver;
+  TimingSolver *tsolver;
   MemoryManager *memory;
   PTree *processTree;
 private:
