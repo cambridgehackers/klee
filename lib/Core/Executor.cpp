@@ -459,14 +459,10 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index, ExecutionState &sta
   int vnumber = ki->operands[index];
   assert(vnumber != -1 && "Invalid operand to eval(), not a value or constant!");
   // Determine if this is a constant or not.
-  if (vnumber < 0) {
-    unsigned index = -vnumber - 2;
-    return kmodule->constantTable[index];
-  } else {
-    unsigned index = vnumber;
-    StackFrame &sf = state.stack.back();
-    return sf.locals[index];
-  }
+  if (vnumber < 0)
+      return kmodule->constantTable[-vnumber - 2];
+  StackFrame &sf = state.stack.back();
+  return sf.locals[vnumber];
 }
 
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> value) {
@@ -541,8 +537,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
 
 void Executor::stepInstruction(ExecutionState &state) {
     printFileLine(state, state.pc);
-    llvm::errs().indent(10) << stats::instructions << " ";
-    llvm::errs() << *(state.pc->inst) << '\n';
+    llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
   if (statsTracker)
     statsTracker->stepInstruction(state);
   ++stats::instructions;
@@ -711,14 +706,13 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
       if (Visited.insert(gv).second)
           if (Function *f = dyn_cast<Function>(gv))
               return f;
-      return 0;
     } else if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c)) {
-      if (ce->getOpcode()==Instruction::BitCast)
-        c = ce->getOperand(0);
-      else
-        return 0;
-    } else
-      return 0;
+      if (ce->getOpcode()==Instruction::BitCast) {
+          c = ce->getOperand(0);
+          continue;
+      }
+    }
+    return 0;
   }
 }
 
@@ -768,8 +762,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
           if (from != to) {
             CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller))); 
             // XXX need to check other param attrs ?
-      bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
-            if (isSExt) {
+            if (cs.paramHasAttr(0, llvm::Attribute::SExt)) {
               result = SExtExpr::create(result, to);
             } else {
               result = ZExtExpr::create(result, to);
