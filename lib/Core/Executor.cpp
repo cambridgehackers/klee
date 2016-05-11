@@ -14,7 +14,6 @@
 #include "Memory.h"
 #include "MemoryManager.h"
 #include "PTree.h"
-#include "Searcher.h"
 #include "SeedInfo.h"
 #include "SpecialFunctionHandler.h"
 #include "StatsTracker.h"
@@ -67,7 +66,237 @@ using namespace klee;
 
 namespace klee {
   RNG theRNG;
+  static bool userSearcherRequiresMD2U();
 }
+
+//#include "llvm/Support/raw_ostream.h"
+//#include <vector>
+//#include <set>
+//#include <map>
+//#include <queue>
+
+namespace llvm {
+  class BasicBlock;
+  class Function;
+  class Instruction;
+  class raw_ostream;
+}
+
+namespace klee {
+  template<class T> class DiscretePDF;
+  class ExecutionState;
+  class Executor; 
+  class Searcher {
+  public:
+    virtual ~Searcher(); 
+    virtual ExecutionState &selectState() = 0; 
+    virtual void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) = 0; 
+    virtual bool empty() = 0; 
+    // prints name of searcher as a klee_message()
+    // TODO: could probably make prettier or more flexible
+    virtual void printName(llvm::raw_ostream &os) {
+      os << "<unnamed searcher>\n";
+    } 
+    // pgbovine - to be called when a searcher gets activated and
+    // deactivated, say, by a higher-level searcher; most searchers
+    // don't need this functionality, so don't have to override.
+    virtual void activate() {}
+    virtual void deactivate() {} 
+    // utility functions 
+    void addState(ExecutionState *es, ExecutionState *current = 0) {
+      std::set<ExecutionState*> tmp;
+      tmp.insert(es);
+      update(current, tmp, std::set<ExecutionState*>());
+    } 
+    void removeState(ExecutionState *es, ExecutionState *current = 0) {
+      std::set<ExecutionState*> tmp;
+      tmp.insert(es);
+      update(current, std::set<ExecutionState*>(), tmp);
+    }
+
+    enum CoreSearchType { DFS, BFS, RandomState, RandomPath, NURS_CovNew, NURS_MD2U,
+      NURS_Depth, NURS_ICnt, NURS_CPICnt, NURS_QC };
+  }; 
+  class DFSSearcher : public Searcher {
+    std::vector<ExecutionState*> states; 
+  public:
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty() { return states.empty(); }
+    void printName(llvm::raw_ostream &os) { os << "DFSSearcher\n"; }
+  }; 
+  class BFSSearcher : public Searcher {
+    std::deque<ExecutionState*> states; 
+  public:
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty() { return states.empty(); }
+    void printName(llvm::raw_ostream &os) { os << "BFSSearcher\n"; }
+  };
+
+  class RandomSearcher : public Searcher {
+    std::vector<ExecutionState*> states; 
+  public:
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty() { return states.empty(); }
+    void printName(llvm::raw_ostream &os) { os << "RandomSearcher\n"; }
+  };
+
+  class WeightedRandomSearcher : public Searcher {
+  public:
+    enum WeightType { Depth, QueryCost, InstCount,
+      CPInstCount, MinDistToUncovered, CoveringNew }; 
+  private:
+    DiscretePDF<ExecutionState*> *states;
+    WeightType type;
+    bool updateWeights; 
+    double getWeight(ExecutionState*); 
+  public:
+    WeightedRandomSearcher(WeightType type);
+    ~WeightedRandomSearcher(); 
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty();
+    void printName(llvm::raw_ostream &os) {
+      os << "WeightedRandomSearcher::";
+      switch(type) {
+      case Depth              : os << "Depth\n"; return;
+      case QueryCost          : os << "QueryCost\n"; return;
+      case InstCount          : os << "InstCount\n"; return;
+      case CPInstCount        : os << "CPInstCount\n"; return;
+      case MinDistToUncovered : os << "MinDistToUncovered\n"; return;
+      case CoveringNew        : os << "CoveringNew\n"; return;
+      default                 : os << "<unknown type>\n"; return;
+      }
+    }
+  }; 
+  class RandomPathSearcher : public Searcher {
+    Executor &executor; 
+  public:
+    RandomPathSearcher(Executor &_executor);
+    ~RandomPathSearcher(); 
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty();
+    void printName(llvm::raw_ostream &os) { os << "RandomPathSearcher\n"; }
+  };
+
+  class MergingSearcher : public Searcher {
+    Executor &executor;
+    std::set<ExecutionState*> statesAtMerge;
+    Searcher *baseSearcher;
+    llvm::Function *mergeFunction; 
+  private:
+    llvm::Instruction *getMergePoint(ExecutionState &es);
+
+  public:
+    MergingSearcher(Executor &executor, Searcher *baseSearcher);
+    ~MergingSearcher(); 
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty() { return baseSearcher->empty() && statesAtMerge.empty(); }
+    void printName(llvm::raw_ostream &os) { os << "MergingSearcher\n"; }
+  };
+
+  class BumpMergingSearcher : public Searcher {
+    Executor &executor;
+    std::map<llvm::Instruction*, ExecutionState*> statesAtMerge;
+    Searcher *baseSearcher;
+    llvm::Function *mergeFunction; 
+  private:
+    llvm::Instruction *getMergePoint(ExecutionState &es);
+
+  public:
+    BumpMergingSearcher(Executor &executor, Searcher *baseSearcher);
+    ~BumpMergingSearcher(); 
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty() { return baseSearcher->empty() && statesAtMerge.empty(); }
+    void printName(llvm::raw_ostream &os) { os << "BumpMergingSearcher\n"; }
+  };
+
+  class BatchingSearcher : public Searcher {
+    Searcher *baseSearcher;
+    double timeBudget;
+    unsigned instructionBudget; 
+    ExecutionState *lastState;
+    double lastStartTime;
+    unsigned lastStartInstructions; 
+  public:
+    BatchingSearcher(Searcher *baseSearcher, double _timeBudget, unsigned _instructionBudget);
+    ~BatchingSearcher(); 
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty() { return baseSearcher->empty(); }
+    void printName(llvm::raw_ostream &os) {
+      os << "<BatchingSearcher> timeBudget: " << timeBudget
+         << ", instructionBudget: " << instructionBudget << ", baseSearcher:\n";
+      baseSearcher->printName(os);
+      os << "</BatchingSearcher>\n";
+    }
+  };
+
+  class IterativeDeepeningTimeSearcher : public Searcher {
+    Searcher *baseSearcher;
+    double time, startTime;
+    std::set<ExecutionState*> pausedStates; 
+  public:
+    IterativeDeepeningTimeSearcher(Searcher *baseSearcher);
+    ~IterativeDeepeningTimeSearcher(); 
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty() { return baseSearcher->empty() && pausedStates.empty(); }
+    void printName(llvm::raw_ostream &os) {
+      os << "IterativeDeepeningTimeSearcher\n";
+    }
+  };
+
+  class InterleavedSearcher : public Searcher {
+    typedef std::vector<Searcher*> searchers_ty; 
+    searchers_ty searchers;
+    unsigned index; 
+  public:
+    explicit InterleavedSearcher(const searchers_ty &_searchers);
+    ~InterleavedSearcher(); 
+    ExecutionState &selectState();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    bool empty() { return searchers[0]->empty(); }
+    void printName(llvm::raw_ostream &os) {
+      os << "<InterleavedSearcher> containing " << searchers.size() << " searchers:\n";
+      for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
+        (*it)->printName(os);
+      os << "</InterleavedSearcher>\n";
+    }
+  };
+
+}
+//#include "Searcher.h"
+//#include "CoreStats.h"
+//#include "Executor.h"
+//#include "PTree.h"
+//#include "StatsTracker.h"
+//#include "klee/ExecutionState.h"
+//#include "klee/Statistics.h"
+//#include "klee/Internal/Module/InstructionInfoTable.h"
+//#include "klee/Internal/Module/KInstruction.h"
+//#include "klee/Internal/Module/KModule.h"
+#include "klee/Internal/ADT/DiscretePDF.h"
+//#include "klee/Internal/ADT/RNG.h"
+//#include "klee/Internal/Support/ModuleUtil.h"
+//#include "klee/Internal/System/Time.h"
+//#include "klee/Internal/Support/ErrorHandling.h"
+//#include "llvm/IR/Constants.h"
+//#include "llvm/IR/Instructions.h"
+//#include "llvm/IR/Module.h"
+//#include "llvm/Support/CommandLine.h"
+//#include "llvm/IR/CallSite.h"
+//#include <cassert>
+//#include <fstream>
+//#include <climits>
+
+//using namespace klee;
+//using namespace llvm;
 namespace {
   cl::list<Searcher::CoreSearchType>
   CoreSearch("search", cl::desc("Specify the search heuristic (default=random-path interleaved with nurs:covnew)"),
@@ -83,8 +312,447 @@ namespace {
 			clEnumValN(Searcher::NURS_QC, "nurs:qc", "use NURS with Query-Cost"),
 			clEnumValEnd));
 }
-namespace klee {
-  static bool userSearcherRequiresMD2U();
+
+namespace {
+  cl::opt<bool>
+  DebugLogMerge("debug-log-merge");
+}
+
+//namespace klee {
+  //extern RNG theRNG;
+//}
+
+Searcher::~Searcher() {
+}
+
+///
+ExecutionState &DFSSearcher::selectState() {
+  return *states.back();
+}
+
+void DFSSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  states.insert(states.end(), addedStates.begin(), addedStates.end());
+  for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+    ExecutionState *es = *it;
+    if (es == states.back()) {
+      states.pop_back();
+    } else {
+      bool ok = false; 
+      for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
+        if (es==*it) {
+          states.erase(it);
+          ok = true;
+          break;
+        }
+      } 
+      assert(ok && "invalid state removed");
+    }
+  }
+}
+
+ExecutionState &BFSSearcher::selectState() {
+  return *states.front();
+}
+
+void BFSSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  states.insert(states.end(), addedStates.begin(), addedStates.end());
+  for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+    ExecutionState *es = *it;
+    if (es == states.front()) {
+      states.pop_front();
+    } else {
+      bool ok = false; 
+      for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
+        if (es==*it) {
+          states.erase(it);
+          ok = true;
+          break;
+        }
+      } 
+      assert(ok && "invalid state removed");
+    }
+  }
+}
+
+ExecutionState &RandomSearcher::selectState() {
+  return *states[theRNG.getInt32()%states.size()];
+}
+
+void RandomSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  states.insert(states.end(), addedStates.begin(), addedStates.end());
+  for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+    ExecutionState *es = *it;
+    bool ok = false; 
+    for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
+      if (es==*it) {
+        states.erase(it);
+        ok = true;
+        break;
+      }
+    } 
+    assert(ok && "invalid state removed");
+  }
+}
+
+WeightedRandomSearcher::WeightedRandomSearcher(WeightType _type) : states(new DiscretePDF<ExecutionState*>()), type(_type) {
+  switch(type) {
+  case Depth: 
+    updateWeights = false;
+    break;
+  case InstCount:
+  case CPInstCount:
+  case QueryCost:
+  case MinDistToUncovered:
+  case CoveringNew:
+    updateWeights = true;
+    break;
+  default:
+    assert(0 && "invalid weight type");
+  }
+}
+
+WeightedRandomSearcher::~WeightedRandomSearcher() {
+  delete states;
+}
+
+ExecutionState &WeightedRandomSearcher::selectState() {
+  return *states->choose(theRNG.getDoubleL());
+}
+
+double WeightedRandomSearcher::getWeight(ExecutionState *es) {
+  switch(type) {
+  default:
+  case Depth: 
+    return es->weight;
+  case InstCount: {
+    uint64_t count = theStatisticManager->getIndexedValue(stats::instructions, es->pc->info->id);
+    double inv = 1. / std::max((uint64_t) 1, count);
+    return inv * inv;
+  }
+  case CPInstCount: {
+    StackFrame &sf = es->stack.back();
+    uint64_t count = stats::instructions;
+    double inv = 1. / std::max((uint64_t) 1, count);
+    return inv;
+  }
+  case QueryCost:
+    return (es->queryCost < .1) ? 1. : 1./es->queryCost;
+  case CoveringNew:
+  case MinDistToUncovered: {
+    uint64_t md2u = computeMinDistToUncovered(es->pc, es->stack.back().minDistToUncoveredOnReturn); 
+    double invMD2U = 1. / (md2u ? md2u : 10000);
+    if (type==CoveringNew) {
+      double invCovNew = 0.;
+      if (es->instsSinceCovNew)
+        invCovNew = 1. / std::max(1, (int) es->instsSinceCovNew - 1000);
+      return (invCovNew * invCovNew + invMD2U * invMD2U);
+    } else {
+      return invMD2U * invMD2U;
+    }
+  }
+  }
+}
+
+void WeightedRandomSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  if (current && updateWeights && !removedStates.count(current))
+    states->update(current, getWeight(current)); 
+  for (auto it = addedStates.begin(), ie = addedStates.end(); it != ie; ++it) {
+    ExecutionState *es = *it;
+    states->insert(es, getWeight(es));
+  } 
+  for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it)
+    states->remove(*it);
+}
+
+bool WeightedRandomSearcher::empty() { 
+  return states->empty(); 
+}
+
+RandomPathSearcher::RandomPathSearcher(Executor &_executor) : executor(_executor) { } 
+RandomPathSearcher::~RandomPathSearcher() { }
+
+ExecutionState &RandomPathSearcher::selectState() {
+  unsigned flips=0, bits=0;
+  PTree::Node *n = executor.processTree->root; 
+  while (!n->data) {
+    if (!n->left) {
+      n = n->right;
+    } else if (!n->right) {
+      n = n->left;
+    } else {
+      if (bits==0) {
+        flips = theRNG.getInt32();
+        bits = 32;
+      }
+      --bits;
+      n = (flips&(1<<bits)) ? n->left : n->right;
+    }
+  }
+
+  return *n->data;
+}
+
+void RandomPathSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) { }
+bool RandomPathSearcher::empty() { 
+  return executor.states.empty(); 
+}
+
+/// 
+BumpMergingSearcher::BumpMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+  : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { }
+
+BumpMergingSearcher::~BumpMergingSearcher() {
+  delete baseSearcher;
+}
+
+///
+
+Instruction *BumpMergingSearcher::getMergePoint(ExecutionState &es) {  
+  if (mergeFunction) {
+    Instruction *i = es.pc->inst; 
+    if (i->getOpcode()==Instruction::Call) {
+      CallSite cs(cast<CallInst>(i));
+      if (mergeFunction==cs.getCalledFunction())
+        return i;
+    }
+  } 
+  return 0;
+}
+
+ExecutionState &BumpMergingSearcher::selectState() {
+entry:
+  // out of base states, pick one to pop
+  if (baseSearcher->empty()) {
+    std::map<llvm::Instruction*, ExecutionState*>::iterator it = 
+      statesAtMerge.begin();
+    ExecutionState *es = it->second;
+    statesAtMerge.erase(it);
+    ++es->pc; 
+    baseSearcher->addState(es);
+  } 
+  ExecutionState &es = baseSearcher->selectState(); 
+  if (Instruction *mp = getMergePoint(es)) {
+    std::map<llvm::Instruction*, ExecutionState*>::iterator it = statesAtMerge.find(mp); 
+    baseSearcher->removeState(&es); 
+    if (it==statesAtMerge.end()) {
+      statesAtMerge.insert(std::make_pair(mp, &es));
+    } else {
+      ExecutionState *mergeWith = it->second;
+      if (mergeWith->merge(es)) {
+        // hack, because we are terminating the state we need to let // the baseSearcher know about it again
+        baseSearcher->addState(&es);
+        executor.terminateState(es);
+      } else {
+        it->second = &es; // the bump
+        ++mergeWith->pc; 
+        baseSearcher->addState(mergeWith);
+      }
+    } 
+    goto entry;
+  } else {
+    return es;
+  }
+}
+
+void BumpMergingSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  baseSearcher->update(current, addedStates, removedStates);
+}
+
+///
+
+MergingSearcher::MergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+  : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { } 
+MergingSearcher::~MergingSearcher() {
+  delete baseSearcher;
+}
+
+///
+
+Instruction *MergingSearcher::getMergePoint(ExecutionState &es) {
+  if (mergeFunction) {
+    Instruction *i = es.pc->inst; 
+    if (i->getOpcode()==Instruction::Call) {
+      CallSite cs(cast<CallInst>(i));
+      if (mergeFunction==cs.getCalledFunction())
+        return i;
+    }
+  } 
+  return 0;
+}
+
+ExecutionState &MergingSearcher::selectState() {
+  while (!baseSearcher->empty()) {
+    ExecutionState &es = baseSearcher->selectState();
+    if (getMergePoint(es)) {
+      baseSearcher->removeState(&es, &es);
+      statesAtMerge.insert(&es);
+    } else {
+      return es;
+    }
+  } 
+  // build map of merge point -> state list
+  std::map<Instruction*, std::vector<ExecutionState*> > merges;
+  for (auto it = statesAtMerge.begin(), ie = statesAtMerge.end(); it != ie; ++it) {
+    ExecutionState &state = **it;
+    Instruction *mp = getMergePoint(state); 
+    merges[mp].push_back(&state);
+  } 
+  if (DebugLogMerge)
+    llvm::errs() << "-- all at merge --\n";
+  for (auto it = merges.begin(), ie = merges.end(); it != ie; ++it) {
+    if (DebugLogMerge) {
+      llvm::errs() << "\tmerge: " << it->first << " [";
+      for (auto it2 = it->second.begin(), ie2 = it->second.end(); it2 != ie2; ++it2) {
+        ExecutionState *state = *it2;
+        llvm::errs() << state << ", ";
+      }
+      llvm::errs() << "]\n";
+    } 
+    // merge states
+    std::set<ExecutionState*> toMerge(it->second.begin(), it->second.end());
+    while (!toMerge.empty()) {
+      ExecutionState *base = *toMerge.begin();
+      toMerge.erase(toMerge.begin()); 
+      std::set<ExecutionState*> toErase;
+      for (auto it = toMerge.begin(), ie = toMerge.end(); it != ie; ++it) {
+        ExecutionState *mergeWith = *it; 
+        if (base->merge(*mergeWith)) {
+          toErase.insert(mergeWith);
+        }
+      }
+      if (DebugLogMerge && !toErase.empty()) {
+        llvm::errs() << "\t\tmerged: " << base << " with [";
+        for (auto it = toErase.begin(), ie = toErase.end(); it != ie; ++it) {
+          if (it!=toErase.begin()) llvm::errs() << ", ";
+          llvm::errs() << *it;
+        }
+        llvm::errs() << "]\n";
+      }
+      for (auto it = toErase.begin(), ie = toErase.end(); it != ie; ++it) {
+        std::set<ExecutionState*>::iterator it2 = toMerge.find(*it);
+        assert(it2!=toMerge.end());
+        executor.terminateState(**it);
+        toMerge.erase(it2);
+      } 
+      // step past merge and toss base back in pool
+      statesAtMerge.erase(statesAtMerge.find(base));
+      ++base->pc;
+      baseSearcher->addState(base);
+    }  
+  } 
+  if (DebugLogMerge)
+    llvm::errs() << "-- merge complete, continuing --\n"; 
+  return selectState();
+}
+
+void MergingSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  if (!removedStates.empty()) {
+    std::set<ExecutionState *> alt = removedStates;
+    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+      ExecutionState *es = *it;
+      auto it2 = statesAtMerge.find(es);
+      if (it2 != statesAtMerge.end()) {
+        statesAtMerge.erase(it2);
+        alt.erase(alt.find(es));
+      }
+    }    
+    baseSearcher->update(current, addedStates, alt);
+  } else {
+    baseSearcher->update(current, addedStates, removedStates);
+  }
+}
+
+///
+BatchingSearcher::BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget) 
+  : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0) { }
+
+BatchingSearcher::~BatchingSearcher() {
+  delete baseSearcher;
+}
+
+ExecutionState &BatchingSearcher::selectState() {
+  if (!lastState || (util::getWallTime()-lastStartTime)>timeBudget ||
+      (stats::instructions-lastStartInstructions)>instructionBudget) {
+    if (lastState) {
+      double delta = util::getWallTime()-lastStartTime;
+      if (delta>timeBudget*1.1) {
+        llvm::errs() << "KLEE: increased time budget from " << timeBudget << " to " << delta << "\n";
+        timeBudget = delta;
+      }
+    }
+    lastState = &baseSearcher->selectState();
+    lastStartTime = util::getWallTime();
+    lastStartInstructions = stats::instructions;
+  }
+  return *lastState;
+}
+
+void BatchingSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  if (removedStates.count(lastState))
+    lastState = 0;
+  baseSearcher->update(current, addedStates, removedStates);
+}
+
+/***/
+
+IterativeDeepeningTimeSearcher::IterativeDeepeningTimeSearcher(Searcher *_baseSearcher)
+  : baseSearcher(_baseSearcher), time(1.) { } 
+IterativeDeepeningTimeSearcher::~IterativeDeepeningTimeSearcher() {
+  delete baseSearcher;
+}
+
+ExecutionState &IterativeDeepeningTimeSearcher::selectState() {
+  ExecutionState &res = baseSearcher->selectState();
+  startTime = util::getWallTime();
+  return res;
+}
+
+void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  double elapsed = util::getWallTime() - startTime; 
+  if (!removedStates.empty()) {
+    std::set<ExecutionState *> alt = removedStates;
+    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+      ExecutionState *es = *it;
+      auto it2 = pausedStates.find(es);
+      if (it2 != pausedStates.end()) {
+        pausedStates.erase(it);
+        alt.erase(alt.find(es));
+      }
+    }    
+    baseSearcher->update(current, addedStates, alt);
+  } else {
+    baseSearcher->update(current, addedStates, removedStates);
+  } 
+  if (current && !removedStates.count(current) && elapsed>time) {
+    pausedStates.insert(current);
+    baseSearcher->removeState(current);
+  } 
+  if (baseSearcher->empty()) {
+    time *= 2;
+    llvm::errs() << "KLEE: increasing time budget to: " << time << "\n";
+    baseSearcher->update(0, pausedStates, std::set<ExecutionState*>());
+    pausedStates.clear();
+  }
+}
+
+/***/
+
+InterleavedSearcher::InterleavedSearcher(const std::vector<Searcher*> &_searchers)
+  : searchers(_searchers), index(1) { } 
+InterleavedSearcher::~InterleavedSearcher() {
+  for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
+    delete *it;
+}
+
+ExecutionState &InterleavedSearcher::selectState() {
+  Searcher *s = searchers[--index];
+  if (index==0) index = searchers.size();
+  return s->selectState();
+}
+
+void InterleavedSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
+    (*it)->update(current, addedStates, removedStates);
 }
 
 Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
