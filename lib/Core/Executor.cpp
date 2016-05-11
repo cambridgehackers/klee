@@ -74,13 +74,13 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
   : Interpreter(opts),
     kmodule(0),
     interpreterHandler(ih),
+    processTree(0),
     searcher(0),
     externalDispatcher(new ExternalDispatcher()),
     statsTracker(0),
     pathWriter(0),
     symPathWriter(0),
-    specialFunctionHandler(0),
-    processTree(0) {
+    specialFunctionHandler(0) {
 printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
