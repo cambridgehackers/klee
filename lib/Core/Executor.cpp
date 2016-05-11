@@ -522,16 +522,6 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
   }
 }
 
-void Executor::stepInstruction(ExecutionState &state) {
-    printFileLine(state, state.pc);
-    llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
-  if (statsTracker)
-    statsTracker->stepInstruction(state);
-  ++stats::instructions;
-  state.prevPC = state.pc;
-  ++state.pc;
-}
-
 void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f, std::vector<ref<Expr>> &arguments) {
   Instruction *i = ki->inst;
   if (f && f->isDeclaration()) {
@@ -711,9 +701,21 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
   }
 }
 
-void Executor::executeInstruction(ExecutionState &state, KInstruction *ki)
+void Executor::stepInstruction(ExecutionState &state) {
+    printFileLine(state, state.pc);
+    llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
+  if (statsTracker)
+    statsTracker->stepInstruction(state);
+  ++stats::instructions;
+  state.prevPC = state.pc;
+  ++state.pc;
+}
+
+void Executor::executeInstruction(ExecutionState &state)
 {
+  KInstruction *ki = state.pc;
   Instruction *i = ki->inst;
+  stepInstruction(state);
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   int opcode = i->getOpcode();
   switch (opcode) {
@@ -1418,15 +1420,22 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   searcher->update(0, states, std::set<ExecutionState*>());
   while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
-    KInstruction *ki = state.pc;
-    stepInstruction(state);
-    executeInstruction(state, ki);
+    executeInstruction(state);
     updateStates(&state);
   }
   delete searcher;
   searcher = 0;
   if (!states.empty()) {
     llvm::errs() << "KLEE: halting execution, dumping remaining states\n";
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
+printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
+exit(-1);
     for (std::set<ExecutionState*>::iterator it = states.begin(), ie = states.end(); it != ie; ++it) {
       ExecutionState &state = **it;
       stepInstruction(state); // keep stats rolling

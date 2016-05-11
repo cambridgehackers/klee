@@ -132,7 +132,7 @@ private:
   ArrayCache arrayCache;
 
   llvm::Function* getTargetFunction(llvm::Value *calledVal, ExecutionState &state); 
-  void executeInstruction(ExecutionState &state, KInstruction *ki); 
+  void executeInstruction(ExecutionState &state); 
   void printFileLine(ExecutionState &state, KInstruction *ki); 
   void run(ExecutionState &initialState); 
   // Given a concrete object in our [klee's] address space, add it to // objects checked code can reference.
