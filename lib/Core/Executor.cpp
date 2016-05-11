@@ -19,7 +19,6 @@
 #include "SpecialFunctionHandler.h"
 #include "StatsTracker.h"
 #include "UserSearcher.h"
-#include "ExecutorTimerInfo.h"
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
 #include "klee/Interpreter.h"
@@ -126,10 +125,6 @@ Executor::~Executor() {
     delete statsTracker;
   delete solver;
   delete kmodule;
-  while(!timers.empty()) {
-    delete timers.back();
-    timers.pop_back();
-  }
 }
 
 /***/
@@ -1436,7 +1431,6 @@ void Executor::run(ExecutionState &initialState) {
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   bindModuleConstants();
   // Delay init till now so that ticks don't accrue during optimization and such.
-  initTimers();
   states.insert(&initialState);
   searcher = constructUserSearcher(*this);
   searcher->update(0, states, std::set<ExecutionState*>());
@@ -1445,7 +1439,6 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
     KInstruction *ki = state.pc;
     stepInstruction(state);
     executeInstruction(state, ki);
-    processTimers(&state, 0);
     updateStates(&state);
   }
   delete searcher;

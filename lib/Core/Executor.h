@@ -101,16 +101,11 @@ public:
   public:
     Timer();
     virtual ~Timer();
-
-    /// The event callback.
     virtual void run() = 0;
   };
-
   typedef std::pair<ExecutionState*,ExecutionState*> StatePair;
 
 private:
-  class TimerInfo;
-
   KModule *kmodule;
   InterpreterHandler *interpreterHandler;
   Searcher *searcher;
@@ -123,7 +118,6 @@ private:
   StatsTracker *statsTracker;
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;
-  std::vector<TimerInfo*> timers;
   PTree *processTree;
 
   /// Used to track states that have been added during the current /// instructions step. 
@@ -257,8 +251,6 @@ private:
   /// bindInstructionConstants - Initialize any necessary per instruction /// constant values.
   void bindInstructionConstants(KInstruction *KI); 
   void handlePointsToObj(ExecutionState &state, KInstruction *target, const std::vector<ref<Expr> > &arguments); 
-  /// Add a timer to be executed periodically.  /// /// \param timer The timer object to run on firings.  /// \param rate The approximate delay (in seconds) between firings.
-  void addTimer(Timer *timer, double rate); 
   void initTimers();
   void processTimers(ExecutionState *current, double maxInstTime); 
 public:
