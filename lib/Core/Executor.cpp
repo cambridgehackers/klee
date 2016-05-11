@@ -250,7 +250,6 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
   assert(N);
 
     stats::forks += N-1;
-
     // XXX do proper balance or keep random?
     result.push_back(&state);
     for (unsigned i=1; i<N; ++i) {
@@ -309,18 +308,12 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   // the value it has been fixed at, we should take this as a nice hint to just use the single constraint instead of all the binary
   // search ones. If that makes sense.
   if (res==Solver::True) {
-    if (!isInternal) {
-      if (pathWriter) {
+    if (!isInternal && pathWriter)
         current.pathOS << "1";
-      }
-    }
     return StatePair(&current, 0);
   } else if (res==Solver::False) {
-    if (!isInternal) {
-      if (pathWriter) {
+    if (!isInternal && pathWriter)
         current.pathOS << "0";
-      }
-    }
     return StatePair(0, &current);
   } else {
     TimerStatIncrementer timer(stats::forkTime);
@@ -363,7 +356,6 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     std::pair<PTree::Node*, PTree::Node*> res = processTree->split(current.ptreeNode, falseState, trueState);
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
-
     if (!isInternal) {
       if (pathWriter) {
         falseState->pathOS = pathWriter->open(current.pathOS);
@@ -388,7 +380,6 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
       llvm::report_fatal_error("attempt to add invalid constraint");
     return;
   }
-
   // Check to see if this constraint violates seeds.
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
   if (it != seedMap.end()) {
@@ -437,10 +428,9 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       llvm::SmallVector<ref<Expr>, 4> kids;
       for (unsigned i = cs->getNumOperands(); i != 0; --i) {
         unsigned op = i-1;
-        ref<Expr> kid = evalConstant(cs->getOperand(op));
-
+        ref<Expr> kid = evalConstant(cs->getOperand(op)); 
         uint64_t thisOffset = sl->getElementOffsetInBits(op),
-                 nextOffset = (op == cs->getNumOperands() - 1) ? sl->getSizeInBits() : sl->getElementOffsetInBits(op+1);
+           nextOffset = (op == cs->getNumOperands() - 1) ? sl->getSizeInBits() : sl->getElementOffsetInBits(op+1);
         if (nextOffset-thisOffset > kid->getWidth()) {
           uint64_t paddingWidth = nextOffset-thisOffset-kid->getWidth();
           kids.push_back(ConstantExpr::create(0, paddingWidth));
@@ -496,7 +486,6 @@ ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
   return result;
 }
 
-
 /* Concretize the given expression, and return a possible constant value.
    'reason' is just a documentation string stating the reason for concretization. */
 ref<klee::ConstantExpr>
@@ -504,20 +493,16 @@ Executor::toConstant(ExecutionState &state, ref<Expr> e, const char *reason) {
   e = state.constraints.simplifyExpr(e);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(e))
     return CE;
-
   ref<ConstantExpr> value;
   bool success = solver->solveGetValue(state, e, value);
   assert(success && "FIXME: Unhandled solver failure");
   (void) success;
-
   std::string str;
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e
      << " to value " << value << " (" << (*(state.pc)).info->file << ":" << (*(state.pc)).info->line << ")";
-
   klee_warning(reason, os.str().c_str());
   addConstraint(state, EqExpr::create(e, value));
-
   return value;
 }
 
@@ -560,7 +545,6 @@ void Executor::stepInstruction(ExecutionState &state) {
     llvm::errs() << *(state.pc->inst) << '\n';
   if (statsTracker)
     statsTracker->stepInstruction(state);
-
   ++stats::instructions;
   state.prevPC = state.pc;
   ++state.pc;
@@ -574,13 +558,10 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       // state may be destroyed by this call, cannot touch
       callExternalFunction(state, ki, f, arguments);
       break;
-
-      // va_arg is handled by caller and intrinsic lowering, see comment for
-      // ExecutionState::varargs
+      // va_arg is handled by caller and intrinsic lowering, see comment for // ExecutionState::varargs
     case Intrinsic::vastart:  {
       StackFrame &sf = state.stack.back();
       assert(sf.varargs && "vastart called in function with no vararg object");
-
       // FIXME: This is really specific to the architecture, not the pointer
       // size. This happens to work fir x86-32 and x86-64, however.
       Expr::Width WordSize = Context::get().getPointerWidth();
@@ -588,7 +569,6 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
         executeMemoryOperation(state, true, arguments[0], sf.varargs->getBaseExpr(), 0);
       } else {
         assert(WordSize == Expr::Int64 && "Unknown word size!");
-
         // X86-64 has quite complicated calling convention. However,
         // instead of implementing it, we can do a simple hack: just
         // make a function believe that all varargs are on stack.
@@ -602,22 +582,16 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       }
       break;
     }
-    case Intrinsic::vaend:
-      // va_end is a noop for the interpreter.
-      //
+    case Intrinsic::vaend: // va_end is a noop for the interpreter.
       // FIXME: We should validate that the target didn't do something bad
       // with vaeend, however (like call it twice).
       break;
 
-    case Intrinsic::vacopy:
-      // va_copy should have been lowered.
-      //
-      // FIXME: It would be nice to check for errors in the usage of this as
-      // well.
+    case Intrinsic::vacopy: // va_copy should have been lowered.
+      // FIXME: It would be nice to check for errors in the usage of this as // well.
     default:
       klee_error("unknown intrinsic: %s", f->getName().data());
     }
-
     if (InvokeInst *ii = dyn_cast<InvokeInst>(i))
       transferToBasicBlock(ii->getNormalDest(), i->getParent(), state);
   } else {
@@ -627,16 +601,12 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC, kf);
-    state.pc = kf->instructions;
-
+    state.pc = kf->instructions; 
     if (statsTracker)
-      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
-
+      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]); 
      // TODO: support "byval" parameter attribute
-     // TODO: support zeroext, signext, sret attributes
-
-    unsigned callingArgs = arguments.size();
-    unsigned funcArgs = f->arg_size();
+     // TODO: support zeroext, signext, sret attributes 
+    unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
     if (!f->isVarArg()) {
       if (callingArgs > funcArgs) {
         klee_warning_once(f, "calling %s with extra arguments.", f->getName().data());
@@ -649,8 +619,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       if (callingArgs < funcArgs) {
         terminateStateOnError(state, "calling function with too few arguments", "user.err");
         return;
-      }
-
+      } 
       StackFrame &sf = state.stack.back();
       unsigned size = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -661,22 +630,19 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
         } else {
           Expr::Width argWidth = arguments[i]->getWidth();
           // AMD64-ABI 3.5.7p5: Step 7. Align l->overflow_arg_area upwards to a 16
-          // byte boundary if alignment needed by type exceeds 8 byte boundary.
-          //
+          // byte boundary if alignment needed by type exceeds 8 byte boundary.  //
           // Alignment requirements for scalar types is the same as their size
           if (argWidth > Expr::Int64) {
              size = llvm::RoundUpToAlignment(size, 16);
           }
           size += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
         }
-      }
-
+      } 
       MemoryObject *mo = sf.varargs = memory->allocate(size, true, false, state.prevPC->inst);
       if ((WordSize == Expr::Int64) && (mo->address & 15)) {
         // Both 64bit Linux/Glibc and 64bit MacOSX should align to 16 bytes.
         klee_warning_once(0, "While allocating varargs: malloc did not align to 16 bytes.");
-      }
-
+      } 
       ObjectState *os = bindObjectInState(state, mo, true);
       unsigned offset = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -686,8 +652,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
           os->write(offset, arguments[i]);
           offset += Expr::getMinBytesForWidth(arguments[i]->getWidth());
         } else {
-          assert(WordSize == Expr::Int64 && "Unknown word size!");
-
+          assert(WordSize == Expr::Int64 && "Unknown word size!"); 
           Expr::Width argWidth = arguments[i]->getWidth();
           if (argWidth > Expr::Int64) {
              offset = llvm::RoundUpToAlignment(offset, 16);
@@ -696,8 +661,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
           offset += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
         }
       }
-    }
-
+    } 
     unsigned numFormals = f->arg_size();
     for (unsigned i=0; i<numFormals; ++i)
       getArgumentCell(state, kf, i).value = arguments[i];
@@ -767,10 +731,12 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
   }
 }
 
-void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
+void Executor::executeInstruction(ExecutionState &state, KInstruction *ki)
+{
   Instruction *i = ki->inst;
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-  switch (i->getOpcode()) {
+  int opcode = i->getOpcode();
+  switch (opcode) {
     // Control flow
   case Instruction::Ret: {
     ReturnInst *ri = cast<ReturnInst>(i);
@@ -785,18 +751,15 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       assert(!caller && "caller set on initial stack frame");
       terminateStateOnExit(state);
     } else {
-      state.popFrame();
-
+      state.popFrame(); 
       if (statsTracker)
-        statsTracker->framePopped(state);
-
+        statsTracker->framePopped(state); 
       if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
         state.pc = kcaller;
         ++state.pc;
-      }
-
+      } 
       if (!isVoidReturn) {
         LLVM_TYPE_Q Type *t = caller->getType();
         if (t != Type::getVoidTy(getGlobalContext())) {
@@ -804,8 +767,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
           Expr::Width from = result->getWidth();
           Expr::Width to = getWidthForLLVMType(t);
           if (from != to) {
-            CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller)));
-
+            CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller))); 
             // XXX need to check other param attrs ?
       bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
             if (isSExt) {
@@ -851,12 +813,10 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   case Instruction::Switch: {
     SwitchInst *si = cast<SwitchInst>(i);
     ref<Expr> cond = eval(ki, 0, state).value;
-    BasicBlock *bb = si->getParent();
-
+    BasicBlock *bb = si->getParent(); 
     cond = toUnique(state, cond);
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(cond)) {
-      // Somewhat gross to create these all the time, but fine till we
-      // switch to an internal rep.
+      // Somewhat gross to create these all the time, but fine till we // switch to an internal rep.
       LLVM_TYPE_Q llvm::IntegerType *Ty = cast<IntegerType>(si->getCondition()->getType());
       ConstantInt *ci = ConstantInt::get(Ty, CE->getZExtValue());
       unsigned index = si->findCaseValue(ci).getSuccessorIndex();
@@ -924,12 +884,10 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       arguments.push_back(eval(ki, j+1, state).value);
     if (f) {
       const FunctionType *fType = dyn_cast<FunctionType>(cast<PointerType>(f->getType())->getElementType());
-      const FunctionType *fpType = dyn_cast<FunctionType>(cast<PointerType>(fp->getType())->getElementType());
-
+      const FunctionType *fpType = dyn_cast<FunctionType>(cast<PointerType>(fp->getType())->getElementType()); 
       // special case the call with a bitcast case
       if (fType != fpType) {
-        assert(fType && fpType && "unable to get function type");
-
+        assert(fType && fpType && "unable to get function type"); 
         // XXX check result coercion
         // XXX this really needs thought and validation
         unsigned i=0;
@@ -949,15 +907,12 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
           }
           i++;
         }
-      }
-
+      } 
       executeCall(state, ki, f, arguments);
     } else {
-      ref<Expr> v = eval(ki, 0, state).value;
-
+      ref<Expr> v = eval(ki, 0, state).value; 
       ExecutionState *free = &state;
-      bool hasInvalid = false, first = true;
-
+      bool hasInvalid = false, first = true; 
       /* XXX This is wasteful, no need to do a full evaluate since we
          have already got a value. But in the end the caches should
          handle it for us, albeit with some overhead. */
@@ -970,8 +925,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         if (res.first) {
           uint64_t addr = value->getZExtValue();
           if (legalFunctions.count(addr)) {
-            f = (Function*) addr;
-
+            f = (Function*) addr; 
             // Don't give warning on unique resolution
             if (res.second || !first)
               klee_warning_once((void*) (unsigned long) addr, "resolved symbolic function pointer to: %s", f->getName().data());
@@ -982,8 +936,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
               hasInvalid = true;
             }
           }
-        }
-
+        } 
         first = false;
         free = res.second;
       } while (free);
@@ -1033,176 +986,97 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     break;
   }
 
-  case Instruction::UDiv: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = UDivExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::SDiv: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = right; //jca SDivExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::URem: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = URemExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::SRem: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = SRemExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::And: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = AndExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::Or: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = OrExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::Xor: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = XorExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::Shl: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = ShlExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
-  case Instruction::LShr: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = LShrExpr::create(left, right);
-    bindLocal(ki, state, result);
-    break;
-  }
-
+  case Instruction::UDiv:
+  case Instruction::SDiv:
+  case Instruction::URem:
+  case Instruction::SRem:
+  case Instruction::And:
+  case Instruction::Or:
+  case Instruction::Xor:
+  case Instruction::Shl:
+  case Instruction::LShr:
   case Instruction::AShr: {
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
-    ref<Expr> result = AShrExpr::create(left, right);
+    ref<Expr> result;
+    switch (opcode) {
+    case Instruction::UDiv:
+        result = UDivExpr::create(left, right);
+        break;
+    case Instruction::SDiv:
+        result = SDivExpr::create(left, right);
+        break;
+    case Instruction::URem:
+        result = URemExpr::create(left, right);
+        break;
+    case Instruction::SRem:
+        result = SRemExpr::create(left, right);
+        break;
+    case Instruction::LShr:
+        result = LShrExpr::create(left, right);
+        break;
+    case Instruction::AShr:
+        result = AShrExpr::create(left, right);
+        break;
+    case Instruction::Shl:
+        result = ShlExpr::create(left, right);
+        break;
+    case Instruction::Xor:
+        result = XorExpr::create(left, right);
+        break;
+    case Instruction::Or:
+        result = OrExpr::create(left, right);
+        break;
+    case Instruction::And:
+        result = AndExpr::create(left, right);
+        break;
+    }
     bindLocal(ki, state, result);
     break;
   }
 
     // Compare
-
   case Instruction::ICmp: {
     CmpInst *ci = cast<CmpInst>(i);
     ICmpInst *ii = cast<ICmpInst>(ci);
-
+    ref<Expr> left = eval(ki, 0, state).value;
+    ref<Expr> right = eval(ki, 1, state).value;
+    ref<Expr> result;
     switch(ii->getPredicate()) {
-    case ICmpInst::ICMP_EQ: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = EqExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_EQ:
+      result = EqExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_NE: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = NeExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_NE:
+      result = NeExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_UGT: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = UgtExpr::create(left, right);
-      bindLocal(ki, state,result);
+    case ICmpInst::ICMP_UGT:
+      result = UgtExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_UGE: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = UgeExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_UGE:
+      result = UgeExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_ULT: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = UltExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_ULT:
+      result = UltExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_ULE: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = UleExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_ULE:
+      result = UleExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_SGT: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = SgtExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_SGT:
+      result = SgtExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_SGE: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = SgeExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_SGE:
+      result = SgeExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_SLT: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = SltExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_SLT:
+      result = SltExpr::create(left, right);
       break;
-    }
-
-    case ICmpInst::ICMP_SLE: {
-      ref<Expr> left = eval(ki, 0, state).value;
-      ref<Expr> right = eval(ki, 1, state).value;
-      ref<Expr> result = SleExpr::create(left, right);
-      bindLocal(ki, state, result);
+    case ICmpInst::ICMP_SLE:
+      result = SleExpr::create(left, right);
       break;
-    }
-
     default:
       terminateStateOnExecError(state, "invalid ICmp predicate");
     }
+    bindLocal(ki, state, result);
     break;
   }
 
