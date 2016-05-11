@@ -1140,61 +1140,34 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
     // Floating point instructions
-
-  case Instruction::FAdd: {
-    ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state).value, "floating point");
-    ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
-    if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
-      return terminateStateOnExecError(state, "Unsupported FAdd operation");
-
-    llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
-    Res.add(APFloat(*fpWidthToSemantics(right->getWidth()),right->getAPValue()), APFloat::rmNearestTiesToEven);
-    bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
-    break;
-  }
-
-  case Instruction::FSub: {
-    ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state).value, "floating point");
-    ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
-    if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
-      return terminateStateOnExecError(state, "Unsupported FSub operation");
-    llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
-    Res.subtract(APFloat(*fpWidthToSemantics(right->getWidth()), right->getAPValue()), APFloat::rmNearestTiesToEven);
-    bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
-    break;
-  }
-
-  case Instruction::FMul: {
-    ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state).value, "floating point");
-    ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
-    if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
-      return terminateStateOnExecError(state, "Unsupported FMul operation");
-
-    llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
-    Res.multiply(APFloat(*fpWidthToSemantics(right->getWidth()), right->getAPValue()), APFloat::rmNearestTiesToEven);
-    bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
-    break;
-  }
-
-  case Instruction::FDiv: {
-    ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state).value, "floating point");
-    ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
-    if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
-      return terminateStateOnExecError(state, "Unsupported FDiv operation");
-
-    llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
-    Res.divide(APFloat(*fpWidthToSemantics(right->getWidth()), right->getAPValue()), APFloat::rmNearestTiesToEven);
-    bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
-    break;
-  }
-
+  case Instruction::FAdd:
+  case Instruction::FSub:
+  case Instruction::FMul:
+  case Instruction::FDiv:
   case Instruction::FRem: {
     ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state).value, "floating point");
     ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
     if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FRem operation");
     llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
-    Res.mod(APFloat(*fpWidthToSemantics(right->getWidth()),right->getAPValue()), APFloat::rmNearestTiesToEven);
+    llvm::APFloat rop(*fpWidthToSemantics(right->getWidth()), right->getAPValue());
+    switch(opcode) {
+    case Instruction::FAdd:
+        Res.add(rop, APFloat::rmNearestTiesToEven);
+        break;
+    case Instruction::FSub:
+        Res.subtract(rop, APFloat::rmNearestTiesToEven);
+        break;
+    case Instruction::FMul:
+        Res.multiply(rop, APFloat::rmNearestTiesToEven);
+        break;
+    case Instruction::FDiv:
+        Res.divide(rop, APFloat::rmNearestTiesToEven);
+        break;
+    case Instruction::FRem:
+        Res.mod(rop, APFloat::rmNearestTiesToEven);
+        break;
+    }
     bindLocal(ki, state, ConstantExpr::alloc(Res.bitcastToAPInt()));
     break;
   }
@@ -1399,14 +1372,9 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     break;
   }
 
-    // Other instructions...
-    // Unhandled
   case Instruction::ExtractElement:
   case Instruction::InsertElement:
   case Instruction::ShuffleVector:
-    terminateStateOnError(state, "XXX vector instructions unhandled", "xxx.err");
-    break;
-
   default:
     terminateStateOnExecError(state, "illegal instruction");
     break;
