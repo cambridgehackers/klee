@@ -744,9 +744,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     Instruction *caller = kcaller ? kcaller->inst : 0;
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
-    if (!isVoidReturn) {
+    if (!isVoidReturn)
       result = eval(ki, 0, state).value;
-    }
     if (state.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
       terminateStateOnExit(state);
@@ -797,10 +796,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       ref<Expr> cond = eval(ki, 0, state).value;
       Executor::StatePair branches = fork(state, cond, false);
 
-      // NOTE: There is a hidden dependency here, markBranchVisited
-      // requires that we still be in the context of the branch
-      // instruction (it reuses its statistic id). Should be cleaned
-      // up with convenient instruction specific data.
+      // NOTE: There is a hidden dependency here, markBranchVisited requires that we still be in the context of the branch
+      // instruction (it reuses its statistic id). Should be cleaned up with convenient instruction specific data.
       if (statsTracker && state.stack.back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
       if (branches.first)
@@ -1103,11 +1100,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
     // Conversion
-  case Instruction::Trunc:
-  case Instruction::ZExt:
-  case Instruction::SExt:
-  case Instruction::IntToPtr:
-  case Instruction::PtrToInt: {
+  case Instruction::Trunc: case Instruction::ZExt: case Instruction::SExt:
+  case Instruction::IntToPtr: case Instruction::PtrToInt: {
     CastInst *ci = cast<CastInst>(i);
     Expr::Width iType = getWidthForLLVMType(ci->getType());
     ref<Expr> arg = eval(ki, 0, state).value;
@@ -1140,11 +1134,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
     // Floating point instructions
-  case Instruction::FAdd:
-  case Instruction::FSub:
-  case Instruction::FMul:
-  case Instruction::FDiv:
-  case Instruction::FRem: {
+  case Instruction::FAdd: case Instruction::FSub:
+  case Instruction::FMul: case Instruction::FDiv: case Instruction::FRem: {
     ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state).value, "floating point");
     ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
     if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
@@ -1382,13 +1373,10 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 }
 
 void Executor::updateStates(ExecutionState *current) {
-  if (searcher) {
+  if (searcher)
     searcher->update(current, addedStates, removedStates);
-  }
-
   states.insert(addedStates.begin(), addedStates.end());
   addedStates.clear();
-
   for (std::set<ExecutionState*>::iterator it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
     ExecutionState *es = *it;
     std::set<ExecutionState*>::iterator it2 = states.find(es);
@@ -1648,56 +1636,42 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
 
   state.addressSpace.copyOutConcretes();
 
-  {
 printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
-    std::string TmpStr;
-    llvm::raw_string_ostream os(TmpStr);
-    os << "calling external: " << function->getName().str() << "(";
-    for (unsigned i=0; i<arguments.size(); i++) {
-      os << arguments[i];
+  std::string TmpStr;
+  llvm::raw_string_ostream messageOs(TmpStr);
+  messageOs << "calling external: " << function->getName().str() << "(";
+  for (unsigned i=0; i<arguments.size(); i++) {
+      messageOs << arguments[i];
       if (i != arguments.size()-1)
-	os << ", ";
-    }
-    os << ")";
-    klee_warning("%s", os.str().c_str());
+	messageOs << ", ";
   }
+  messageOs << ")";
+  klee_warning("%s", messageOs.str().c_str());
   // MCJIT needs unique module, so we create quick external dispatcher for call.
-  // reference:
-  // http://blog.llvm.org/2013/07/using-mcjit-with-kaleidoscope-tutorial.html
+  // reference: // http://blog.llvm.org/2013/07/using-mcjit-with-kaleidoscope-tutorial.html
   ExternalDispatcher *e = new ExternalDispatcher();
   bool success = e->executeCall(function, target->inst, args);
   delete e;
-  if (!success) {
-    terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
-    return;
-  }
-  if (!state.addressSpace.copyInConcretes()) {
-    terminateStateOnError(state, "external modified read-only object", "external.err");
-    return;
-  }
-  LLVM_TYPE_Q Type *resultType = target->inst->getType();
-  if (resultType != Type::getVoidTy(getGlobalContext())) {
-    ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
-    bindLocal(target, state, e);
+  if (!success)
+      terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
+  else if (!state.addressSpace.copyInConcretes())
+      terminateStateOnError(state, "external modified read-only object", "external.err");
+  else {
+      LLVM_TYPE_Q Type *resultType = target->inst->getType();
+      if (resultType != Type::getVoidTy(getGlobalContext())) {
+        ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
+        bindLocal(target, state, e);
+      }
   }
 }
 
 /***/
 ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e) {
   unsigned n = interpreterOpts.MakeConcreteSymbolic;
-  if (!n)
-    return e;
-
   // right now, we don't replace symbolics (is there any reason to?)
-  if (!isa<ConstantExpr>(e))
-    return e;
-
-  if (n != 1 && random() % n)
-    return e;
-
-  // create a new fresh location, assert it is equal to concrete value in e
-  // and return it.
-
+  if (!n || !isa<ConstantExpr>(e) || (n != 1 && random() % n))
+    return e; 
+  // create a new fresh location, assert it is equal to concrete value in e // and return it.  
   static unsigned id;
   const Array *array = arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id), Expr::getMinBytesForWidth(e->getWidth()));
   ref<Expr> res = Expr::createTempRead(array, e->getWidth());
@@ -1709,15 +1683,12 @@ ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e) 
 
 ObjectState *Executor::bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array) {
   ObjectState *os = array ? new ObjectState(mo, array) : new ObjectState(mo);
-  state.addressSpace.bindObject(mo, os);
-
+  state.addressSpace.bindObject(mo, os); 
   // Its possible that multiple bindings of the same mo in the state
   // will put multiple copies on this list, but it doesn't really
-  // matter because all we use this list for is to unbind the object
-  // on function return.
+  // matter because all we use this list for is to unbind the object // on function return.
   if (isLocal)
-    state.stack.back().allocas.push_back(mo);
-
+    state.stack.back().allocas.push_back(mo); 
   return os;
 }
 
@@ -1726,11 +1697,10 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
     MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, state.prevPC->inst);
       ObjectState *os = bindObjectInState(state, mo, isLocal);
-      if (zeroMemory) {
+      if (zeroMemory)
         os->initializeToZero();
-      } else {
+      else
         os->initializeToRandom();
-      }
       bindLocal(target, state, mo->getBaseExpr());
       if (reallocFrom) {
         unsigned count = std::min(reallocFrom->size, os->size);
@@ -1766,10 +1736,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       if (!res)
         break;
       example = tmp;
-    }
-
-    StatePair fixedSize = fork(state, EqExpr::create(example, size), true);
-
+    } 
+    StatePair fixedSize = fork(state, EqExpr::create(example, size), true); 
     if (fixedSize.second) {
       // Check for exactly two values
       ref<ConstantExpr> tmp;
@@ -1789,8 +1757,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
         if (hugeSize.first) {
           klee_message("NOTE: found huge malloc, returning 0");
           bindLocal(target, *hugeSize.first, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
-        }
-
+        } 
         if (hugeSize.second) {
           std::string Str;
           llvm::raw_string_ostream info(Str);
@@ -1897,11 +1864,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   ResolutionList rl;
   osolver->setCoreSolverTimeout(0);
   bool incomplete = state.addressSpace.resolve(state, solver, address, rl, 0, 0);
-  osolver->setCoreSolverTimeout(0);
-
+  osolver->setCoreSolverTimeout(0); 
   // XXX there is some query wasteage here. who cares?
-  ExecutionState *unbound = &state;
-
+  ExecutionState *unbound = &state; 
   for (ResolutionList::iterator i = rl.begin(), ie = rl.end(); i != ie; ++i) {
     const MemoryObject *mo = i->first;
     const ObjectState *os = i->second;
@@ -1926,15 +1891,13 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     unbound = branches.second;
     if (!unbound)
       break;
-  }
-
+  } 
   // XXX should we distinguish out of bounds and overlapped cases?
   if (unbound) {
-    if (incomplete) {
+    if (incomplete)
       terminateStateEarly(*unbound, "Query timed out (resolve).");
-    } else {
+    else
       terminateStateOnError(*unbound, "memory error: out of bound pointer", "ptr.err", getAddressInfo(*unbound, address));
-    }
   }
 }
 
