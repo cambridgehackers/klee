@@ -275,7 +275,6 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
         ref<ConstantExpr> res;
         bool success = solver->solveGetValue(state, siit->assignment.evaluate(conditions[i]), res);
         assert(success && "FIXME: Unhandled solver failure");
-        (void) success;
         if (res->isTrue())
           break;
       } 
@@ -293,7 +292,7 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
 }
 
 Executor::StatePair
-Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
+Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&current);
   osolver->setCoreSolverTimeout(0);
@@ -330,7 +329,6 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         ref<ConstantExpr> res;
         bool success = solver->solveGetValue(current, siit->assignment.evaluate(condition), res);
         assert(success && "FIXME: Unhandled solver failure");
-        (void) success;
         if (res->isTrue()) {
           trueSeeds.push_back(*siit);
         } else {
@@ -388,7 +386,6 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
       bool res;
       bool success = solver->mustBeFalse(state, siit->assignment.evaluate(condition), res);
       assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
       if (res) {
         siit->patchSeed(state, condition, solver);
         warn = true;
@@ -492,7 +489,6 @@ Executor::toConstant(ExecutionState &state, ref<Expr> e, const char *reason) {
   ref<ConstantExpr> value;
   bool success = solver->solveGetValue(state, e, value);
   assert(success && "FIXME: Unhandled solver failure");
-  (void) success;
   std::string str;
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e
@@ -509,7 +505,6 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     ref<ConstantExpr> value;
     bool success = solver->solveGetValue(state, e, value);
     assert(success && "FIXME: Unhandled solver failure");
-    (void) success;
     bindLocal(target, state, value);
   } else {
     std::set< ref<Expr> > values;
@@ -517,7 +512,6 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
       ref<ConstantExpr> value;
       bool success = solver->solveGetValue(state, siit->assignment.evaluate(e), value);
       assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
       values.insert(value);
     }
     std::vector< ref<Expr> > conditions;
@@ -787,7 +781,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       // FIXME: Find a way that we don't have this hidden dependency.
       assert(bi->getCondition() == bi->getOperand(0) && "Wrong operand index!");
       ref<Expr> cond = eval(ki, 0, state).value;
-      Executor::StatePair branches = fork(state, cond, false);
+      Executor::StatePair branches = stateFork(state, cond, false);
 
       // NOTE: There is a hidden dependency here, markBranchVisited requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned up with convenient instruction specific data.
@@ -910,8 +904,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         ref<ConstantExpr> value;
         bool success = solver->solveGetValue(*free, v, value);
         assert(success && "FIXME: Unhandled solver failure");
-        (void) success;
-        StatePair res = fork(*free, EqExpr::create(v, value), true);
+        StatePair res = stateFork(*free, EqExpr::create(v, value), true);
         if (res.first) {
           uint64_t addr = value->getZExtValue();
           if (legalFunctions.count(addr)) {
@@ -1480,7 +1473,6 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
     ref<ConstantExpr> value;
     bool success = solver->solveGetValue(state, address, value);
     assert(success && "FIXME: Unhandled solver failure");
-    (void) success;
     example = value->getZExtValue();
     info << "\texample: " << example << "\n";
     std::pair< ref<Expr>, ref<Expr> > res = solveGetRange(state, address);
@@ -1716,7 +1708,6 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     ref<ConstantExpr> example;
     bool success = solver->solveGetValue(state, size, example);
     assert(success && "FIXME: Unhandled solver failure");
-    (void) success;
 
     // Try and start with a small example.
     Expr::Width W = example->getWidth();
@@ -1725,28 +1716,25 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       bool res;
       bool success = solver->mayBeTrue(state, EqExpr::create(tmp, size), res);
       assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
       if (!res)
         break;
       example = tmp;
     } 
-    StatePair fixedSize = fork(state, EqExpr::create(example, size), true); 
+    StatePair fixedSize = stateFork(state, EqExpr::create(example, size), true); 
     if (fixedSize.second) {
       // Check for exactly two values
       ref<ConstantExpr> tmp;
       bool success = solver->solveGetValue(*fixedSize.second, size, tmp);
       assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
       bool res;
       success = solver->mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), res);
       assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
       if (res) {
         executeAlloc(*fixedSize.second, tmp, isLocal, target, zeroMemory, reallocFrom);
       } else {
         // See if a *really* big value is possible. If so assume
         // malloc will fail for it, so lets fork and return 0.
-        StatePair hugeSize = fork(*fixedSize.second, UltExpr::create(ConstantExpr::alloc(1<<31, W), size), true);
+        StatePair hugeSize = stateFork(*fixedSize.second, UltExpr::create(ConstantExpr::alloc(1<<31, W), size), true);
         if (hugeSize.first) {
           klee_message("NOTE: found huge malloc, returning 0");
           bindLocal(target, *hugeSize.first, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
@@ -1767,7 +1755,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
 }
 
 void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
-  StatePair zeroPointer = fork(state, Expr::createIsZero(address), true);
+  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
   if (zeroPointer.first) {
     if (target)
       bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
@@ -1797,7 +1785,7 @@ void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionL
   ExecutionState *unbound = &state;
   for (ResolutionList::iterator it = rl.begin(), ie = rl.end(); it != ie; ++it) {
     ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
-    StatePair branches = fork(*unbound, inBounds, true);
+    StatePair branches = stateFork(*unbound, inBounds, true);
     if (branches.first)
       results.push_back(std::make_pair(*it, branches.first));
     unbound = branches.second;
@@ -1864,7 +1852,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     const MemoryObject *mo = i->first;
     const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
-    StatePair branches = fork(*unbound, inBounds, true);
+    StatePair branches = stateFork(*unbound, inBounds, true);
     ExecutionState *bound = branches.first;
     // bound can be 0 on failure or overlapped
     if (bound) {
