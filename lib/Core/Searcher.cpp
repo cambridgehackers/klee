@@ -259,8 +259,7 @@ entry:
     } else {
       ExecutionState *mergeWith = it->second;
       if (mergeWith->merge(es)) {
-        // hack, because we are terminating the state we need to let
-        // the baseSearcher know about it again
+        // hack, because we are terminating the state we need to let // the baseSearcher know about it again
         baseSearcher->addState(&es);
         executor.terminateState(es);
       } else {
