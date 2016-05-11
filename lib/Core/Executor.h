@@ -98,7 +98,6 @@ public:
   MemoryManager *memory;
   PTree *processTree;
 private:
-  Searcher *searcher;
   ExternalDispatcher *externalDispatcher;
   Solver       *osolver;
   StatsTracker *statsTracker;
@@ -140,7 +139,6 @@ private:
   void initializeGlobalObject(ExecutionState &state, ObjectState *os, const llvm::Constant *c, unsigned offset);
   void initializeGlobals(ExecutionState &state); 
   void stepInstruction(ExecutionState &state);
-  void updateStates(ExecutionState *current);
   void transferToBasicBlock(llvm::BasicBlock *dst, llvm::BasicBlock *src, ExecutionState &state); 
   void callExternalFunction(ExecutionState &state, KInstruction *target, llvm::Function *function, std::vector<ref<Expr>> &arguments); 
   // do address resolution / object binding / out of bounds checking // and perform the operation

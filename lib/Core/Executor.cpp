@@ -75,7 +75,6 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
     kmodule(0),
     interpreterHandler(ih),
     processTree(0),
-    searcher(0),
     externalDispatcher(new ExternalDispatcher()),
     statsTracker(0),
     pathWriter(0),
@@ -1345,25 +1344,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-void Executor::updateStates(ExecutionState *current) {
-  if (searcher)
-    searcher->update(current, addedStates, removedStates);
-  states.insert(addedStates.begin(), addedStates.end());
-  addedStates.clear();
-  for (std::set<ExecutionState*>::iterator it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
-    ExecutionState *es = *it;
-    std::set<ExecutionState*>::iterator it2 = states.find(es);
-    assert(it2!=states.end());
-    states.erase(it2);
-    std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it3 = seedMap.find(es);
-    if (it3 != seedMap.end())
-      seedMap.erase(it3);
-    processTree->remove(es->ptreeNode);
-    delete es;
-  }
-  removedStates.clear();
-}
-
 template <typename TypeIt>
 void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
   ref<ConstantExpr> constantOffset = ConstantExpr::alloc(0, Context::get().getPointerWidth());
@@ -1416,33 +1396,29 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   }
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(&initialState);
-  searcher = constructUserSearcher(*this);
+  Searcher *searcher = constructUserSearcher(*this);
   searcher->update(0, states, std::set<ExecutionState*>());
   while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
     executeInstruction(state);
-    updateStates(&state);
+    searcher->update(&state, addedStates, removedStates);
+    states.insert(addedStates.begin(), addedStates.end());
+    addedStates.clear();
+    for (std::set<ExecutionState*>::iterator it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+      ExecutionState *es = *it;
+      std::set<ExecutionState*>::iterator it2 = states.find(es);
+      assert(it2!=states.end());
+      states.erase(it2);
+      std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it3 = seedMap.find(es);
+      if (it3 != seedMap.end())
+        seedMap.erase(it3);
+      processTree->remove(es->ptreeNode);
+      delete es;
+    }
+    removedStates.clear();
   }
   delete searcher;
   searcher = 0;
-  if (!states.empty()) {
-    llvm::errs() << "KLEE: halting execution, dumping remaining states\n";
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-printf("[%s:%d]ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n", __FUNCTION__, __LINE__);
-exit(-1);
-    for (std::set<ExecutionState*>::iterator it = states.begin(), ie = states.end(); it != ie; ++it) {
-      ExecutionState &state = **it;
-      stepInstruction(state); // keep stats rolling
-      terminateStateEarly(state, "Execution halting.");
-    }
-    updateStates(0);
-  }
 printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
 }
 
