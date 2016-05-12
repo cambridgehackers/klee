@@ -43,21 +43,16 @@ namespace llvm {
 }
 
 namespace klee {  
-  class Array;
-  struct Cell;
   class ExecutionState;
   class ExternalDispatcher;
   class Expr;
   class InstructionInfoTable;
   struct KFunction;
-  struct KInstruction;
   class KInstIterator;
-  class KModule;
   class MemoryManager;
   class MemoryObject;
   class ObjectState;
   class PTree;
-  class Searcher;
   class SeedInfo;
   class SpecialFunctionHandler;
   struct StackFrame;
@@ -81,10 +76,6 @@ namespace klee {
     bool mayBeFalse(const ExecutionState&, ref<Expr>, bool &result);
     bool solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
   };
-
-  /// \todo Add a context object to keep track of data only live
-  /// during an instruction step. Should contain addedStates,
-  /// removedStates, and haltExecution, among others.
 
 class Executor : public Interpreter {
 public:
