@@ -28,6 +28,7 @@
 #include "klee/util/ExprUtil.h"
 #include "klee/util/GetElementPtrTypeIterator.h"
 #include "klee/Config/Version.h"
+#include "klee/Internal/ADT/DiscretePDF.h"
 #include "klee/Internal/ADT/KTest.h"
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Internal/Module/Cell.h"
@@ -64,23 +65,7 @@
 using namespace llvm;
 using namespace klee;
 
-namespace klee {
-  RNG theRNG;
-  static bool userSearcherRequiresMD2U();
-}
-
-//#include "llvm/Support/raw_ostream.h"
-//#include <vector>
-//#include <set>
-//#include <map>
-//#include <queue>
-
-namespace llvm {
-  class BasicBlock;
-  class Function;
-  class Instruction;
-  class raw_ostream;
-}
+static RNG theRNG;
 
 namespace klee {
   template<class T> class DiscretePDF;
@@ -271,32 +256,6 @@ namespace klee {
   };
 
 }
-//#include "Searcher.h"
-//#include "CoreStats.h"
-//#include "Executor.h"
-//#include "PTree.h"
-//#include "StatsTracker.h"
-//#include "klee/ExecutionState.h"
-//#include "klee/Statistics.h"
-//#include "klee/Internal/Module/InstructionInfoTable.h"
-//#include "klee/Internal/Module/KInstruction.h"
-//#include "klee/Internal/Module/KModule.h"
-#include "klee/Internal/ADT/DiscretePDF.h"
-//#include "klee/Internal/ADT/RNG.h"
-//#include "klee/Internal/Support/ModuleUtil.h"
-//#include "klee/Internal/System/Time.h"
-//#include "klee/Internal/Support/ErrorHandling.h"
-//#include "llvm/IR/Constants.h"
-//#include "llvm/IR/Instructions.h"
-//#include "llvm/IR/Module.h"
-//#include "llvm/Support/CommandLine.h"
-//#include "llvm/IR/CallSite.h"
-//#include <cassert>
-//#include <fstream>
-//#include <climits>
-
-//using namespace klee;
-//using namespace llvm;
 namespace {
   cl::list<Searcher::CoreSearchType>
   CoreSearch("search", cl::desc("Specify the search heuristic (default=random-path interleaved with nurs:covnew)"),
@@ -318,14 +277,8 @@ namespace {
   DebugLogMerge("debug-log-merge");
 }
 
-//namespace klee {
-  //extern RNG theRNG;
-//}
+Searcher::~Searcher() { }
 
-Searcher::~Searcher() {
-}
-
-///
 ExecutionState &DFSSearcher::selectState() {
   return *states.back();
 }
@@ -781,7 +734,8 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   memory = new MemoryManager(&arrayCache);
 }
 
-const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts) {
+const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
+{
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   assert(!kmodule && module && "can only register one module"); // XXX gross
   kmodule = new KModule(module);
@@ -793,7 +747,12 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   specialFunctionHandler->bind();
   if (StatsTracker::useStatistics()) {
 printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
-    statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly.ll"), userSearcherRequiresMD2U());
+    statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly.ll"),
+       (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
   }
   return module;
 }
@@ -1075,20 +1034,19 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
 }
 
 ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
-  if (const llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c)) {
+  if (const llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c))
     return evalConstantExpr(ce);
-  } else {
-    if (const ConstantInt *ci = dyn_cast<ConstantInt>(c)) {
+  else if (const ConstantInt *ci = dyn_cast<ConstantInt>(c))
       return ConstantExpr::alloc(ci->getValue());
-    } else if (const ConstantFP *cf = dyn_cast<ConstantFP>(c)) {
+    else if (const ConstantFP *cf = dyn_cast<ConstantFP>(c))
       return ConstantExpr::alloc(cf->getValueAPF().bitcastToAPInt());
-    } else if (const GlobalValue *gv = dyn_cast<GlobalValue>(c)) {
+    else if (const GlobalValue *gv = dyn_cast<GlobalValue>(c))
       return globalAddresses.find(gv)->second;
-    } else if (isa<ConstantPointerNull>(c)) {
+    else if (isa<ConstantPointerNull>(c))
       return Expr::createPointer(0);
-    } else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c)) {
+    else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c))
       return ConstantExpr::create(0, getWidthForLLVMType(c->getType()));
-    } else if (const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c)) {
+    else if (const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c)) {
       std::vector<ref<Expr> > kids;
       for (unsigned i = 0, e = cds->getNumElements(); i != e; ++i) {
         ref<Expr> kid = evalConstant(cds->getElementAsConstant(i));
@@ -1124,7 +1082,6 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
     } else { // Constant{Vector}
       llvm::report_fatal_error("invalid argument to evalConstant()");
     }
-  }
 }
 
 const Cell& Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const {
@@ -2055,13 +2012,6 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
   kgepi->offset = constantOffset->getZExtValue();
 }
 
-static bool klee::userSearcherRequiresMD2U() {
-  return (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end() ||
-	  std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end() ||
-	  std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end() ||
-	  std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end() ||
-	  std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end());
-}
 static Searcher *getNewSearcher(Searcher::CoreSearchType type, Executor &executor) {
   Searcher *searcher = NULL;
   switch (type) {
