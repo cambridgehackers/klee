@@ -135,10 +135,10 @@ namespace klee {
     double getWeight(ExecutionState*); 
   public:
     WeightedRandomSearcher(WeightType type);
-    ~WeightedRandomSearcher(); 
-    ExecutionState &selectState();
+    ~WeightedRandomSearcher() { delete states; } 
+    ExecutionState &selectState() { return *states->choose(theRNG.getDoubleL()); } 
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
-    bool empty();
+    bool empty() { return states->empty(); } 
     void printName(llvm::raw_ostream &os) {
       os << "WeightedRandomSearcher::";
       switch(type) {
@@ -152,23 +152,16 @@ namespace klee {
       }
     }
   }; 
-WeightedRandomSearcher::~WeightedRandomSearcher() { delete states; } 
-ExecutionState &WeightedRandomSearcher::selectState() { return *states->choose(theRNG.getDoubleL()); } 
-bool WeightedRandomSearcher::empty() { return states->empty(); } 
   class RandomPathSearcher : public Searcher {
     Executor &executor; 
   public:
-    RandomPathSearcher(Executor &_executor);
-    ~RandomPathSearcher(); 
+    RandomPathSearcher(Executor &_executor) : executor(_executor) { } 
+    ~RandomPathSearcher() { }
     ExecutionState &selectState();
-    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
-    bool empty();
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) { }
+    bool empty() { return executor.states.empty(); } 
     void printName(llvm::raw_ostream &os) { os << "RandomPathSearcher\n"; }
   };
-RandomPathSearcher::RandomPathSearcher(Executor &_executor) : executor(_executor) { } 
-RandomPathSearcher::~RandomPathSearcher() { }
-void RandomPathSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) { }
-bool RandomPathSearcher::empty() { return executor.states.empty(); } 
 
   class MergingSearcher : public Searcher {
     Executor &executor;
@@ -177,7 +170,6 @@ bool RandomPathSearcher::empty() { return executor.states.empty(); }
     llvm::Function *mergeFunction; 
   private:
     llvm::Instruction *getMergePoint(ExecutionState &es);
-
   public:
     MergingSearcher(Executor &executor, Searcher *baseSearcher);
     ~MergingSearcher(); 
