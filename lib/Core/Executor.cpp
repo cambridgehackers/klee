@@ -104,30 +104,27 @@ namespace klee {
   class DFSSearcher : public Searcher {
     std::vector<ExecutionState*> states; 
   public:
-    ExecutionState &selectState();
+    ExecutionState &selectState() { return *states.back(); }
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
     bool empty() { return states.empty(); }
     void printName(llvm::raw_ostream &os) { os << "DFSSearcher\n"; }
   }; 
-ExecutionState &DFSSearcher::selectState() { return *states.back(); }
   class BFSSearcher : public Searcher {
     std::deque<ExecutionState*> states; 
   public:
-    ExecutionState &selectState();
+    ExecutionState &selectState() { return *states.front(); } 
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
     bool empty() { return states.empty(); }
     void printName(llvm::raw_ostream &os) { os << "BFSSearcher\n"; }
   };
-ExecutionState &BFSSearcher::selectState() { return *states.front(); } 
   class RandomSearcher : public Searcher {
     std::vector<ExecutionState*> states; 
   public:
-    ExecutionState &selectState();
+    ExecutionState &selectState() { return *states[theRNG.getInt32()%states.size()]; } 
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
     bool empty() { return states.empty(); }
     void printName(llvm::raw_ostream &os) { os << "RandomSearcher\n"; }
   };
-ExecutionState &RandomSearcher::selectState() { return *states[theRNG.getInt32()%states.size()]; } 
   class WeightedRandomSearcher : public Searcher {
   public:
     enum WeightType { Depth, QueryCost, InstCount, CPInstCount, MinDistToUncovered, CoveringNew }; 
