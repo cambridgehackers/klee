@@ -105,16 +105,6 @@ namespace {
 }
 
 namespace klee {
-class PTree { 
-    typedef ExecutionState* data_type;
-public:
-    typedef class PTreeNode Node;
-    Node *root;
-    PTree(const data_type &_root);
-    ~PTree() {}
-    std::pair<Node*,Node*> split(Node *n, const data_type &leftData, const data_type &rightData);
-    void remove(Node *n); 
-}; 
 class PTreeNode {
     friend class PTree;
 public:
@@ -126,33 +116,37 @@ private:
       : parent(_parent), left(0), right(0), data(_data), condition(0) { } 
     ~PTreeNode() { }
 };
-}
-PTree::PTree(const data_type &_root) : root(new Node(0,_root)) { } 
-
-std::pair<PTreeNode*, PTreeNode*>
-PTree::split(Node *n, const data_type &leftData, const data_type &rightData) {
-  assert(n && !n->left && !n->right);
-  n->left = new Node(n, leftData);
-  n->right = new Node(n, rightData);
-  return std::make_pair(n->left, n->right);
-}
-
-void PTree::remove(Node *n) {
-  assert(!n->left && !n->right);
-  do {
-    Node *p = n->parent;
-    delete n;
-    if (p) {
-      if (n == p->left)
-        p->left = 0;
-      else {
-        assert(n == p->right);
-        p->right = 0;
-      }
+class PTree { 
+    typedef ExecutionState* data_type;
+public:
+    PTreeNode *root;
+    PTree(const data_type &_root);
+    ~PTree() {}
+    std::pair<PTreeNode*,PTreeNode*> split(PTreeNode *n, const data_type &leftData, const data_type &rightData) {
+      assert(n && !n->left && !n->right);
+      n->left = new PTreeNode(n, leftData);
+      n->right = new PTreeNode(n, rightData);
+      return std::make_pair(n->left, n->right);
     }
-    n = p;
-  } while (n && !n->left && !n->right);
+    void remove(PTreeNode *n) {
+      assert(!n->left && !n->right);
+      do {
+        PTreeNode *p = n->parent;
+        delete n;
+        if (p) {
+          if (n == p->left)
+            p->left = 0;
+          else {
+            assert(n == p->right);
+            p->right = 0;
+          }
+        }
+        n = p;
+      } while (n && !n->left && !n->right);
+    }
+}; 
 }
+PTree::PTree(const data_type &_root) : root(new PTreeNode(0,_root)) { } 
 
 class DFSSearcher : public Searcher {
   std::vector<ExecutionState*> states; 
@@ -388,7 +382,7 @@ void WeightedRandomSearcher::update(ExecutionState *current, const std::set<Exec
 
 ExecutionState &RandomPathSearcher::selectState() {
   unsigned flips=0, bits=0;
-  PTree::Node *n = executor.processTree->root; 
+  PTreeNode *n = executor.processTree->root; 
   while (!n->data) {
     if (!n->left) {
       n = n->right;
@@ -801,7 +795,7 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
       addedStates.insert(ns);
       result.push_back(ns);
       es->ptreeNode->data = 0;
-      std::pair<PTree::Node*,PTree::Node*> res = processTree->split(es->ptreeNode, ns, es);
+      std::pair<PTreeNode*,PTreeNode*> res = processTree->split(es->ptreeNode, ns, es);
       ns->ptreeNode = res.first;
       es->ptreeNode = res.second;
     }
@@ -894,7 +888,7 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
       }
     }
     current.ptreeNode->data = 0;
-    std::pair<PTree::Node*, PTree::Node*> res = processTree->split(current.ptreeNode, falseState, trueState);
+    std::pair<PTreeNode*, PTreeNode*> res = processTree->split(current.ptreeNode, falseState, trueState);
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
     if (!isInternal) {
