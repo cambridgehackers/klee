@@ -109,6 +109,7 @@ namespace klee {
     bool empty() { return states.empty(); }
     void printName(llvm::raw_ostream &os) { os << "DFSSearcher\n"; }
   }; 
+ExecutionState &DFSSearcher::selectState() { return *states.back(); }
   class BFSSearcher : public Searcher {
     std::deque<ExecutionState*> states; 
   public:
@@ -117,6 +118,7 @@ namespace klee {
     bool empty() { return states.empty(); }
     void printName(llvm::raw_ostream &os) { os << "BFSSearcher\n"; }
   };
+ExecutionState &BFSSearcher::selectState() { return *states.front(); } 
   class RandomSearcher : public Searcher {
     std::vector<ExecutionState*> states; 
   public:
@@ -125,6 +127,7 @@ namespace klee {
     bool empty() { return states.empty(); }
     void printName(llvm::raw_ostream &os) { os << "RandomSearcher\n"; }
   };
+ExecutionState &RandomSearcher::selectState() { return *states[theRNG.getInt32()%states.size()]; } 
   class WeightedRandomSearcher : public Searcher {
   public:
     enum WeightType { Depth, QueryCost, InstCount, CPInstCount, MinDistToUncovered, CoveringNew }; 
@@ -152,6 +155,9 @@ namespace klee {
       }
     }
   }; 
+WeightedRandomSearcher::~WeightedRandomSearcher() { delete states; } 
+ExecutionState &WeightedRandomSearcher::selectState() { return *states->choose(theRNG.getDoubleL()); } 
+bool WeightedRandomSearcher::empty() { return states->empty(); } 
   class RandomPathSearcher : public Searcher {
     Executor &executor; 
   public:
@@ -162,6 +168,10 @@ namespace klee {
     bool empty();
     void printName(llvm::raw_ostream &os) { os << "RandomPathSearcher\n"; }
   };
+RandomPathSearcher::RandomPathSearcher(Executor &_executor) : executor(_executor) { } 
+RandomPathSearcher::~RandomPathSearcher() { }
+void RandomPathSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) { }
+bool RandomPathSearcher::empty() { return executor.states.empty(); } 
 
   class MergingSearcher : public Searcher {
     Executor &executor;
@@ -179,6 +189,9 @@ namespace klee {
     bool empty() { return baseSearcher->empty() && statesAtMerge.empty(); }
     void printName(llvm::raw_ostream &os) { os << "MergingSearcher\n"; }
   };
+MergingSearcher::MergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+  : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { } 
+MergingSearcher::~MergingSearcher() { delete baseSearcher; }
 
   class BumpMergingSearcher : public Searcher {
     Executor &executor;
@@ -196,6 +209,12 @@ namespace klee {
     bool empty() { return baseSearcher->empty() && statesAtMerge.empty(); }
     void printName(llvm::raw_ostream &os) { os << "BumpMergingSearcher\n"; }
   };
+BumpMergingSearcher::BumpMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+  : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { }
+BumpMergingSearcher::~BumpMergingSearcher() { delete baseSearcher; }
+void BumpMergingSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  baseSearcher->update(current, addedStates, removedStates);
+}
 
   class BatchingSearcher : public Searcher {
     Searcher *baseSearcher;
@@ -217,6 +236,9 @@ namespace klee {
       os << "</BatchingSearcher>\n";
     }
   };
+BatchingSearcher::BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget) 
+  : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0) { } 
+BatchingSearcher::~BatchingSearcher() { delete baseSearcher; }
 
   class IterativeDeepeningTimeSearcher : public Searcher {
     Searcher *baseSearcher;
@@ -232,6 +254,9 @@ namespace klee {
       os << "IterativeDeepeningTimeSearcher\n";
     }
   };
+IterativeDeepeningTimeSearcher::IterativeDeepeningTimeSearcher(Searcher *_baseSearcher)
+  : baseSearcher(_baseSearcher), time(1.) { } 
+IterativeDeepeningTimeSearcher::~IterativeDeepeningTimeSearcher() { delete baseSearcher; }
 
   class InterleavedSearcher : public Searcher {
     typedef std::vector<Searcher*> searchers_ty; 
@@ -251,37 +276,6 @@ namespace klee {
     }
   };
 
-}
-ExecutionState &DFSSearcher::selectState() { return *states.back(); }
-ExecutionState &BFSSearcher::selectState() { return *states.front(); } 
-ExecutionState &RandomSearcher::selectState() { return *states[theRNG.getInt32()%states.size()]; } 
-WeightedRandomSearcher::~WeightedRandomSearcher() { delete states; } 
-ExecutionState &WeightedRandomSearcher::selectState() { return *states->choose(theRNG.getDoubleL()); } 
-bool WeightedRandomSearcher::empty() { return states->empty(); } 
-RandomPathSearcher::RandomPathSearcher(Executor &_executor) : executor(_executor) { } 
-RandomPathSearcher::~RandomPathSearcher() { }
-void RandomPathSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) { }
-bool RandomPathSearcher::empty() { return executor.states.empty(); } 
-BumpMergingSearcher::BumpMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
-  : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { }
-BumpMergingSearcher::~BumpMergingSearcher() {
-  delete baseSearcher;
-}
-void BumpMergingSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  baseSearcher->update(current, addedStates, removedStates);
-}
-MergingSearcher::MergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
-  : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { } 
-MergingSearcher::~MergingSearcher() {
-  delete baseSearcher;
-}
-BatchingSearcher::BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget) 
-  : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0) { } 
-BatchingSearcher::~BatchingSearcher() { delete baseSearcher; }
-IterativeDeepeningTimeSearcher::IterativeDeepeningTimeSearcher(Searcher *_baseSearcher)
-  : baseSearcher(_baseSearcher), time(1.) { } 
-IterativeDeepeningTimeSearcher::~IterativeDeepeningTimeSearcher() {
-  delete baseSearcher;
 }
 InterleavedSearcher::InterleavedSearcher(const std::vector<Searcher*> &_searchers)
   : searchers(_searchers), index(1) { } 
