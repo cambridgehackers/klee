@@ -572,8 +572,8 @@ ExecutionState &IterativeDeepeningTimeSearcher::selectState() {
 
 void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
   double elapsed = util::getWallTime() - startTime; 
+  std::set<ExecutionState *> alt = removedStates;
   if (!removedStates.empty()) {
-    std::set<ExecutionState *> alt = removedStates;
     for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
       ExecutionState *es = *it;
       auto it2 = pausedStates.find(es);
@@ -582,10 +582,8 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
         alt.erase(alt.find(es));
       }
     }    
-    baseSearcher->update(current, addedStates, alt);
-  } else {
-    baseSearcher->update(current, addedStates, removedStates);
   } 
+  baseSearcher->update(current, addedStates, alt);
   if (current && !removedStates.count(current) && elapsed>time) {
     pausedStates.insert(current);
     baseSearcher->removeState(current);
