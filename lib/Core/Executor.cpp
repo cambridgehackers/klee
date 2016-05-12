@@ -1293,12 +1293,9 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
           }
           bindLocal(kcaller, state, result);
         }
-      } else {
-        // We check that the return value has no users instead of // checking the type, since C defaults to returning int for // undeclared functions.
-        if (!caller->use_empty()) {
-          terminateStateOnExecError(state, "return void when caller expected a result");
-        }
-      }
+      } else if (!caller->use_empty())
+        terminateStateOnExecError(state, "return void when caller expected a result");
+        // check that return value has no users instead of checking the type, since C defaults to returning int for undeclared fns
     }
     break;
   }
