@@ -1164,7 +1164,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
 
 void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src, ExecutionState &state) {
   // Note that in general phi nodes can reuse phi values from the same
-  // block but the incoming value is the eval() result *before* the
+  // block but the incoming value is the result *before* the
   // execution of any phi nodes. this is pathological and doesn't
   // really seem to occur, but just in case we run the PhiCleanerPass
   // which makes sure this cannot happen and so it is safe to just
@@ -1234,14 +1234,14 @@ void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> 
   state.stack.back().locals[target->dest].value = value;
 }
 
-const Cell& Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const {
+const ref<Expr> Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const {
   assert(index < ki->inst->getNumOperands());
   int vnumber = ki->operands[index];
   assert(vnumber != -1 && "Invalid operand to eval(), not a value or constant!");
   // Determine if this is a constant or not.
   if (vnumber < 0)
-      return kmodule->constantTable[-vnumber - 2];
-  return state.stack.back().locals[vnumber];
+      return kmodule->constantTable[-vnumber - 2].value;
+  return state.stack.back().locals[vnumber].value;
 }
 
 void Executor::executeInstruction(ExecutionState &state)
@@ -1260,7 +1260,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
     if (!isVoidReturn)
-      result = eval(ki, 0, state).value;
+      result = eval(ki, 0, state);
     if (state.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
       terminateStateOnExit(state);
@@ -1307,7 +1307,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     } else {
       // FIXME: Find a way that we don't have this hidden dependency.
       assert(bi->getCondition() == bi->getOperand(0) && "Wrong operand index!");
-      ref<Expr> cond = eval(ki, 0, state).value;
+      ref<Expr> cond = eval(ki, 0, state);
       Executor::StatePair branches = stateFork(state, cond, false);
 
       // NOTE: There is a hidden dependency here, markBranchVisited requires that we still be in the context of the branch
@@ -1323,7 +1323,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
   case Instruction::Switch: {
     SwitchInst *si = cast<SwitchInst>(i);
-    ref<Expr> cond = eval(ki, 0, state).value;
+    ref<Expr> cond = eval(ki, 0, state);
     BasicBlock *bb = si->getParent();
     cond = toUnique(state, cond);
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(cond)) {
@@ -1392,7 +1392,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     std::vector< ref<Expr> > arguments;
     arguments.reserve(numArgs);
     for (unsigned j=0; j<numArgs; ++j)
-      arguments.push_back(eval(ki, j+1, state).value);
+      arguments.push_back(eval(ki, j+1, state));
     if (f) {
       const FunctionType *fType = dyn_cast<FunctionType>(cast<PointerType>(f->getType())->getElementType());
       const FunctionType *fpType = dyn_cast<FunctionType>(cast<PointerType>(fp->getType())->getElementType());
@@ -1419,7 +1419,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       }
       executeCall(state, ki, f, arguments);
     } else {
-      ref<Expr> v = eval(ki, 0, state).value;
+      ref<Expr> v = eval(ki, 0, state);
       ExecutionState *free = &state;
       bool hasInvalid = false, first = true;
       /* XXX This is wasteful, no need to do a full evaluate since we
@@ -1451,16 +1451,16 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     break;
   }
   case Instruction::PHI: {
-    ref<Expr> result = eval(ki, state.incomingBBIndex, state).value;
+    ref<Expr> result = eval(ki, state.incomingBBIndex, state);
     bindLocal(ki, state, result);
     break;
   }
 
     // Special instructions
   case Instruction::Select: {
-    ref<Expr> cond = eval(ki, 0, state).value;
-    ref<Expr> tExpr = eval(ki, 1, state).value;
-    ref<Expr> fExpr = eval(ki, 2, state).value;
+    ref<Expr> cond = eval(ki, 0, state);
+    ref<Expr> tExpr = eval(ki, 1, state);
+    ref<Expr> fExpr = eval(ki, 2, state);
     ref<Expr> result = SelectExpr::create(cond, tExpr, fExpr);
     bindLocal(ki, state, result);
     break;
@@ -1476,8 +1476,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   case Instruction::URem: case Instruction::SRem:
   case Instruction::And: case Instruction::Or: case Instruction::Xor:
   case Instruction::Shl: case Instruction::LShr: case Instruction::AShr: {
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
+    ref<Expr> left = eval(ki, 0, state);
+    ref<Expr> right = eval(ki, 1, state);
     ref<Expr> result;
     switch (opcode) {
     case Instruction::Add:
@@ -1527,8 +1527,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     // Compare
   case Instruction::ICmp: {
     ICmpInst *ii = cast<ICmpInst>(i);
-    ref<Expr> left = eval(ki, 0, state).value;
-    ref<Expr> right = eval(ki, 1, state).value;
+    ref<Expr> left = eval(ki, 0, state);
+    ref<Expr> right = eval(ki, 1, state);
     ref<Expr> result;
     switch(ii->getPredicate()) {
     case ICmpInst::ICMP_EQ:
@@ -1574,7 +1574,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     unsigned elementSize = kmodule->targetData->getTypeStoreSize(ai->getAllocatedType());
     ref<Expr> size = Expr::createPointer(elementSize);
     if (ai->isArrayAllocation()) {
-      ref<Expr> count = eval(ki, 0, state).value;
+      ref<Expr> count = eval(ki, 0, state);
       count = Expr::createZExtToPointerWidth(count);
       size = MulExpr::create(size, count);
     }
@@ -1583,23 +1583,23 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
   case Instruction::Load: {
-    ref<Expr> base = eval(ki, 0, state).value;
+    ref<Expr> base = eval(ki, 0, state);
     executeMemoryOperation(state, false, base, 0, ki);
     break;
   }
   case Instruction::Store: {
-    ref<Expr> base = eval(ki, 1, state).value;
-    ref<Expr> value = eval(ki, 0, state).value;
+    ref<Expr> base = eval(ki, 1, state);
+    ref<Expr> value = eval(ki, 0, state);
     executeMemoryOperation(state, true, base, value, 0);
     break;
   }
 
   case Instruction::GetElementPtr: {
     KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(ki);
-    ref<Expr> base = eval(ki, 0, state).value;
+    ref<Expr> base = eval(ki, 0, state);
     for (auto it = kgepi->indices.begin(), ie = kgepi->indices.end(); it != ie; ++it){
       uint64_t elementSize = it->second;
-      ref<Expr> index = eval(ki, it->first, state).value;
+      ref<Expr> index = eval(ki, it->first, state);
       base = AddExpr::create(base, MulExpr::create(Expr::createSExtToPointerWidth(index), Expr::createPointer(elementSize)));
     }
     if (kgepi->offset)
@@ -1612,7 +1612,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   case Instruction::Trunc: case Instruction::ZExt: case Instruction::SExt:
   case Instruction::IntToPtr: case Instruction::PtrToInt: {
     Expr::Width iType = getWidthForLLVMType(i->getType());
-    ref<Expr> arg = eval(ki, 0, state).value;
+    ref<Expr> arg = eval(ki, 0, state);
     ref<Expr> result;
     switch (opcode) {
     case Instruction::Trunc:
@@ -1636,7 +1636,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 
   case Instruction::BitCast: {
-    ref<Expr> result = eval(ki, 0, state).value;
+    ref<Expr> result = eval(ki, 0, state);
     bindLocal(ki, state, result);
     break;
   }
@@ -1644,8 +1644,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     // Floating point instructions
   case Instruction::FAdd: case Instruction::FSub:
   case Instruction::FMul: case Instruction::FDiv: case Instruction::FRem: {
-    ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state).value, "floating point");
-    ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
+    ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state), "floating point");
+    ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state), "floating point");
     if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FRem operation");
     llvm::APFloat Res(*fpWidthToSemantics(left->getWidth()), left->getAPValue());
@@ -1673,7 +1673,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   case Instruction::FPTrunc: {
     Expr::Width resultType = getWidthForLLVMType(i->getType());
-    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
+    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state), "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > arg->getWidth())
       return terminateStateOnExecError(state, "Unsupported FPTrunc operation");
     llvm::APFloat Res(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
@@ -1685,7 +1685,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   case Instruction::FPExt: {
     Expr::Width resultType = getWidthForLLVMType(i->getType());
-    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
+    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state), "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || arg->getWidth() > resultType)
       return terminateStateOnExecError(state, "Unsupported FPExt operation");
     llvm::APFloat Res(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
@@ -1697,7 +1697,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   case Instruction::FPToUI: {
     Expr::Width resultType = getWidthForLLVMType(i->getType());
-    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
+    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state), "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > 64)
       return terminateStateOnExecError(state, "Unsupported FPToUI operation");
     llvm::APFloat Arg(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
@@ -1710,7 +1710,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   case Instruction::FPToSI: {
     Expr::Width resultType = getWidthForLLVMType(i->getType());
-    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
+    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state), "floating point");
     if (!fpWidthToSemantics(arg->getWidth()) || resultType > 64)
       return terminateStateOnExecError(state, "Unsupported FPToSI operation");
     llvm::APFloat Arg(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
@@ -1723,7 +1723,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   case Instruction::UIToFP: {
     Expr::Width resultType = getWidthForLLVMType(i->getType());
-    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
+    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state), "floating point");
     const llvm::fltSemantics *semantics = fpWidthToSemantics(resultType);
     if (!semantics)
       return terminateStateOnExecError(state, "Unsupported UIToFP operation");
@@ -1735,7 +1735,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   case Instruction::SIToFP: {
     Expr::Width resultType = getWidthForLLVMType(i->getType());
-    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state).value, "floating point");
+    ref<ConstantExpr> arg = toConstant(state, eval(ki, 0, state), "floating point");
     const llvm::fltSemantics *semantics = fpWidthToSemantics(resultType);
     if (!semantics)
       return terminateStateOnExecError(state, "Unsupported SIToFP operation");
@@ -1747,8 +1747,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
   case Instruction::FCmp: {
     FCmpInst *fi = cast<FCmpInst>(i);
-    ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state).value, "floating point");
-    ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
+    ref<ConstantExpr> left = toConstant(state, eval(ki, 0, state), "floating point");
+    ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state), "floating point");
     if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FCmp operation");
     APFloat LHS(*fpWidthToSemantics(left->getWidth()),left->getAPValue());
@@ -1825,8 +1825,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
   case Instruction::InsertValue: {
     KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(ki);
-    ref<Expr> agg = eval(ki, 0, state).value;
-    ref<Expr> val = eval(ki, 1, state).value;
+    ref<Expr> agg = eval(ki, 0, state);
+    ref<Expr> val = eval(ki, 1, state);
     ref<Expr> l = NULL, r = NULL;
     unsigned lOffset = kgepi->offset*8, rOffset = kgepi->offset*8 + val->getWidth();
     if (lOffset > 0)
@@ -1847,7 +1847,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
   case Instruction::ExtractValue: {
     KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(ki);
-    ref<Expr> agg = eval(ki, 0, state).value;
+    ref<Expr> agg = eval(ki, 0, state);
     ref<Expr> result = ExtractExpr::create(agg, kgepi->offset*8, getWidthForLLVMType(i->getType()));
     bindLocal(ki, state, result);
     break;

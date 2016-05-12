@@ -138,7 +138,7 @@ private:
   /// as one of the results. Note that the output vector may included
   /// NULL pointers for states which were unable to be created.
   void branch(ExecutionState &state, const std::vector< ref<Expr> > &conditions, std::vector<ExecutionState*> &result); 
-  const Cell& eval(KInstruction *ki, unsigned index, ExecutionState &state) const; 
+  const ref<Expr> eval(KInstruction *ki, unsigned index, ExecutionState &state) const; 
   void getArgumentCell(ExecutionState &state, KFunction *kf, unsigned aSize, std::vector<ref<Expr>> &arguments) {
     for (unsigned i = 0; i < aSize; i++)
         state.stack.back().locals[kf->getArgRegister(i)].value = arguments[i];
