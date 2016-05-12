@@ -124,7 +124,7 @@ private:
   llvm::Function* getTargetFunction(llvm::Value *calledVal, ExecutionState &state); 
   void executeInstruction(ExecutionState &state); 
   void printFileLine(ExecutionState &state, KInstruction *ki); 
-  void run(ExecutionState &initialState); 
+  void runExecutor(ExecutionState &initialState); 
   // Given a concrete object in our [klee's] address space, add it to // objects checked code can reference.
   MemoryObject *addExternalObject(ExecutionState &state, void *addr, unsigned size, bool isReadOnly); 
   void initializeGlobalObject(ExecutionState &state, ObjectState *os, const llvm::Constant *c, unsigned offset);

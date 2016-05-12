@@ -1930,7 +1930,7 @@ static Searcher *getNewSearcher(Searcher::CoreSearchType type, Executor &executo
   return searcher;
 }
 
-void Executor::run(ExecutionState &initialState) {
+void Executor::runExecutor(ExecutionState &initialState) {
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
@@ -1959,14 +1959,12 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
     CoreSearch.push_back(Searcher::RandomPath);
     CoreSearch.push_back(Searcher::NURS_CovNew);
   }
-  Searcher *searcher = getNewSearcher(CoreSearch[0], *this);
-  if (CoreSearch.size() > 1) {
-    std::vector<Searcher *> s;
-    s.push_back(searcher);
-    for (unsigned i=1; i<CoreSearch.size(); i++)
+  std::vector<Searcher *> s;
+  for (unsigned i=0; i < CoreSearch.size(); i++)
       s.push_back(getNewSearcher(CoreSearch[i], *this));
+  Searcher *searcher = s[0];
+  if (CoreSearch.size() > 1)
     searcher = new InterleavedSearcher(s);
-  }
   searcher->update(0, states, std::set<ExecutionState*>());
   while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
@@ -2508,7 +2506,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
 printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
   std::set<std::string> undefinedSymbols;
   GetAllUndefinedSymbols(kf->function->getParent(), undefinedSymbols);
-  run(*state);
+  runExecutor(*state);
 printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   delete processTree;
   processTree = 0;
