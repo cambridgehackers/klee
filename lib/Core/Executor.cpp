@@ -1913,23 +1913,6 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
   kgepi->offset = constantOffset->getZExtValue();
 }
 
-static Searcher *getNewSearcher(Searcher::CoreSearchType type, Executor &executor) {
-  Searcher *searcher = NULL;
-  switch (type) {
-  case Searcher::DFS: searcher = new DFSSearcher(); break;
-  case Searcher::BFS: searcher = new BFSSearcher(); break;
-  case Searcher::RandomState: searcher = new RandomSearcher(); break;
-  case Searcher::RandomPath: searcher = new RandomPathSearcher(executor); break;
-  case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew); break;
-  case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered); break;
-  case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth); break;
-  case Searcher::NURS_ICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::InstCount); break;
-  case Searcher::NURS_CPICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CPInstCount); break;
-  case Searcher::NURS_QC: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost); break;
-  }
-  return searcher;
-}
-
 void Executor::runExecutor(ExecutionState &initialState) {
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
@@ -1960,8 +1943,22 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
     CoreSearch.push_back(Searcher::NURS_CovNew);
   }
   std::vector<Searcher *> s;
-  for (unsigned i=0; i < CoreSearch.size(); i++)
-      s.push_back(getNewSearcher(CoreSearch[i], *this));
+  for (unsigned i=0; i < CoreSearch.size(); i++) {
+      Searcher *searcher = NULL;
+      switch (CoreSearch[i]) {
+      case Searcher::DFS: searcher = new DFSSearcher(); break;
+      case Searcher::BFS: searcher = new BFSSearcher(); break;
+      case Searcher::RandomState: searcher = new RandomSearcher(); break;
+      case Searcher::RandomPath: searcher = new RandomPathSearcher(*this); break;
+      case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew); break;
+      case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered); break;
+      case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth); break;
+      case Searcher::NURS_ICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::InstCount); break;
+      case Searcher::NURS_CPICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CPInstCount); break;
+      case Searcher::NURS_QC: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost); break;
+      }
+      s.push_back(searcher);
+  }
   Searcher *searcher = s[0];
   if (CoreSearch.size() > 1)
     searcher = new InterleavedSearcher(s);
