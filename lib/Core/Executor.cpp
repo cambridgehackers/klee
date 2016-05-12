@@ -171,16 +171,14 @@ namespace klee {
   private:
     llvm::Instruction *getMergePoint(ExecutionState &es);
   public:
-    MergingSearcher(Executor &executor, Searcher *baseSearcher);
-    ~MergingSearcher(); 
+    MergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+      : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { } 
+    ~MergingSearcher() { delete baseSearcher; }
     ExecutionState &selectState();
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
     bool empty() { return baseSearcher->empty() && statesAtMerge.empty(); }
     void printName(llvm::raw_ostream &os) { os << "MergingSearcher\n"; }
   };
-MergingSearcher::MergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
-  : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { } 
-MergingSearcher::~MergingSearcher() { delete baseSearcher; }
 
   class BumpMergingSearcher : public Searcher {
     Executor &executor;
