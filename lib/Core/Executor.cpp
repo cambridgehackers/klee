@@ -68,9 +68,6 @@ using namespace klee;
 static RNG theRNG;
 
 namespace klee {
-  template<class T> class DiscretePDF;
-  class ExecutionState;
-  class Executor; 
   class Searcher {
   public:
     virtual ~Searcher() {}
@@ -187,7 +184,6 @@ namespace klee {
     llvm::Function *mergeFunction; 
   private:
     llvm::Instruction *getMergePoint(ExecutionState &es);
-
   public:
     BumpMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
       : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { }
@@ -209,7 +205,7 @@ namespace klee {
     unsigned lastStartInstructions; 
   public:
     BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget) 
-      : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0) { } 
+      : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0){}
     ~BatchingSearcher() { delete baseSearcher; }
     ExecutionState &selectState();
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
@@ -259,8 +255,8 @@ namespace klee {
       os << "</InterleavedSearcher>\n";
     }
   };
-
 }
+
 namespace {
   cl::list<Searcher::CoreSearchType>
   CoreSearch("search", cl::desc("Specify the search heuristic (default=random-path interleaved with nurs:covnew)"),
