@@ -616,7 +616,8 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
     statsTracker(0),
     pathWriter(0),
     symPathWriter(0),
-    specialFunctionHandler(0) {
+    specialFunctionHandler(0),
+    constantTable(0) {
 printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
@@ -667,6 +668,8 @@ Executor::~Executor() {
     delete statsTracker;
   delete tsolver;
   delete kmodule;
+  if (constantTable)
+      delete[] constantTable;
 }
 
 /***/
@@ -1240,7 +1243,7 @@ const ref<Expr> Executor::eval(KInstruction *ki, unsigned index, ExecutionState 
   assert(vnumber != -1 && "Invalid operand to eval(), not a value or constant!");
   // Determine if this is a constant or not.
   if (vnumber < 0)
-      return kmodule->constantTable[-vnumber - 2].value;
+      return constantTable[-vnumber - 2].value;
   return state.stack.back().locals[vnumber].value;
 }
 
@@ -1283,11 +1286,10 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
           if (from != to) {
             CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller)));
             // XXX need to check other param attrs ?
-            if (cs.paramHasAttr(0, llvm::Attribute::SExt)) {
+            if (cs.paramHasAttr(0, llvm::Attribute::SExt))
               result = SExtExpr::create(result, to);
-            } else {
+            else
               result = ZExtExpr::create(result, to);
-            }
           }
           bindLocal(kcaller, state, result);
         }
@@ -1905,9 +1907,9 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
         }
     }
   }
-  kmodule->constantTable = new Cell[kmodule->constants.size()];
+  constantTable = new Cell[kmodule->constants.size()];
   for (unsigned i=0; i<kmodule->constants.size(); ++i)
-      kmodule->constantTable[i].value = evalConstant(kmodule->constants[i]);
+      constantTable[i].value = evalConstant(kmodule->constants[i]);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(&initialState);
   if (CoreSearch.size() == 0) {

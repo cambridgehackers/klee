@@ -108,12 +108,10 @@ KModule::KModule(Module *_module)
   : module(_module),
     targetData(new DataLayout(module)),
     kleeMergeFn(0),
-    infos(0),
-    constantTable(0) {
+    infos(0) {
 }
 
 KModule::~KModule() {
-  delete[] constantTable;
   delete infos;
 
   for (std::vector<KFunction*>::iterator it = functions.begin(), 
