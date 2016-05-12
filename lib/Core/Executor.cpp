@@ -191,19 +191,16 @@ MergingSearcher::~MergingSearcher() { delete baseSearcher; }
     llvm::Instruction *getMergePoint(ExecutionState &es);
 
   public:
-    BumpMergingSearcher(Executor &executor, Searcher *baseSearcher);
-    ~BumpMergingSearcher(); 
+    BumpMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+      : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { }
+    ~BumpMergingSearcher() { delete baseSearcher; }
     ExecutionState &selectState();
-    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+    void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+      baseSearcher->update(current, addedStates, removedStates);
+    }
     bool empty() { return baseSearcher->empty() && statesAtMerge.empty(); }
     void printName(llvm::raw_ostream &os) { os << "BumpMergingSearcher\n"; }
   };
-BumpMergingSearcher::BumpMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
-  : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { }
-BumpMergingSearcher::~BumpMergingSearcher() { delete baseSearcher; }
-void BumpMergingSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  baseSearcher->update(current, addedStates, removedStates);
-}
 
   class BatchingSearcher : public Searcher {
     Searcher *baseSearcher;
@@ -213,8 +210,9 @@ void BumpMergingSearcher::update(ExecutionState *current, const std::set<Executi
     double lastStartTime;
     unsigned lastStartInstructions; 
   public:
-    BatchingSearcher(Searcher *baseSearcher, double _timeBudget, unsigned _instructionBudget);
-    ~BatchingSearcher(); 
+    BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget) 
+      : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0) { } 
+    ~BatchingSearcher() { delete baseSearcher; }
     ExecutionState &selectState();
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
     bool empty() { return baseSearcher->empty(); }
@@ -225,17 +223,15 @@ void BumpMergingSearcher::update(ExecutionState *current, const std::set<Executi
       os << "</BatchingSearcher>\n";
     }
   };
-BatchingSearcher::BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget) 
-  : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0) { } 
-BatchingSearcher::~BatchingSearcher() { delete baseSearcher; }
 
   class IterativeDeepeningTimeSearcher : public Searcher {
     Searcher *baseSearcher;
     double time, startTime;
     std::set<ExecutionState*> pausedStates; 
   public:
-    IterativeDeepeningTimeSearcher(Searcher *baseSearcher);
-    ~IterativeDeepeningTimeSearcher(); 
+    IterativeDeepeningTimeSearcher(Searcher *_baseSearcher)
+      : baseSearcher(_baseSearcher), time(1.) { } 
+    ~IterativeDeepeningTimeSearcher() { delete baseSearcher; }
     ExecutionState &selectState();
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
     bool empty() { return baseSearcher->empty() && pausedStates.empty(); }
@@ -243,17 +239,18 @@ BatchingSearcher::~BatchingSearcher() { delete baseSearcher; }
       os << "IterativeDeepeningTimeSearcher\n";
     }
   };
-IterativeDeepeningTimeSearcher::IterativeDeepeningTimeSearcher(Searcher *_baseSearcher)
-  : baseSearcher(_baseSearcher), time(1.) { } 
-IterativeDeepeningTimeSearcher::~IterativeDeepeningTimeSearcher() { delete baseSearcher; }
 
   class InterleavedSearcher : public Searcher {
     typedef std::vector<Searcher*> searchers_ty; 
     searchers_ty searchers;
     unsigned index; 
   public:
-    explicit InterleavedSearcher(const searchers_ty &_searchers);
-    ~InterleavedSearcher(); 
+    explicit InterleavedSearcher(const std::vector<Searcher*> &_searchers)
+      : searchers(_searchers), index(1) { } 
+    ~InterleavedSearcher() {
+      for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
+        delete *it;
+    }
     ExecutionState &selectState();
     void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
     bool empty() { return searchers[0]->empty(); }
@@ -265,12 +262,6 @@ IterativeDeepeningTimeSearcher::~IterativeDeepeningTimeSearcher() { delete baseS
     }
   };
 
-}
-InterleavedSearcher::InterleavedSearcher(const std::vector<Searcher*> &_searchers)
-  : searchers(_searchers), index(1) { } 
-InterleavedSearcher::~InterleavedSearcher() {
-  for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
-    delete *it;
 }
 namespace {
   cl::list<Searcher::CoreSearchType>
