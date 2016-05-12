@@ -123,7 +123,6 @@ private:
 
   llvm::Function* getTargetFunction(llvm::Value *calledVal, ExecutionState &state); 
   void executeInstruction(ExecutionState &state); 
-  void printFileLine(ExecutionState &state, KInstruction *ki); 
   void runExecutor(ExecutionState &initialState); 
   // Given a concrete object in our [klee's] address space, add it to // objects checked code can reference.
   MemoryObject *addExternalObject(ExecutionState &state, void *addr, unsigned size, bool isReadOnly); 
@@ -163,8 +162,7 @@ public: //friends
   /// for pointers to invalid locations (either out of bounds or
   /// address inside the middle of objects).  ///
   /// \param results[out] A list of ((MemoryObject,ObjectState),
-  /// state) pairs for each object the given address can point to the
-  /// beginning of.
+  /// state) pairs for each object the given address can point to the /// beginning of.
   typedef std::vector< std::pair<std::pair<const MemoryObject*, const ObjectState*>, ExecutionState*> > ExactResolutionList;
   void resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name); 
   /// Allocate and bind a new object in a particular state. NOTE: This /// function may fork.  ///

@@ -982,21 +982,6 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
   llvm::report_fatal_error("invalid argument to evalConstant()");
 }
 
-const Cell& Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const {
-  assert(index < ki->inst->getNumOperands());
-  int vnumber = ki->operands[index];
-  assert(vnumber != -1 && "Invalid operand to eval(), not a value or constant!");
-  // Determine if this is a constant or not.
-  if (vnumber < 0)
-      return kmodule->constantTable[-vnumber - 2];
-  StackFrame &sf = state.stack.back();
-  return sf.locals[vnumber];
-}
-
-void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> value) {
-  state.stack.back().locals[target->dest].value = value;
-}
-
 ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
   ref<Expr> result = e;
   if (!isa<ConstantExpr>(e)) {
@@ -1200,14 +1185,6 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src, ExecutionS
   }
 }
 
-void Executor::printFileLine(ExecutionState &state, KInstruction *ki) {
-  const InstructionInfo &ii = *ki->info;
-  if (ii.file != "")
-    llvm::errs() << "     " << ii.file << ":" << ii.line << ":";
-  else
-    llvm::errs() << "     [no debug info]:";
-}
-
 /// Compute the true target of a function call, resolving LLVM and KLEE aliases
 /// and bitcasts.
 Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
@@ -1240,13 +1217,31 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 }
 
 void Executor::stepInstruction(ExecutionState &state) {
-    printFileLine(state, state.pc);
+    const InstructionInfo &ii = *state.pc->info;
+    if (ii.file != "")
+      llvm::errs() << "     " << ii.file << ":" << ii.line << ":";
+    else
+      llvm::errs() << "     [no debug info]:";
     llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
   if (statsTracker)
     statsTracker->stepInstruction(state);
   ++stats::instructions;
   state.prevPC = state.pc;
   ++state.pc;
+}
+
+void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> value) {
+  state.stack.back().locals[target->dest].value = value;
+}
+
+const Cell& Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const {
+  assert(index < ki->inst->getNumOperands());
+  int vnumber = ki->operands[index];
+  assert(vnumber != -1 && "Invalid operand to eval(), not a value or constant!");
+  // Determine if this is a constant or not.
+  if (vnumber < 0)
+      return kmodule->constantTable[-vnumber - 2];
+  return state.stack.back().locals[vnumber];
 }
 
 void Executor::executeInstruction(ExecutionState &state)
@@ -1413,12 +1408,10 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
             to = getWidthForLLVMType(fType->getParamType(i));
             if (from != to) {
               // XXX need to check other param attrs ?
-              bool isSExt = cs.paramHasAttr(i+1, llvm::Attribute::SExt);
-              if (isSExt) {
+              if (cs.paramHasAttr(i+1, llvm::Attribute::SExt))
                 arguments[i] = SExtExpr::create(arguments[i], to);
-              } else {
+              else
                 arguments[i] = ZExtExpr::create(arguments[i], to);
-              }
             }
           }
           i++;
@@ -1430,8 +1423,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       ExecutionState *free = &state;
       bool hasInvalid = false, first = true;
       /* XXX This is wasteful, no need to do a full evaluate since we
-         have already got a value. But in the end the caches should
-         handle it for us, albeit with some overhead. */
+         have already got a value. But in the end the caches should handle it for us, albeit with some overhead. */
       do {
         ref<ConstantExpr> value;
         bool success = tsolver->solveGetValue(*free, v, value);
@@ -1534,7 +1526,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
     // Compare
   case Instruction::ICmp: {
-    //CmpInst *ci = cast<CmpInst>(i);
     ICmpInst *ii = cast<ICmpInst>(i);
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
@@ -1900,9 +1891,8 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
 void Executor::runExecutor(ExecutionState &initialState) {
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
-    KFunction *kf = *it;
-    for (unsigned i=0; i<kf->numInstructions; ++i) {
-        KInstruction *KI = kf->instructions[i];
+    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
+        KInstruction *KI = (*it)->instructions[i];
         KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
         if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
             computeOffsets(kgepi, gep_type_begin(gepi), gep_type_end(gepi));
@@ -1916,10 +1906,8 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
     }
   }
   kmodule->constantTable = new Cell[kmodule->constants.size()];
-  for (unsigned i=0; i<kmodule->constants.size(); ++i) {
-    Cell &c = kmodule->constantTable[i];
-    c.value = evalConstant(kmodule->constants[i]);
-  }
+  for (unsigned i=0; i<kmodule->constants.size(); ++i)
+      kmodule->constantTable[i].value = evalConstant(kmodule->constants[i]);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(&initialState);
   if (CoreSearch.size() == 0) {
