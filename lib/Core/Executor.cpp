@@ -69,14 +69,14 @@ static RNG theRNG;
 class Searcher {
 public:
   virtual ~Searcher() {}
-  virtual ExecutionState &selectState() = 0; 
-  virtual void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) = 0; 
-  virtual bool empty() = 0; 
+  virtual ExecutionState &selectState() = 0;
+  virtual void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) = 0;
+  virtual bool empty() = 0;
   void addState(ExecutionState *es, ExecutionState *current = 0) {
     std::set<ExecutionState*> tmp;
     tmp.insert(es);
     update(current, tmp, std::set<ExecutionState*>());
-  } 
+  }
   void removeState(ExecutionState *es, ExecutionState *current = 0) {
     std::set<ExecutionState*> tmp;
     tmp.insert(es);
@@ -84,7 +84,7 @@ public:
   }
   enum CoreSearchType { DFS, BFS, RandomState, RandomPath, NURS_CovNew, NURS_MD2U,
     NURS_Depth, NURS_ICnt, NURS_CPICnt, NURS_QC };
-}; 
+};
 
 namespace {
   cl::list<Searcher::CoreSearchType>
@@ -110,13 +110,13 @@ class PTreeNode {
 public:
     PTreeNode *parent, *left, *right;
     ExecutionState *data;
-    ref<Expr> condition; 
+    ref<Expr> condition;
 private:
-    PTreeNode(PTreeNode *_parent, ExecutionState *_data) 
-      : parent(_parent), left(0), right(0), data(_data), condition(0) { } 
+    PTreeNode(PTreeNode *_parent, ExecutionState *_data)
+      : parent(_parent), left(0), right(0), data(_data), condition(0) { }
     ~PTreeNode() { }
 };
-class PTree { 
+class PTree {
     typedef ExecutionState* data_type;
 public:
     PTreeNode *root;
@@ -144,65 +144,65 @@ public:
         n = p;
       } while (n && !n->left && !n->right);
     }
-}; 
+};
 }
-PTree::PTree(const data_type &_root) : root(new PTreeNode(0,_root)) { } 
+PTree::PTree(const data_type &_root) : root(new PTreeNode(0,_root)) { }
 
 class DFSSearcher : public Searcher {
-  std::vector<ExecutionState*> states; 
+  std::vector<ExecutionState*> states;
 public:
   ExecutionState &selectState() { return *states.back(); }
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
   bool empty() { return states.empty(); }
-}; 
+};
 class BFSSearcher : public Searcher {
-  std::deque<ExecutionState*> states; 
+  std::deque<ExecutionState*> states;
 public:
-  ExecutionState &selectState() { return *states.front(); } 
+  ExecutionState &selectState() { return *states.front(); }
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
   bool empty() { return states.empty(); }
 };
 class RandomSearcher : public Searcher {
-  std::vector<ExecutionState*> states; 
+  std::vector<ExecutionState*> states;
 public:
-  ExecutionState &selectState() { return *states[theRNG.getInt32()%states.size()]; } 
+  ExecutionState &selectState() { return *states[theRNG.getInt32()%states.size()]; }
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
   bool empty() { return states.empty(); }
 };
 class WeightedRandomSearcher : public Searcher {
 public:
-  enum WeightType { Depth, QueryCost, InstCount, CPInstCount, MinDistToUncovered, CoveringNew }; 
+  enum WeightType { Depth, QueryCost, InstCount, CPInstCount, MinDistToUncovered, CoveringNew };
 private:
   DiscretePDF<ExecutionState*> *states;
   WeightType type;
-  bool updateWeights; 
-  double getWeight(ExecutionState*); 
+  bool updateWeights;
+  double getWeight(ExecutionState*);
 public:
   WeightedRandomSearcher(WeightType type);
-  ~WeightedRandomSearcher() { delete states; } 
-  ExecutionState &selectState() { return *states->choose(theRNG.getDoubleL()); } 
+  ~WeightedRandomSearcher() { delete states; }
+  ExecutionState &selectState() { return *states->choose(theRNG.getDoubleL()); }
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
-  bool empty() { return states->empty(); } 
-}; 
+  bool empty() { return states->empty(); }
+};
 class RandomPathSearcher : public Searcher {
-  Executor &executor; 
+  Executor &executor;
 public:
-  RandomPathSearcher(Executor &_executor) : executor(_executor) { } 
+  RandomPathSearcher(Executor &_executor) : executor(_executor) { }
   ~RandomPathSearcher() { }
   ExecutionState &selectState();
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) { }
-  bool empty() { return executor.states.empty(); } 
+  bool empty() { return executor.states.empty(); }
 };
 
 class MergingSearcher : public Searcher {
   Executor &executor;
   std::set<ExecutionState*> statesAtMerge;
   Searcher *baseSearcher;
-  llvm::Function *mergeFunction; 
+  llvm::Function *mergeFunction;
   llvm::Instruction *getMergePoint(ExecutionState &es);
 public:
-  MergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
-    : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { } 
+  MergingSearcher(Executor &_executor, Searcher *_baseSearcher)
+    : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { }
   ~MergingSearcher() { delete baseSearcher; }
   ExecutionState &selectState();
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
@@ -213,10 +213,10 @@ class BumpMergingSearcher : public Searcher {
   Executor &executor;
   std::map<llvm::Instruction*, ExecutionState*> statesAtMerge;
   Searcher *baseSearcher;
-  llvm::Function *mergeFunction; 
+  llvm::Function *mergeFunction;
   llvm::Instruction *getMergePoint(ExecutionState &es);
 public:
-  BumpMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+  BumpMergingSearcher(Executor &_executor, Searcher *_baseSearcher)
     : executor(_executor), baseSearcher(_baseSearcher), mergeFunction(executor.kmodule->kleeMergeFn) { }
   ~BumpMergingSearcher() { delete baseSearcher; }
   ExecutionState &selectState();
@@ -229,12 +229,12 @@ public:
 class BatchingSearcher : public Searcher {
   Searcher *baseSearcher;
   double timeBudget;
-  unsigned instructionBudget; 
+  unsigned instructionBudget;
   ExecutionState *lastState;
   double lastStartTime;
-  unsigned lastStartInstructions; 
+  unsigned lastStartInstructions;
 public:
-  BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget) 
+  BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget)
     : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0){}
   ~BatchingSearcher() { delete baseSearcher; }
   ExecutionState &selectState();
@@ -245,10 +245,10 @@ public:
 class IterativeDeepeningTimeSearcher : public Searcher {
   Searcher *baseSearcher;
   double time, startTime;
-  std::set<ExecutionState*> pausedStates; 
+  std::set<ExecutionState*> pausedStates;
 public:
   IterativeDeepeningTimeSearcher(Searcher *_baseSearcher)
-    : baseSearcher(_baseSearcher), time(1.) { } 
+    : baseSearcher(_baseSearcher), time(1.) { }
   ~IterativeDeepeningTimeSearcher() { delete baseSearcher; }
   ExecutionState &selectState();
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
@@ -256,12 +256,12 @@ public:
 };
 
 class InterleavedSearcher : public Searcher {
-  typedef std::vector<Searcher*> searchers_ty; 
+  typedef std::vector<Searcher*> searchers_ty;
   searchers_ty searchers;
-  unsigned index; 
+  unsigned index;
 public:
   explicit InterleavedSearcher(const std::vector<Searcher*> &_searchers)
-    : searchers(_searchers), index(1) { } 
+    : searchers(_searchers), index(1) { }
   ~InterleavedSearcher() {
     for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
       delete *it;
@@ -278,14 +278,14 @@ void DFSSearcher::update(ExecutionState *current, const std::set<ExecutionState*
     if (es == states.back()) {
       states.pop_back();
     } else {
-      bool ok = false; 
+      bool ok = false;
       for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
         if (es==*it) {
           states.erase(it);
           ok = true;
           break;
         }
-      } 
+      }
       assert(ok && "invalid state removed");
     }
   }
@@ -298,14 +298,14 @@ void BFSSearcher::update(ExecutionState *current, const std::set<ExecutionState*
     if (es == states.front()) {
       states.pop_front();
     } else {
-      bool ok = false; 
+      bool ok = false;
       for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
         if (es==*it) {
           states.erase(it);
           ok = true;
           break;
         }
-      } 
+      }
       assert(ok && "invalid state removed");
     }
   }
@@ -315,21 +315,21 @@ void RandomSearcher::update(ExecutionState *current, const std::set<ExecutionSta
   states.insert(states.end(), addedStates.begin(), addedStates.end());
   for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
     ExecutionState *es = *it;
-    bool ok = false; 
+    bool ok = false;
     for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
       if (es==*it) {
         states.erase(it);
         ok = true;
         break;
       }
-    } 
+    }
     assert(ok && "invalid state removed");
   }
 }
 
 WeightedRandomSearcher::WeightedRandomSearcher(WeightType _type) : states(new DiscretePDF<ExecutionState*>()), type(_type) {
   switch(type) {
-  case Depth: 
+  case Depth:
     updateWeights = false;
     break;
   case InstCount: case CPInstCount: case QueryCost: case MinDistToUncovered: case CoveringNew:
@@ -343,7 +343,7 @@ WeightedRandomSearcher::WeightedRandomSearcher(WeightType _type) : states(new Di
 double WeightedRandomSearcher::getWeight(ExecutionState *es) {
   switch(type) {
   default:
-  case Depth: 
+  case Depth:
     return es->weight;
   case InstCount: {
     uint64_t count = theStatisticManager->getIndexedValue(stats::instructions, es->pc->info->id);
@@ -356,7 +356,7 @@ double WeightedRandomSearcher::getWeight(ExecutionState *es) {
     return (es->queryCost < .1) ? 1. : 1./es->queryCost;
   case CoveringNew:
   case MinDistToUncovered: {
-    uint64_t md2u = computeMinDistToUncovered(es->pc, es->stack.back().minDistToUncoveredOnReturn); 
+    uint64_t md2u = computeMinDistToUncovered(es->pc, es->stack.back().minDistToUncoveredOnReturn);
     double invMD2U = 1. / (md2u ? md2u : 10000);
     if (type==CoveringNew) {
       double invCovNew = 0.;
@@ -371,18 +371,18 @@ double WeightedRandomSearcher::getWeight(ExecutionState *es) {
 
 void WeightedRandomSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
   if (current && updateWeights && !removedStates.count(current))
-    states->update(current, getWeight(current)); 
+    states->update(current, getWeight(current));
   for (auto it = addedStates.begin(), ie = addedStates.end(); it != ie; ++it) {
     ExecutionState *es = *it;
     states->insert(es, getWeight(es));
-  } 
+  }
   for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it)
     states->remove(*it);
 }
 
 ExecutionState &RandomPathSearcher::selectState() {
   unsigned flips=0, bits=0;
-  PTreeNode *n = executor.processTree->root; 
+  PTreeNode *n = executor.processTree->root;
   while (!n->data) {
     if (!n->left) {
       n = n->right;
@@ -400,15 +400,15 @@ ExecutionState &RandomPathSearcher::selectState() {
   return *n->data;
 }
 
-Instruction *BumpMergingSearcher::getMergePoint(ExecutionState &es) {  
+Instruction *BumpMergingSearcher::getMergePoint(ExecutionState &es) {
   if (mergeFunction) {
-    Instruction *i = es.pc->inst; 
+    Instruction *i = es.pc->inst;
     if (i->getOpcode()==Instruction::Call) {
       CallSite cs(cast<CallInst>(i));
       if (mergeFunction==cs.getCalledFunction())
         return i;
     }
-  } 
+  }
   return 0;
 }
 
@@ -416,17 +416,17 @@ ExecutionState &BumpMergingSearcher::selectState() {
 entry:
   // out of base states, pick one to pop
   if (baseSearcher->empty()) {
-    std::map<llvm::Instruction*, ExecutionState*>::iterator it = 
+    std::map<llvm::Instruction*, ExecutionState*>::iterator it =
       statesAtMerge.begin();
     ExecutionState *es = it->second;
     statesAtMerge.erase(it);
-    ++es->pc; 
+    ++es->pc;
     baseSearcher->addState(es);
-  } 
-  ExecutionState &es = baseSearcher->selectState(); 
+  }
+  ExecutionState &es = baseSearcher->selectState();
   if (Instruction *mp = getMergePoint(es)) {
-    std::map<llvm::Instruction*, ExecutionState*>::iterator it = statesAtMerge.find(mp); 
-    baseSearcher->removeState(&es); 
+    std::map<llvm::Instruction*, ExecutionState*>::iterator it = statesAtMerge.find(mp);
+    baseSearcher->removeState(&es);
     if (it==statesAtMerge.end()) {
       statesAtMerge.insert(std::make_pair(mp, &es));
     } else {
@@ -437,10 +437,10 @@ entry:
         executor.terminateState(es);
       } else {
         it->second = &es; // the bump
-        ++mergeWith->pc; 
+        ++mergeWith->pc;
         baseSearcher->addState(mergeWith);
       }
-    } 
+    }
     goto entry;
   } else {
     return es;
@@ -449,13 +449,13 @@ entry:
 
 Instruction *MergingSearcher::getMergePoint(ExecutionState &es) {
   if (mergeFunction) {
-    Instruction *i = es.pc->inst; 
+    Instruction *i = es.pc->inst;
     if (i->getOpcode()==Instruction::Call) {
       CallSite cs(cast<CallInst>(i));
       if (mergeFunction==cs.getCalledFunction())
         return i;
     }
-  } 
+  }
   return 0;
 }
 
@@ -468,14 +468,14 @@ ExecutionState &MergingSearcher::selectState() {
     } else {
       return es;
     }
-  } 
+  }
   // build map of merge point -> state list
   std::map<Instruction*, std::vector<ExecutionState*> > merges;
   for (auto it = statesAtMerge.begin(), ie = statesAtMerge.end(); it != ie; ++it) {
     ExecutionState &state = **it;
-    Instruction *mp = getMergePoint(state); 
+    Instruction *mp = getMergePoint(state);
     merges[mp].push_back(&state);
-  } 
+  }
   if (DebugLogMerge)
     llvm::errs() << "-- all at merge --\n";
   for (auto it = merges.begin(), ie = merges.end(); it != ie; ++it) {
@@ -486,15 +486,15 @@ ExecutionState &MergingSearcher::selectState() {
         llvm::errs() << state << ", ";
       }
       llvm::errs() << "]\n";
-    } 
+    }
     // merge states
     std::set<ExecutionState*> toMerge(it->second.begin(), it->second.end());
     while (!toMerge.empty()) {
       ExecutionState *base = *toMerge.begin();
-      toMerge.erase(toMerge.begin()); 
+      toMerge.erase(toMerge.begin());
       std::set<ExecutionState*> toErase;
       for (auto it = toMerge.begin(), ie = toMerge.end(); it != ie; ++it) {
-        ExecutionState *mergeWith = *it; 
+        ExecutionState *mergeWith = *it;
         if (base->merge(*mergeWith)) {
           toErase.insert(mergeWith);
         }
@@ -512,15 +512,15 @@ ExecutionState &MergingSearcher::selectState() {
         assert(it2!=toMerge.end());
         executor.terminateState(**it);
         toMerge.erase(it2);
-      } 
+      }
       // step past merge and toss base back in pool
       statesAtMerge.erase(statesAtMerge.find(base));
       ++base->pc;
       baseSearcher->addState(base);
-    }  
-  } 
+    }
+  }
   if (DebugLogMerge)
-    llvm::errs() << "-- merge complete, continuing --\n"; 
+    llvm::errs() << "-- merge complete, continuing --\n";
   return selectState();
 }
 
@@ -534,7 +534,7 @@ void MergingSearcher::update(ExecutionState *current, const std::set<ExecutionSt
         statesAtMerge.erase(it2);
         alt.erase(alt.find(es));
       }
-    }    
+    }
     baseSearcher->update(current, addedStates, alt);
   } else {
     baseSearcher->update(current, addedStates, removedStates);
@@ -571,7 +571,7 @@ ExecutionState &IterativeDeepeningTimeSearcher::selectState() {
 }
 
 void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  double elapsed = util::getWallTime() - startTime; 
+  double elapsed = util::getWallTime() - startTime;
   std::set<ExecutionState *> alt = removedStates;
   if (!removedStates.empty()) {
     for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
@@ -581,13 +581,13 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
         pausedStates.erase(it);
         alt.erase(alt.find(es));
       }
-    }    
-  } 
+    }
+  }
   baseSearcher->update(current, addedStates, alt);
   if (current && !removedStates.count(current) && elapsed>time) {
     pausedStates.insert(current);
     baseSearcher->removeState(current);
-  } 
+  }
   if (baseSearcher->empty()) {
     time *= 2;
     llvm::errs() << "KLEE: increasing time budget to: " << time << "\n";
@@ -722,7 +722,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
   // object. given that we use malloc to allocate memory in states this also
   // ensures that we won't conflict. we don't need to allocate a memory object
   // since reading/writing via a function pointer is unsupported anyway.
-  for (Module::iterator i = m->begin(), ie = m->end(); i != ie; ++i) {
+  for (auto i = m->begin(), ie = m->end(); i != ie; ++i) {
     ref<ConstantExpr> addr(0);
     addr = Expr::createPointer((unsigned long) (void*) i);
     legalFunctions.insert((uint64_t) (unsigned long) (void*) i);
@@ -732,7 +732,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
   // allocate and initialize globals, done in two passes since we may
   // need address of a global in order to initialize some other one.
   // allocate memory objects for all globals
-  for (Module::const_global_iterator i = m->global_begin(), e = m->global_end(); i != e; ++i) {
+  for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
     uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
     bool isDecl = i->isDeclaration();
@@ -768,7 +768,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
         os->initializeToRandom();
   }
   // once all objects are allocated, do the actual initialization
-  for (Module::const_global_iterator i = m->global_begin(), e = m->global_end(); i != e; ++i) {
+  for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     if (i->hasInitializer()) {
       MemoryObject *mo = globalObjects.find(i)->second;
       const ObjectState *os = state.addressSpace.findObject(mo);
@@ -804,7 +804,7 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
     seedMap.erase(it);
     // Assume each seed only satisfies one condition (necessarily true
     // when conditions are mutually exclusive and their conjunction is // a tautology).
-    for (std::vector<SeedInfo>::iterator siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
+    for (auto siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
       unsigned i;
       for (i=0; i<N; ++i) {
         ref<ConstantExpr> res;
@@ -860,7 +860,7 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
       it->second.clear();
       std::vector<SeedInfo> &trueSeeds = seedMap[trueState];
       std::vector<SeedInfo> &falseSeeds = seedMap[falseState];
-      for (std::vector<SeedInfo>::iterator siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
+      for (auto siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
         ref<ConstantExpr> res;
         bool success = tsolver->solveGetValue(current, siit->assignment.evaluate(condition), res);
         assert(success && "FIXME: Unhandled solver failure");
@@ -917,7 +917,7 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
   if (it != seedMap.end()) {
     bool warn = false;
-    for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
+    for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       bool res;
       bool success = tsolver->mustBeFalse(state, siit->assignment.evaluate(condition), res);
       assert(success && "FIXME: Unhandled solver failure");
@@ -934,18 +934,18 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
 
 ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
   if (const llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c))
-    return evalConstantExpr(ce);
+      return evalConstantExpr(ce);
   else if (const ConstantInt *ci = dyn_cast<ConstantInt>(c))
       return ConstantExpr::alloc(ci->getValue());
-    else if (const ConstantFP *cf = dyn_cast<ConstantFP>(c))
+  else if (const ConstantFP *cf = dyn_cast<ConstantFP>(c))
       return ConstantExpr::alloc(cf->getValueAPF().bitcastToAPInt());
-    else if (const GlobalValue *gv = dyn_cast<GlobalValue>(c))
+  else if (const GlobalValue *gv = dyn_cast<GlobalValue>(c))
       return globalAddresses.find(gv)->second;
-    else if (isa<ConstantPointerNull>(c))
+  else if (isa<ConstantPointerNull>(c))
       return Expr::createPointer(0);
-    else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c))
+  else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c))
       return ConstantExpr::create(0, getWidthForLLVMType(c->getType()));
-    else if (const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c)) {
+  else if (const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c)) {
       std::vector<ref<Expr> > kids;
       for (unsigned i = 0, e = cds->getNumElements(); i != e; ++i) {
         ref<Expr> kid = evalConstant(cds->getElementAsConstant(i));
@@ -953,7 +953,7 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       }
       ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
       return cast<ConstantExpr>(res);
-    } else if (const ConstantStruct *cs = dyn_cast<ConstantStruct>(c)) {
+  } else if (const ConstantStruct *cs = dyn_cast<ConstantStruct>(c)) {
       const StructLayout *sl = kmodule->targetData->getStructLayout(cs->getType());
       llvm::SmallVector<ref<Expr>, 4> kids;
       for (unsigned i = cs->getNumOperands(); i != 0; --i) {
@@ -969,7 +969,7 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       }
       ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
       return cast<ConstantExpr>(res);
-    } else if (const ConstantArray *ca = dyn_cast<ConstantArray>(c)){
+  } else if (const ConstantArray *ca = dyn_cast<ConstantArray>(c)){
       llvm::SmallVector<ref<Expr>, 4> kids;
       for (unsigned i = ca->getNumOperands(); i != 0; --i) {
         unsigned op = i-1;
@@ -978,9 +978,8 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       }
       ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
       return cast<ConstantExpr>(res);
-    } else { // Constant{Vector}
-      llvm::report_fatal_error("invalid argument to evalConstant()");
-    }
+  }
+  llvm::report_fatal_error("invalid argument to evalConstant()");
 }
 
 const Cell& Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const {
@@ -1004,7 +1003,8 @@ ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
     ref<ConstantExpr> value;
     bool isTrue = false;
     osolver->setCoreSolverTimeout(0);
-    if (tsolver->solveGetValue(state, e, value) && tsolver->mustBeTrue(state, EqExpr::create(e, value), isTrue) && isTrue)
+    if (tsolver->solveGetValue(state, e, value)
+     && tsolver->mustBeTrue(state, EqExpr::create(e, value), isTrue) && isTrue)
       result = value;
     osolver->setCoreSolverTimeout(0);
   }
@@ -1040,19 +1040,19 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     bindLocal(target, state, value);
   } else {
     std::set< ref<Expr> > values;
-    for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
+    for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
       bool success = tsolver->solveGetValue(state, siit->assignment.evaluate(e), value);
       assert(success && "FIXME: Unhandled solver failure");
       values.insert(value);
     }
     std::vector< ref<Expr> > conditions;
-    for (std::set< ref<Expr> >::iterator vit = values.begin(), vie = values.end(); vit != vie; ++vit)
+    for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit)
       conditions.push_back(EqExpr::create(e, *vit));
     std::vector<ExecutionState*> branches;
     branch(state, conditions, branches);
     std::vector<ExecutionState*>::iterator bit = branches.begin();
-    for (std::set< ref<Expr> >::iterator vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
+    for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
       ExecutionState *es = *bit;
       if (es)
         bindLocal(target, *es, *vit);
@@ -1085,11 +1085,11 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
         // make a function believe that all varargs are on stack.
         executeMemoryOperation(state, true, arguments[0], ConstantExpr::create(48, 32), 0); // gp_offset
         executeMemoryOperation(state, true, AddExpr::create(arguments[0], ConstantExpr::create(4, 64)),
-                               ConstantExpr::create(304, 32), 0); // fp_offset
+              ConstantExpr::create(304, 32), 0); // fp_offset
         executeMemoryOperation(state, true, AddExpr::create(arguments[0], ConstantExpr::create(8, 64)),
-                               sf.varargs->getBaseExpr(), 0); // overflow_arg_area
+              sf.varargs->getBaseExpr(), 0); // overflow_arg_area
         executeMemoryOperation(state, true, AddExpr::create(arguments[0], ConstantExpr::create(16, 64)),
-                               ConstantExpr::create(0, 64), 0); // reg_save_area
+              ConstantExpr::create(0, 64), 0); // reg_save_area
       }
       break;
     }
@@ -1165,9 +1165,8 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
         } else {
           assert(WordSize == Expr::Int64 && "Unknown word size!");
           Expr::Width argWidth = arguments[i]->getWidth();
-          if (argWidth > Expr::Int64) {
+          if (argWidth > Expr::Int64)
              offset = llvm::RoundUpToAlignment(offset, 16);
-          }
           os->write(offset, arguments[i]);
           offset += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
         }
@@ -1362,12 +1361,12 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       if (res)
         targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
       std::vector<ref<Expr> > conditions;
-      for (std::map<BasicBlock *, ref<Expr> >::iterator it = targets.begin(), ie = targets.end(); it != ie; ++it)
+      for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it)
         conditions.push_back(it->second);
       std::vector<ExecutionState *> branches;
       branch(state, conditions, branches);
       std::vector<ExecutionState *>::iterator bit = branches.begin();
-      for (std::map<BasicBlock *, ref<Expr> >::iterator it = targets.begin(), ie = targets.end(); it != ie; ++it) {
+      for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
         ExecutionState *es = *bit;
         if (es)
           transferToBasicBlock(it->first, bb, *es);
@@ -1408,7 +1407,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         // XXX check result coercion
         // XXX this really needs thought and validation
         unsigned i=0;
-        for (std::vector< ref<Expr> >::iterator ai = arguments.begin(), ie = arguments.end(); ai != ie; ++ai) {
+        for (auto ai = arguments.begin(), ie = arguments.end(); ai != ie; ++ai) {
           Expr::Width to, from = (*ai)->getWidth();
           if (i<fType->getNumParams()) {
             to = getWidthForLLVMType(fType->getParamType(i));
@@ -1607,7 +1606,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   case Instruction::GetElementPtr: {
     KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(ki);
     ref<Expr> base = eval(ki, 0, state).value;
-    for (std::vector<std::pair<unsigned, uint64_t>>::iterator it = kgepi->indices.begin(), ie = kgepi->indices.end(); it != ie; ++it){
+    for (auto it = kgepi->indices.begin(), ie = kgepi->indices.end(); it != ie; ++it){
       uint64_t elementSize = it->second;
       ref<Expr> index = eval(ki, it->first, state).value;
       base = AddExpr::create(base, MulExpr::create(Expr::createSExtToPointerWidth(index), Expr::createPointer(elementSize)));
@@ -1761,22 +1760,18 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     ref<ConstantExpr> right = toConstant(state, eval(ki, 1, state).value, "floating point");
     if (!fpWidthToSemantics(left->getWidth()) || !fpWidthToSemantics(right->getWidth()))
       return terminateStateOnExecError(state, "Unsupported FCmp operation");
-
     APFloat LHS(*fpWidthToSemantics(left->getWidth()),left->getAPValue());
     APFloat RHS(*fpWidthToSemantics(right->getWidth()),right->getAPValue());
     APFloat::cmpResult CmpRes = LHS.compare(RHS);
-
     bool Result = false;
     switch( fi->getPredicate() ) {
       // Predicates which only care about whether or not the operands are NaNs.
     case FCmpInst::FCMP_ORD:
       Result = CmpRes != APFloat::cmpUnordered;
       break;
-
     case FCmpInst::FCMP_UNO:
       Result = CmpRes == APFloat::cmpUnordered;
       break;
-
       // Ordered comparisons return false if either operand is NaN.  Unordered
       // comparisons return true if either operand is NaN.
     case FCmpInst::FCMP_UEQ:
@@ -1787,7 +1782,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     case FCmpInst::FCMP_OEQ:
       Result = CmpRes == APFloat::cmpEqual;
       break;
-
     case FCmpInst::FCMP_UGT:
       if (CmpRes == APFloat::cmpUnordered) {
         Result = true;
@@ -1796,7 +1790,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     case FCmpInst::FCMP_OGT:
       Result = CmpRes == APFloat::cmpGreaterThan;
       break;
-
     case FCmpInst::FCMP_UGE:
       if (CmpRes == APFloat::cmpUnordered) {
         Result = true;
@@ -1805,7 +1798,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     case FCmpInst::FCMP_OGE:
       Result = CmpRes == APFloat::cmpGreaterThan || CmpRes == APFloat::cmpEqual;
       break;
-
     case FCmpInst::FCMP_ULT:
       if (CmpRes == APFloat::cmpUnordered) {
         Result = true;
@@ -1814,7 +1806,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     case FCmpInst::FCMP_OLT:
       Result = CmpRes == APFloat::cmpLessThan;
       break;
-
     case FCmpInst::FCMP_ULE:
       if (CmpRes == APFloat::cmpUnordered) {
         Result = true;
@@ -1823,14 +1814,12 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     case FCmpInst::FCMP_OLE:
       Result = CmpRes == APFloat::cmpLessThan || CmpRes == APFloat::cmpEqual;
       break;
-
     case FCmpInst::FCMP_UNE:
       Result = CmpRes == APFloat::cmpUnordered || CmpRes != APFloat::cmpEqual;
       break;
     case FCmpInst::FCMP_ONE:
       Result = CmpRes != APFloat::cmpUnordered && CmpRes != APFloat::cmpEqual;
       break;
-
     default:
       assert(0 && "Invalid FCMP predicate!");
     case FCmpInst::FCMP_FALSE:
@@ -1849,12 +1838,10 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     ref<Expr> val = eval(ki, 1, state).value;
     ref<Expr> l = NULL, r = NULL;
     unsigned lOffset = kgepi->offset*8, rOffset = kgepi->offset*8 + val->getWidth();
-
     if (lOffset > 0)
       l = ExtractExpr::create(agg, 0, lOffset);
     if (rOffset < agg->getWidth())
       r = ExtractExpr::create(agg, rOffset, agg->getWidth() - rOffset);
-
     ref<Expr> result;
     if (!l.isNull() && !r.isNull())
       result = ConcatExpr::create(r, ConcatExpr::create(val, l));
@@ -1902,9 +1889,8 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
         ref<ConstantExpr> index = evalConstant(c)->SExt(Context::get().getPointerWidth());
         ref<ConstantExpr> addend = index->Mul(ConstantExpr::alloc(elementSize, Context::get().getPointerWidth()));
         constantOffset = constantOffset->Add(addend);
-      } else {
+      } else
         kgepi->indices.push_back(std::make_pair(index, elementSize));
-      }
     }
     index++;
   }
@@ -1967,7 +1953,7 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
     searcher->update(&state, addedStates, removedStates);
     states.insert(addedStates.begin(), addedStates.end());
     addedStates.clear();
-    for (std::set<ExecutionState*>::iterator it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
       ExecutionState *es = *it;
       std::set<ExecutionState*>::iterator it2 = states.find(es);
       assert(it2!=states.end());
@@ -2003,9 +1989,9 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
   MemoryObject hack((unsigned) example);
   MemoryMap::iterator lower = state.addressSpace.objects.upper_bound(&hack);
   info << "\tnext: ";
-  if (lower==state.addressSpace.objects.end()) {
+  if (lower==state.addressSpace.objects.end())
     info << "none\n";
-  } else {
+  else {
     const MemoryObject *mo = lower->first;
     std::string alloc_info;
     mo->getAllocInfo(alloc_info);
@@ -2014,16 +2000,15 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
   if (lower!=state.addressSpace.objects.begin()) {
     --lower;
     info << "\tprev: ";
-    if (lower==state.addressSpace.objects.end()) {
+    if (lower==state.addressSpace.objects.end())
       info << "none\n";
-    } else {
+    else {
       const MemoryObject *mo = lower->first;
       std::string alloc_info;
       mo->getAllocInfo(alloc_info);
       info << "object at " << mo->address << " of size " << mo->size << "\n" << "\t\t" << alloc_info << "\n";
     }
   }
-
   return info.str();
 }
 
@@ -2065,11 +2050,8 @@ const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const Execut
   if (kmodule->internalFunctions.count(it->kf->function) == 0){
     ii =  state.prevPC->info;
     *lastInstruction = state.prevPC->inst;
-    //  Cannot return yet because even though
-    //  it->function is not an internal function it might of
-    //  been called from an internal function.
+    // Cannot return yet because even though it->function is not an internal function it might of been called from an internal function
   }
-
   // Wind up the stack and check if we are in a KLEE internal function.
   // We visit the entire stack because we want to return a CallInstruction
   // that was not reached via any KLEE internal functions.
@@ -2128,7 +2110,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
   uint64_t *args = (uint64_t*) alloca(2*sizeof(*args) * (arguments.size() + 1));
   memset(args, 0, 2 * sizeof(*args) * (arguments.size() + 1));
   unsigned wordIndex = 2;
-  for (std::vector<ref<Expr> >::iterator ai = arguments.begin(), ae = arguments.end(); ai!=ae; ++ai) {
+  for (auto ai = arguments.begin(), ae = arguments.end(); ai!=ae; ++ai) {
       ref<Expr> arg = toUnique(state, *ai);
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(arg)) {
         // XXX kick toMemory functions from here
@@ -2139,9 +2121,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
         return;
       }
   }
-
   state.addressSpace.copyOutConcretes();
-
 printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
   std::string TmpStr;
   llvm::raw_string_ostream messageOs(TmpStr);
@@ -2248,8 +2228,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
           std::string Str;
           llvm::raw_string_ostream info(Str);
           ExprPPrinter::printOne(info, "  size expr", size);
-          info << "  concretization : " << example << "\n";
-          info << "  unbound example: " << tmp << "\n";
+          info << "  concretization : " << example << "\n" << "  unbound example: " << tmp << "\n";
           terminateStateOnError(*hugeSize.second, "concretized symbolic size", "model.err", info.str());
         }
       }
@@ -2268,7 +2247,7 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
   if (zeroPointer.second) { // address != 0
     ExactResolutionList rl;
     resolveExact(*zeroPointer.second, address, rl, "free");
-    for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end(); it != ie; ++it) {
+    for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
       const MemoryObject *mo = it->first.first;
       if (mo->isLocal) {
         terminateStateOnError(*it->second, "free of alloca", "free.err", getAddressInfo(*it->second, address));
@@ -2288,7 +2267,7 @@ void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionL
   ResolutionList rl;
   state.addressSpace.resolve(state, tsolver, p, rl);
   ExecutionState *unbound = &state;
-  for (ResolutionList::iterator it = rl.begin(), ie = rl.end(); it != ie; ++it) {
+  for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
     ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
     StatePair branches = stateFork(*unbound, inBounds, true);
     if (branches.first)
@@ -2329,9 +2308,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     if (inBounds) {
       const ObjectState *os = op.second;
       if (isWrite) {
-        if (os->readOnly) {
+        if (os->readOnly)
           terminateStateOnError(state, "memory error: object read only", "readonly.err");
-        } else {
+        else {
           ObjectState *wos = state.addressSpace.getWriteable(mo, os);
           wos->write(offset, value);
         }
@@ -2365,7 +2344,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   osolver->setCoreSolverTimeout(0);
   // XXX there is some query wasteage here. who cares?
   ExecutionState *unbound = &state;
-  for (ResolutionList::iterator i = rl.begin(), ie = rl.end(); i != ie; ++i) {
+  for (auto i = rl.begin(), ie = rl.end(); i != ie; ++i) {
     const MemoryObject *mo = i->first;
     const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
@@ -2374,9 +2353,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     // bound can be 0 on failure or overlapped
     if (bound) {
       if (isWrite) {
-        if (os->readOnly) {
+        if (os->readOnly)
           terminateStateOnError(*bound, "memory error: object read only", "readonly.err");
-        } else {
+        else {
           ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
           wos->write(mo->getOffsetExpr(address), value);
         }
@@ -2404,19 +2383,17 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
     // Find a unique name for this array.  First try the original name, // or if that fails try adding a unique identifier.
     unsigned id = 0;
     std::string uniqueName = name;
-    while (!state.arrayNames.insert(uniqueName).second) {
-      uniqueName = name + "_" + llvm::utostr(++id);
-    }
+    while (!state.arrayNames.insert(uniqueName).second)
+        uniqueName = name + "_" + llvm::utostr(++id);
     const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
     bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
 
     std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
     if (it!=seedMap.end()) { // In seed mode we need to add this as a // binding.
-      for (std::vector<SeedInfo>::iterator siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
+      for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
         SeedInfo &si = *siit;
         KTestObject *obj = si.getNextInput(mo, false);
-
         if (!obj) {
             terminateStateOnError(state, "ran out of inputs during seeding", "user.err");
             break;
@@ -2561,7 +2538,6 @@ void Executor::getConstraintLog(const ExecutionState &state, std::string &res, I
 bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std::pair<std::string, std::vector<unsigned char>>> &res){
   osolver->setCoreSolverTimeout(0);
   ExecutionState tmp(state);
-
   // Go through each byte in every test case and attempt to restrict
   // it to the constraints contained in cexPreferences.  (Note:
   // usually this means trying to make it an ASCII character (0-127)
@@ -2587,7 +2563,6 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
     }
     if (pi!=pie) break;
   }
-
   std::vector< std::vector<unsigned char> > values;
   std::vector<const Array*> objects;
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
@@ -2606,7 +2581,6 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
     ExprPPrinter::printQuery(llvm::errs(), state.constraints, ConstantExpr::alloc(0, Expr::Bool));
     return false;
   }
-
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     res.push_back(std::make_pair(state.symbolics[i].first->name, values[i]));
   return true;
