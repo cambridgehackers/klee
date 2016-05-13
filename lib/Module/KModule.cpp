@@ -53,9 +53,9 @@ KModule::KModule(Module *_module)
 
 KModule::~KModule() {
   delete infos; 
-  for (std::vector<KFunction*>::iterator it = functions.begin(), ie = functions.end(); it != ie; ++it)
+  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it)
     delete *it; 
-  for (std::map<llvm::Constant*, KConstant*>::iterator it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
+  for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
     delete it->second; 
   delete targetData;
   delete module;
@@ -72,7 +72,7 @@ void KModule::addInternalFunction(const char* functionName){
 }
 
 KConstant* KModule::getKConstant(Constant *c) {
-  std::map<llvm::Constant*, KConstant*>::iterator it = constantMap.find(c);
+  auto it = constantMap.find(c);
   if (it != constantMap.end())
     return it->second;
   return NULL;
@@ -117,7 +117,7 @@ KFunction::KFunction(llvm::Function *_function, KModule *km)
     numArgs(function->arg_size()),
     numInstructions(0),
     trackCoverage(true) {
-  for (llvm::Function::iterator bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit) {
+  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit) {
     BasicBlock *bb = bbit;
     basicBlockEntry[bb] = numInstructions;
     numInstructions += bb->size();
@@ -126,13 +126,13 @@ KFunction::KFunction(llvm::Function *_function, KModule *km)
   std::map<Instruction*, unsigned> registerMap; 
   // The first arg_size() registers are reserved for formals.
   unsigned rnum = numArgs;
-  for (llvm::Function::iterator bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
-    for (llvm::BasicBlock::iterator it = bbit->begin(), ie = bbit->end(); it != ie; ++it)
+  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
+    for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it)
       registerMap[it] = rnum++;
   numRegisters = rnum; 
   unsigned i = 0;
-  for (llvm::Function::iterator bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
-    for (llvm::BasicBlock::iterator it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
+  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
+    for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
       KInstruction *ki; 
       switch(it->getOpcode()) {
       case Instruction::GetElementPtr: case Instruction::InsertValue: case Instruction::ExtractValue:

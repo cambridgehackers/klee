@@ -6,25 +6,16 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
 #include "klee/ExecutionState.h"
-
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
-
 #include "klee/Expr.h"
-
 #include "Memory.h"
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
 #include "llvm/IR/Function.h"
-#else
-#include "llvm/Function.h"
-#endif
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
-
 #include <iomanip>
 #include <sstream>
 #include <cassert>
@@ -68,12 +59,10 @@ StackFrame::~StackFrame() {
 
 ExecutionState::ExecutionState(KFunction *kf) :
     pc(kf->instructions),
-    prevPC(pc),
-
+    prevPC(pc), 
     queryCost(0.), 
     weight(1),
-    depth(0),
-
+    depth(0), 
     instsSinceCovNew(0),
     coveredNew(false),
     ptreeNode(0) {
@@ -121,15 +110,12 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 }
 
 ExecutionState *ExecutionState::branch() {
-  depth++;
-
+  depth++; 
   ExecutionState *falseState = new ExecutionState(*this);
   falseState->coveredNew = false;
-  falseState->coveredLines.clear();
-
+  falseState->coveredLines.clear(); 
   weight *= .5;
-  falseState->weight -= weight;
-
+  falseState->weight -= weight; 
   return falseState;
 }
 
@@ -139,8 +125,7 @@ void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
 
 void ExecutionState::popFrame() {
   StackFrame &sf = stack.back();
-  for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(), 
-         ie = sf.allocas.end(); it != ie; ++it)
+  for (auto it = sf.allocas.begin(), ie = sf.allocas.end(); it != ie; ++it)
     addressSpace.unbindObject(*it);
   stack.pop_back();
 }
@@ -152,7 +137,7 @@ void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) {
 ///
 
 std::string ExecutionState::getFnAlias(std::string fn) {
-  std::map < std::string, std::string >::iterator it = fnAliases.find(fn);
+  auto it = fnAliases.find(fn);
   if (it != fnAliases.end())
     return it->second;
   else return "";
@@ -170,8 +155,8 @@ void ExecutionState::removeFnAlias(std::string fn) {
 
 llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) {
   os << "{";
-  MemoryMap::iterator it = mm.begin();
-  MemoryMap::iterator ie = mm.end();
+  auto it = mm.begin();
+  auto ie = mm.end();
   if (it!=ie) {
     os << "MO" << it->first->id << ":" << it->second;
     for (++it; it!=ie; ++it)
@@ -194,8 +179,8 @@ bool ExecutionState::merge(const ExecutionState &b) {
     return false;
 
   {
-    std::vector<StackFrame>::const_iterator itA = stack.begin();
-    std::vector<StackFrame>::const_iterator itB = b.stack.begin();
+    auto itA = stack.begin();
+    auto itB = b.stack.begin();
     while (itA!=stack.end() && itB!=b.stack.end()) {
       // XXX vaargs?
       if (itA->caller!=itB->caller || itA->kf!=itB->kf)
@@ -208,35 +193,25 @@ bool ExecutionState::merge(const ExecutionState &b) {
   }
 
   std::set< ref<Expr> > aConstraints(constraints.begin(), constraints.end());
-  std::set< ref<Expr> > bConstraints(b.constraints.begin(), 
-                                     b.constraints.end());
+  std::set< ref<Expr> > bConstraints(b.constraints.begin(), b.constraints.end());
   std::set< ref<Expr> > commonConstraints, aSuffix, bSuffix;
   std::set_intersection(aConstraints.begin(), aConstraints.end(),
-                        bConstraints.begin(), bConstraints.end(),
-                        std::inserter(commonConstraints, commonConstraints.begin()));
+                        bConstraints.begin(), bConstraints.end(), std::inserter(commonConstraints, commonConstraints.begin()));
   std::set_difference(aConstraints.begin(), aConstraints.end(),
-                      commonConstraints.begin(), commonConstraints.end(),
-                      std::inserter(aSuffix, aSuffix.end()));
+                      commonConstraints.begin(), commonConstraints.end(), std::inserter(aSuffix, aSuffix.end()));
   std::set_difference(bConstraints.begin(), bConstraints.end(),
-                      commonConstraints.begin(), commonConstraints.end(),
-                      std::inserter(bSuffix, bSuffix.end()));
+                      commonConstraints.begin(), commonConstraints.end(), std::inserter(bSuffix, bSuffix.end()));
   if (DebugLogStateMerge) {
     llvm::errs() << "\tconstraint prefix: [";
-    for (std::set<ref<Expr> >::iterator it = commonConstraints.begin(),
-                                        ie = commonConstraints.end();
-         it != ie; ++it)
+    for (auto it = commonConstraints.begin(), ie = commonConstraints.end(); it != ie; ++it)
       llvm::errs() << *it << ", ";
     llvm::errs() << "]\n";
     llvm::errs() << "\tA suffix: [";
-    for (std::set<ref<Expr> >::iterator it = aSuffix.begin(),
-                                        ie = aSuffix.end();
-         it != ie; ++it)
+    for (auto it = aSuffix.begin(), ie = aSuffix.end(); it != ie; ++it)
       llvm::errs() << *it << ", ";
     llvm::errs() << "]\n";
     llvm::errs() << "\tB suffix: [";
-    for (std::set<ref<Expr> >::iterator it = bSuffix.begin(),
-                                        ie = bSuffix.end();
-         it != ie; ++it)
+    for (auto it = bSuffix.begin(), ie = bSuffix.end(); it != ie; ++it)
       llvm::errs() << *it << ", ";
     llvm::errs() << "]\n";
   }
@@ -257,10 +232,10 @@ bool ExecutionState::merge(const ExecutionState &b) {
   }
     
   std::set<const MemoryObject*> mutated;
-  MemoryMap::iterator ai = addressSpace.objects.begin();
-  MemoryMap::iterator bi = b.addressSpace.objects.begin();
-  MemoryMap::iterator ae = addressSpace.objects.end();
-  MemoryMap::iterator be = b.addressSpace.objects.end();
+  auto ai = addressSpace.objects.begin();
+  auto bi = b.addressSpace.objects.begin();
+  auto ae = addressSpace.objects.end();
+  auto be = b.addressSpace.objects.end();
   for (; ai!=ae && bi!=be; ++ai, ++bi) {
     if (ai->first != bi->first) {
       if (DebugLogStateMerge) {
@@ -282,25 +257,20 @@ bool ExecutionState::merge(const ExecutionState &b) {
     if (DebugLogStateMerge)
       llvm::errs() << "\t\tmappings differ\n";
     return false;
-  }
-  
-  // merge stack
-
+  } 
+  // merge stack 
   ref<Expr> inA = ConstantExpr::alloc(1, Expr::Bool);
   ref<Expr> inB = ConstantExpr::alloc(1, Expr::Bool);
-  for (std::set< ref<Expr> >::iterator it = aSuffix.begin(), 
-         ie = aSuffix.end(); it != ie; ++it)
+  for (auto it = aSuffix.begin(), ie = aSuffix.end(); it != ie; ++it)
     inA = AndExpr::create(inA, *it);
-  for (std::set< ref<Expr> >::iterator it = bSuffix.begin(), 
-         ie = bSuffix.end(); it != ie; ++it)
+  for (auto it = bSuffix.begin(), ie = bSuffix.end(); it != ie; ++it)
     inB = AndExpr::create(inB, *it);
 
   // XXX should we have a preference as to which predicate to use?
   // it seems like it can make a difference, even though logically
-  // they must contradict each other and so inA => !inB
-
-  std::vector<StackFrame>::iterator itA = stack.begin();
-  std::vector<StackFrame>::const_iterator itB = b.stack.begin();
+  // they must contradict each other and so inA => !inB 
+  auto itA = stack.begin();
+  auto itB = b.stack.begin();
   for (; itA!=stack.end(); ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
@@ -316,15 +286,12 @@ bool ExecutionState::merge(const ExecutionState &b) {
     }
   }
 
-  for (std::set<const MemoryObject*>::iterator it = mutated.begin(), 
-         ie = mutated.end(); it != ie; ++it) {
+  for (auto it = mutated.begin(), ie = mutated.end(); it != ie; ++it) {
     const MemoryObject *mo = *it;
     const ObjectState *os = addressSpace.findObject(mo);
     const ObjectState *otherOS = b.addressSpace.findObject(mo);
-    assert(os && !os->readOnly && 
-           "objects mutated but not writable in merging state");
-    assert(otherOS);
-
+    assert(os && !os->readOnly && "objects mutated but not writable in merging state");
+    assert(otherOS); 
     ObjectState *wos = addressSpace.getWriteable(mo, os);
     for (unsigned i=0; i<mo->size; i++) {
       ref<Expr> av = wos->read8(i);
@@ -334,8 +301,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
   }
 
   constraints = ConstraintManager();
-  for (std::set< ref<Expr> >::iterator it = commonConstraints.begin(), 
-         ie = commonConstraints.end(); it != ie; ++it)
+  for (auto it = commonConstraints.begin(), ie = commonConstraints.end(); it != ie; ++it)
     constraints.addConstraint(*it);
   constraints.addConstraint(OrExpr::create(inA, inB));
 
@@ -345,9 +311,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
 void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
   unsigned idx = 0;
   const KInstruction *target = prevPC;
-  for (ExecutionState::stack_ty::const_reverse_iterator
-         it = stack.rbegin(), ie = stack.rend();
-       it != ie; ++it) {
+  for (auto it = stack.rbegin(), ie = stack.rend(); it != ie; ++it) {
     const StackFrame &sf = *it;
     Function *f = sf.kf->function;
     const InstructionInfo &ii = *target->info;
@@ -358,10 +322,8 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
     out << " in " << f->getName().str() << " (";
     // Yawn, we could go up and print varargs if we wanted to.
     unsigned index = 0;
-    for (Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
-         ai != ae; ++ai) {
-      if (ai!=f->arg_begin()) out << ", ";
-
+    for (auto ai = f->arg_begin(), ae = f->arg_end(); ai != ae; ++ai) {
+      if (ai!=f->arg_begin()) out << ", "; 
       out << ai->getName().str();
       // XXX should go through function
       ref<Expr> value = sf.locals[sf.kf->getArgRegister(index++)].value; 
