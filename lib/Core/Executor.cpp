@@ -445,7 +445,7 @@ entry:
       statesAtMerge.insert(std::make_pair(mp, &es));
     } else {
       ExecutionState *mergeWith = it->second;
-      if (mergeWith->merge(es)) {
+      if (mergeWith->mergeState(es)) {
         // hack, because we are terminating the state we need to let // the baseSearcher know about it again
         baseSearcher->addState(&es);
         executor.terminateState(es);
@@ -509,7 +509,7 @@ ExecutionState &MergingSearcher::selectState() {
       std::set<ExecutionState*> toErase;
       for (auto it = toMerge.begin(), ie = toMerge.end(); it != ie; ++it) {
         ExecutionState *mergeWith = *it;
-        if (base->merge(*mergeWith)) {
+        if (base->mergeState(*mergeWith)) {
           toErase.insert(mergeWith);
         }
       }
@@ -1444,7 +1444,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
       // NOTE: There is a hidden dependency here, markBranchVisited requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned up with convenient instruction specific data.
-      if (statsTracker && state.stack.back().kf->trackCoverage)
+      if (statsTracker)
         statsTracker->markBranchVisited(branches.first, branches.second);
       if (branches.first)
         transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);

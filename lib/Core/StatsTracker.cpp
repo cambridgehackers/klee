@@ -152,23 +152,17 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
   for (std::vector<KFunction*>::iterator it = km->functions.begin(), 
          ie = km->functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
-    kf->trackCoverage = 1;
-
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
-
       if (OutputIStats) {
         unsigned id = ki->info->id;
         theStatisticManager->setIndex(id);
-        if (kf->trackCoverage && instructionIsCoverable(ki->inst))
+        if (instructionIsCoverable(ki->inst))
           ++stats::uncoveredInstructions;
       }
-      
-      if (kf->trackCoverage) {
         if (BranchInst *bi = dyn_cast<BranchInst>(ki->inst))
           if (!bi->isUnconditional())
             numBranches++;
-      }
     }
   }
 
@@ -230,19 +224,13 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 
     Instruction *inst = es.pc->inst;
     const InstructionInfo &ii = *es.pc->info;
-    StackFrame &sf = es.stack.back();
     theStatisticManager->setIndex(ii.id);
-
     if (es.instsSinceCovNew)
       ++es.instsSinceCovNew;
-
-    if (sf.kf->trackCoverage && instructionIsCoverable(inst)) {
+    if (instructionIsCoverable(inst)) {
       if (!theStatisticManager->getIndexedValue(stats::coveredInstructions, ii.id)) {
-        // Checking for actual stoppoints avoids inconsistencies due
-        // to line number propogation.
-        //
-        // FIXME: This trick no longer works, we should fix this in the line
-        // number propogation.
+        // Checking for actual stoppoints avoids inconsistencies due // to line number propogation.  //
+        // FIXME: This trick no longer works, we should fix this in the line // number propogation.
           es.coveredLines[&ii.file].insert(ii.line);
 	es.coveredNew = true;
         es.instsSinceCovNew = 1;

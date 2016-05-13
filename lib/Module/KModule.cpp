@@ -115,8 +115,7 @@ static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap
 KFunction::KFunction(llvm::Function *_function, KModule *km) 
   : function(_function),
     numArgs(function->arg_size()),
-    numInstructions(0),
-    trackCoverage(true) {
+    numInstructions(0) {
   for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit) {
     BasicBlock *bb = bbit;
     basicBlockEntry[bb] = numInstructions;

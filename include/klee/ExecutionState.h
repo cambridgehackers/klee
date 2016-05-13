@@ -75,95 +75,66 @@ private:
 public:
   // Execution - Control Flow specific
 
-  /// @brief Pointer to instruction to be executed after the current
-  /// instruction
-  KInstIterator pc;
-
+  /// @brief Pointer to instruction to be executed after the current /// instruction
+  KInstIterator pc; 
   /// @brief Pointer to instruction which is currently executed
-  KInstIterator prevPC;
-
+  KInstIterator prevPC; 
   /// @brief Stack representing the current instruction stream
-  stack_ty stack;
-
-  /// @brief Remember from which Basic Block control flow arrived
-  /// (i.e. to select the right phi values)
-  unsigned incomingBBIndex;
-
+  stack_ty stack; 
+  /// @brief Remember from which Basic Block control flow arrived /// (i.e. to select the right phi values)
+  unsigned incomingBBIndex; 
   // Overall state of the state - Data specific
 
   /// @brief Address space used by this state (e.g. Global and Heap)
-  AddressSpace addressSpace;
-
+  AddressSpace addressSpace; 
   /// @brief Constraints collected so far
-  ConstraintManager constraints;
-
-  /// Statistics and information
-
+  ConstraintManager constraints; 
+  /// Statistics and information 
   /// @brief Costs for all queries issued for this state, in seconds
-  mutable double queryCost;
-
+  mutable double queryCost; 
   /// @brief Weight assigned for importance of this state.  Can be
   /// used for searchers to decide what paths to explore
-  double weight;
-
+  double weight; 
   /// @brief Exploration depth, i.e., number of times KLEE branched for this state
-  unsigned depth;
-
+  unsigned depth; 
   /// @brief History of complete path: represents branches taken to
   /// reach/create this state (both concrete and symbolic)
-  TreeOStream pathOS;
-
+  TreeOStream pathOS; 
   /// @brief History of symbolic path: represents symbolic branches
   /// taken to reach/create this state
-  TreeOStream symPathOS;
-
+  TreeOStream symPathOS; 
   /// @brief Counts how many instructions were executed since the last new
   /// instruction was covered.
-  unsigned instsSinceCovNew;
-
+  unsigned instsSinceCovNew; 
   /// @brief Whether a new instruction was covered in this state
   bool coveredNew;
   /// @brief Set containing which lines in which files are covered by this state
-  std::map<const std::string *, std::set<unsigned> > coveredLines;
-
+  std::map<const std::string *, std::set<unsigned> > coveredLines; 
   /// @brief Pointer to the process tree of the current state
-  PTreeNode *ptreeNode;
-
+  PTreeNode *ptreeNode; 
   /// @brief Ordered list of symbolics: used to generate test cases.
   //
   // FIXME: Move to a shared list structure (not critical).
-  std::vector<std::pair<const MemoryObject *, const Array *> > symbolics;
-
+  std::vector<std::pair<const MemoryObject *, const Array *> > symbolics; 
   /// @brief Set of used array names for this state.  Used to avoid collisions.
-  std::set<std::string> arrayNames;
-
+  std::set<std::string> arrayNames; 
   std::string getFnAlias(std::string fn);
   void addFnAlias(std::string old_fn, std::string new_fn);
-  void removeFnAlias(std::string fn);
-
+  void removeFnAlias(std::string fn); 
 private:
-  ExecutionState() : ptreeNode(0) {}
-
+  ExecutionState() : ptreeNode(0) {} 
 public:
-  ExecutionState(KFunction *kf);
-
-  // XXX total hack, just used to make a state so solver can
-  // use on structure
-  ExecutionState(const std::vector<ref<Expr> > &assumptions);
-
-  ExecutionState(const ExecutionState &state);
-
-  ~ExecutionState();
-
-  ExecutionState *branch();
-
+  ExecutionState(KFunction *kf); 
+  // XXX total hack, just used to make a state so solver can // use on structure
+  ExecutionState(const std::vector<ref<Expr> > &assumptions); 
+  ExecutionState(const ExecutionState &state); 
+  ~ExecutionState(); 
+  ExecutionState *branch(); 
   void pushFrame(KInstIterator caller, KFunction *kf);
-  void popFrame();
-
+  void popFrame(); 
   void addSymbolic(const MemoryObject *mo, const Array *array);
-  void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }
-
-  bool merge(const ExecutionState &b);
+  void addConstraint(ref<Expr> e) { constraints.addConstraint(e); } 
+  bool mergeState(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
 };
 }

@@ -166,7 +166,7 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) 
   return os;
 }
 
-bool ExecutionState::merge(const ExecutionState &b) {
+bool ExecutionState::mergeState(const ExecutionState &b) {
   if (DebugLogStateMerge)
     llvm::errs() << "-- attempting merge of A:" << this << " with B:" << &b
                  << "--\n";
@@ -183,7 +183,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
     auto itB = b.stack.begin();
     while (itA!=stack.end() && itB!=b.stack.end()) {
       // XXX vaargs?
-      if (itA->caller!=itB->caller || itA->kf!=itB->kf)
+      if (itA->caller != itB->caller || itA->kf->function != itB->kf->function)
         return false;
       ++itA;
       ++itB;
