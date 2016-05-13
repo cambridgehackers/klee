@@ -601,6 +601,169 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
   }
 }
 
+unsigned Executor::getPathStreamID(const ExecutionState &state) {
+  assert(pathWriter);
+  return state.pathOS.getID();
+}
+
+unsigned Executor::getSymbolicPathStreamID(const ExecutionState &state) {
+  assert(symPathWriter);
+  return state.symPathOS.getID();
+}
+
+void Executor::getConstraintLog(const ExecutionState &state, std::string &res, Interpreter::LogType logFormat) {
+  std::ostringstream info;
+
+  switch (logFormat) {
+  case STP: {
+    Query query(state.constraints, ConstantExpr::alloc(0, Expr::Bool));
+    char *log = osolver->getConstraintLog(query);
+    res = std::string(log);
+    free(log);
+  } break;
+
+  case KQUERY: {
+    std::string Str;
+    llvm::raw_string_ostream info(Str);
+    ExprPPrinter::printConstraints(info, state.constraints);
+    res = info.str();
+  } break;
+
+  case SMTLIB2: {
+    std::string Str;
+    llvm::raw_string_ostream info(Str);
+    ExprSMTLIBPrinter printer;
+    printer.setOutput(info);
+    Query query(state.constraints, ConstantExpr::alloc(0, Expr::Bool));
+    printer.setQuery(query);
+    printer.generateOutput();
+    res = info.str();
+  } break;
+
+  default:
+    klee_warning("Executor::getConstraintLog() : Log format not supported!");
+  }
+}
+
+bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std::pair<std::string, std::vector<unsigned char>>> &res){
+  osolver->setCoreSolverTimeout(0);
+  ExecutionState tmp(state);
+  // Go through each byte in every test case and attempt to restrict
+  // it to the constraints contained in cexPreferences.  (Note:
+  // usually this means trying to make it an ASCII character (0-127)
+  // and therefore human readable. It is also possible to customize
+  // the preferred constraints.  See test/Features/PreferCex.c for
+  // an example) While this process can be very expensive, it can
+  // also make understanding individual test cases much easier.
+  for (unsigned i = 0; i != state.symbolics.size(); ++i) {
+    const MemoryObject *mo = state.symbolics[i].first;
+    std::vector< ref<Expr> >::const_iterator pi = mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
+    for (; pi != pie; ++pi) {
+      bool mustBeTrue;
+      // Attempt to bound byte to constraints held in cexPreferences
+      bool success = tsolver->mustBeTrue(tmp, Expr::createIsZero(*pi), mustBeTrue);
+      // If it isn't possible to constrain this particular byte in the desired
+      // way (normally this would mean that the byte can't be constrained to
+      // be between 0 and 127 without making the entire constraint list UNSAT)
+      // then just continue on to the next byte.
+      if (!success) break;
+      // If the particular constraint operated on in this iteration through
+      // the loop isn't implied then add it to the list of constraints.
+      if (!mustBeTrue) tmp.addConstraint(*pi);
+    }
+    if (pi!=pie) break;
+  }
+  std::vector< std::vector<unsigned char> > values;
+  std::vector<const Array*> objects;
+  for (unsigned i = 0; i != state.symbolics.size(); ++i)
+    objects.push_back(state.symbolics[i].second);
+  bool success = true;
+  if (!objects.empty()) {
+      sys::TimeValue now = util::getWallTimeVal();
+      success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values);
+      sys::TimeValue delta = util::getWallTimeVal();
+      delta -= now;
+      stats::solverTime += delta.usec();
+  }
+  osolver->setCoreSolverTimeout(0);
+  if (!success) {
+    klee_warning("unable to compute initial values (invalid constraints?)!");
+    ExprPPrinter::printQuery(llvm::errs(), state.constraints, ConstantExpr::alloc(0, Expr::Bool));
+    return false;
+  }
+  for (unsigned i = 0; i != state.symbolics.size(); ++i)
+    res.push_back(std::make_pair(state.symbolics[i].first->name, values[i]));
+  return true;
+}
+
+void Executor::getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res) {
+  res = state.coveredLines;
+}
+
+Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {
+  return kmodule->targetData->getTypeSizeInBits(type);
+}
+
+Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
+  return new Executor(opts, ih);
+}
+
+std::pair< ref<Expr>, ref<Expr> >
+Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
+  return osolver->getRange(Query(state.constraints, expr));
+}
+
+bool TimingSolver::solveEvaluate(const ExecutionState& state, ref<Expr> expr, Solver::Validity &result) {
+  // Fast path, to avoid timer and OS overhead.
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
+    result = CE->isTrue() ? Solver::True : Solver::False;
+    return true;
+  }
+  sys::TimeValue now = util::getWallTimeVal();
+  if (simplifyExprs)
+    expr = state.constraints.simplifyExpr(expr);
+  bool success = tosolver->evaluate(Query(state.constraints, expr), result);
+  sys::TimeValue delta = util::getWallTimeVal();
+  delta -= now;
+  stats::solverTime += delta.usec();
+  state.queryCost += delta.usec()/1000000.;
+  return success;
+}
+
+bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
+  // Fast path, to avoid timer and OS overhead.
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
+    result = CE->isTrue() ? true : false;
+    return true;
+  }
+  sys::TimeValue now = util::getWallTimeVal();
+  if (simplifyExprs)
+    expr = state.constraints.simplifyExpr(expr);
+  bool success = tosolver->mustBeTrue(Query(state.constraints, expr), result);
+  sys::TimeValue delta = util::getWallTimeVal();
+  delta -= now;
+  stats::solverTime += delta.usec();
+  state.queryCost += delta.usec()/1000000.;
+  return success;
+}
+
+bool TimingSolver::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
+  // Fast path, to avoid timer and OS overhead.
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
+    result = CE;
+    return true;
+  }
+  sys::TimeValue now = util::getWallTimeVal();
+  if (simplifyExprs)
+    expr = state.constraints.simplifyExpr(expr);
+  bool success = tosolver->getValue(Query(state.constraints, expr), result);
+  sys::TimeValue delta = util::getWallTimeVal();
+  delta -= now;
+  stats::solverTime += delta.usec();
+  state.queryCost += delta.usec()/1000000.;
+  return success;
+}
+
 Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
   : Interpreter(opts),
     kmodule(0),
@@ -1098,9 +1261,9 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
      // TODO: support zeroext, signext, sret attributes
     unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
     if (!f->isVarArg()) {
-      if (callingArgs > funcArgs) {
+      if (callingArgs > funcArgs)
         klee_warning_once(f, "calling %s with extra arguments.", f->getName().data());
-      } else if (callingArgs < funcArgs) {
+      else if (callingArgs < funcArgs) {
         terminateStateOnError(state, "calling function with too few arguments", "user.err");
         return;
       }
@@ -1115,16 +1278,15 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       for (unsigned i = funcArgs; i < callingArgs; i++) {
         // FIXME: This is really specific to the architecture, not the pointer
         // size. This happens to work fir x86-32 and x86-64, however.
-        if (WordSize == Expr::Int32) {
+        if (WordSize == Expr::Int32)
           size += Expr::getMinBytesForWidth(arguments[i]->getWidth());
-        } else {
+        else {
           Expr::Width argWidth = arguments[i]->getWidth();
           // AMD64-ABI 3.5.7p5: Step 7. Align l->overflow_arg_area upwards to a 16
           // byte boundary if alignment needed by type exceeds 8 byte boundary.  //
           // Alignment requirements for scalar types is the same as their size
-          if (argWidth > Expr::Int64) {
+          if (argWidth > Expr::Int64)
              size = llvm::RoundUpToAlignment(size, 16);
-          }
           size += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
         }
       }
@@ -1291,9 +1453,9 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
   case Instruction::Br: {
     BranchInst *bi = cast<BranchInst>(i);
-    if (bi->isUnconditional()) {
+    if (bi->isUnconditional())
       transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), state);
-    } else {
+    else {
       // FIXME: Find a way that we don't have this hidden dependency.
       assert(bi->getCondition() == bi->getOperand(0) && "Wrong operand index!");
       ref<Expr> cond = eval(ki, 0, state);
@@ -2251,9 +2413,8 @@ void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionL
     if (!unbound) // Fork failure
       break;
   }
-  if (unbound) {
-    terminateStateOnError(*unbound, "memory error: invalid pointer: " + name, "ptr.err", getAddressInfo(*unbound, p));
-  }
+  if (unbound)
+    terminateStateOnError(*unbound, "merror: invalid pointer: " + name, "ptr.err", getAddressInfo(*unbound, p));
 }
 
 void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */) {
@@ -2464,187 +2625,4 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   globalAddresses.clear();
   if (statsTracker)
     statsTracker->done();
-}
-
-unsigned Executor::getPathStreamID(const ExecutionState &state) {
-  assert(pathWriter);
-  return state.pathOS.getID();
-}
-
-unsigned Executor::getSymbolicPathStreamID(const ExecutionState &state) {
-  assert(symPathWriter);
-  return state.symPathOS.getID();
-}
-
-void Executor::getConstraintLog(const ExecutionState &state, std::string &res, Interpreter::LogType logFormat) {
-  std::ostringstream info;
-
-  switch (logFormat) {
-  case STP: {
-    Query query(state.constraints, ConstantExpr::alloc(0, Expr::Bool));
-    char *log = osolver->getConstraintLog(query);
-    res = std::string(log);
-    free(log);
-  } break;
-
-  case KQUERY: {
-    std::string Str;
-    llvm::raw_string_ostream info(Str);
-    ExprPPrinter::printConstraints(info, state.constraints);
-    res = info.str();
-  } break;
-
-  case SMTLIB2: {
-    std::string Str;
-    llvm::raw_string_ostream info(Str);
-    ExprSMTLIBPrinter printer;
-    printer.setOutput(info);
-    Query query(state.constraints, ConstantExpr::alloc(0, Expr::Bool));
-    printer.setQuery(query);
-    printer.generateOutput();
-    res = info.str();
-  } break;
-
-  default:
-    klee_warning("Executor::getConstraintLog() : Log format not supported!");
-  }
-}
-
-bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std::pair<std::string, std::vector<unsigned char>>> &res){
-  osolver->setCoreSolverTimeout(0);
-  ExecutionState tmp(state);
-  // Go through each byte in every test case and attempt to restrict
-  // it to the constraints contained in cexPreferences.  (Note:
-  // usually this means trying to make it an ASCII character (0-127)
-  // and therefore human readable. It is also possible to customize
-  // the preferred constraints.  See test/Features/PreferCex.c for
-  // an example) While this process can be very expensive, it can
-  // also make understanding individual test cases much easier.
-  for (unsigned i = 0; i != state.symbolics.size(); ++i) {
-    const MemoryObject *mo = state.symbolics[i].first;
-    std::vector< ref<Expr> >::const_iterator pi = mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
-    for (; pi != pie; ++pi) {
-      bool mustBeTrue;
-      // Attempt to bound byte to constraints held in cexPreferences
-      bool success = tsolver->mustBeTrue(tmp, Expr::createIsZero(*pi), mustBeTrue);
-      // If it isn't possible to constrain this particular byte in the desired
-      // way (normally this would mean that the byte can't be constrained to
-      // be between 0 and 127 without making the entire constraint list UNSAT)
-      // then just continue on to the next byte.
-      if (!success) break;
-      // If the particular constraint operated on in this iteration through
-      // the loop isn't implied then add it to the list of constraints.
-      if (!mustBeTrue) tmp.addConstraint(*pi);
-    }
-    if (pi!=pie) break;
-  }
-  std::vector< std::vector<unsigned char> > values;
-  std::vector<const Array*> objects;
-  for (unsigned i = 0; i != state.symbolics.size(); ++i)
-    objects.push_back(state.symbolics[i].second);
-  bool success = true;
-  if (!objects.empty()) {
-      sys::TimeValue now = util::getWallTimeVal();
-      success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values);
-      sys::TimeValue delta = util::getWallTimeVal();
-      delta -= now;
-      stats::solverTime += delta.usec();
-  }
-  osolver->setCoreSolverTimeout(0);
-  if (!success) {
-    klee_warning("unable to compute initial values (invalid constraints?)!");
-    ExprPPrinter::printQuery(llvm::errs(), state.constraints, ConstantExpr::alloc(0, Expr::Bool));
-    return false;
-  }
-  for (unsigned i = 0; i != state.symbolics.size(); ++i)
-    res.push_back(std::make_pair(state.symbolics[i].first->name, values[i]));
-  return true;
-}
-
-void Executor::getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res) {
-  res = state.coveredLines;
-}
-
-Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {
-  return kmodule->targetData->getTypeSizeInBits(type);
-}
-
-Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
-  return new Executor(opts, ih);
-}
-
-std::pair< ref<Expr>, ref<Expr> >
-Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
-  return osolver->getRange(Query(state.constraints, expr));
-}
-
-bool TimingSolver::solveEvaluate(const ExecutionState& state, ref<Expr> expr, Solver::Validity &result) {
-  // Fast path, to avoid timer and OS overhead.
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
-    result = CE->isTrue() ? Solver::True : Solver::False;
-    return true;
-  }
-  sys::TimeValue now = util::getWallTimeVal();
-  if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr);
-  bool success = tosolver->evaluate(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal();
-  delta -= now;
-  stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.;
-  return success;
-}
-
-bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
-  // Fast path, to avoid timer and OS overhead.
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
-    result = CE->isTrue() ? true : false;
-    return true;
-  }
-  sys::TimeValue now = util::getWallTimeVal();
-  if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr);
-  bool success = tosolver->mustBeTrue(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal();
-  delta -= now;
-  stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.;
-  return success;
-}
-
-bool TimingSolver::mustBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
-  return mustBeTrue(state, Expr::createIsZero(expr), result);
-}
-
-bool TimingSolver::mayBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
-  bool res;
-  if (!mustBeFalse(state, expr, res))
-    return false;
-  result = !res;
-  return true;
-}
-
-bool TimingSolver::mayBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
-  bool res;
-  if (!mustBeTrue(state, expr, res))
-    return false;
-  result = !res;
-  return true;
-}
-
-bool TimingSolver::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
-  // Fast path, to avoid timer and OS overhead.
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
-    result = CE;
-    return true;
-  }
-  sys::TimeValue now = util::getWallTimeVal();
-  if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr);
-  bool success = tosolver->getValue(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal();
-  delta -= now;
-  stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.;
-  return success;
 }
