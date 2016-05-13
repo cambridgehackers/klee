@@ -27,7 +27,6 @@ namespace klee {
   struct Cell;
   class Executor;
   class Expr;
-  class InterpreterHandler;
   class InstructionInfoTable;
   struct KInstruction;
   class KModule;
@@ -38,10 +37,8 @@ namespace klee {
     unsigned numInstructions;
     KInstruction **instructions; 
     std::map<llvm::BasicBlock*, unsigned> basicBlockEntry; 
-    /// Whether instructions in this function should count as
-    /// "coverable" for statistics and search heuristics.
-    bool trackCoverage;
-
+    /// Whether instructions in this function should count as /// "coverable" for statistics and search heuristics.
+    bool trackCoverage; 
   private:
     KFunction(const KFunction&);
     KFunction &operator=(const KFunction&); 
@@ -86,10 +83,6 @@ namespace klee {
   public:
     KModule(llvm::Module *_module);
     ~KModule(); 
-    /// Initialize local data structures.
-    //
-    // FIXME: ihandler should not be here
-    void prepareModule(const Interpreter::ModuleOptions &opts, InterpreterHandler *ihandler); 
     /// Return an id for the given constant, creating a new one if necessary.
     unsigned getConstantID(llvm::Constant *c, KInstruction* ki);
   };
