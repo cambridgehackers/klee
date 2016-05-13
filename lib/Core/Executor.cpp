@@ -2636,8 +2636,7 @@ const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opt
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   assert(!kmodule && module && "can only register one module"); // XXX gross
   kmodule = new KModule(module);
-  DataLayout *TD = kmodule->targetData;
-  Context::initialize(TD->isLittleEndian(), (Expr::Width) TD->getPointerSizeInBits());
+  Context::initialize(kmodule->targetData->isLittleEndian(), (Expr::Width) kmodule->targetData->getPointerSizeInBits());
   specialFunctionHandler = new SpecialFunctionHandler(*this);
   specialFunctionHandler->prepare();
   // Inject checks prior to optimization... we also perform the // invariant transformations that we will end up doing later so that
@@ -2663,11 +2662,7 @@ printf("[%s:%d] after runpreprocessmodule\n", __FUNCTION__, __LINE__);
   // Add internal functions which are not used to check if instructions // have been already visited
   kmodule->addInternalFunction("klee_div_zero_check");
   kmodule->addInternalFunction("klee_overshift_check");
-  // Needs to happen after linking (since ctors/dtors can be modified)
-  // and optimization (since global optimization can rewrite lists).
-//  injectStaticConstructorsAndDestructors(module);
-//static void injectStaticConstructorsAndDestructors(Module *module) 
-//{
+  // After linking (since ctors/dtors can be modified) and optimization (global optimization can rewrite lists).
   GlobalVariable *ctors = module->getNamedGlobal("llvm.global_ctors");
   GlobalVariable *dtors = module->getNamedGlobal("llvm.global_dtors"); 
   if (ctors || dtors) {
@@ -2683,7 +2678,6 @@ printf("[%s:%d] after runpreprocessmodule\n", __FUNCTION__, __LINE__);
 	  CallInst::Create(dtorStub, "", it->getTerminator());
     }
   }
-//}
 
   // Finally, run the passes that maintain invariants we expect during
   // interpretation. We run the intrinsic cleaner just in case we
@@ -2739,7 +2733,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   specialFunctionHandler->bind();
   if (StatsTracker::useStatistics()) {
 printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
-    statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly.ll"),
+    statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly2.ll"),
        (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
