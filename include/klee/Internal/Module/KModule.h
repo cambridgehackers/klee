@@ -51,7 +51,6 @@ namespace klee {
     llvm::Function *kleeMergeFn; 
     // Our shadow versions of LLVM structures.
     std::vector<KFunction*> functions;
-    std::map<llvm::Function*, KFunction*> functionMap; 
     // Functions which escape (may be called indirectly) // XXX change to KFunction
     std::set<llvm::Function*> escapingFunctions; 
     InstructionInfoTable *infos; 

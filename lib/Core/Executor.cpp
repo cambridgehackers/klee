@@ -1232,7 +1232,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     // guess. This just done to avoid having to pass KInstIterator everywhere
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
-    KFunction *kf = kmodule->functionMap[f];
+    KFunction *kf = functionMap[f];
     state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
     state.pc = kf->instructions;
     if (statsTracker)
@@ -1311,7 +1311,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src, ExecutionS
   // instructions know which argument to eval, set the pc, and continue.
 
   // XXX this lookup has to go ?
-  KFunction *kf = kmodule->functionMap[state.stack.back().func];
+  KFunction *kf = functionMap[state.stack.back().func];
   state.pc = &kf->instructions[kf->basicBlockEntry[dst]];
   if (state.pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(state.pc->inst);
@@ -2531,7 +2531,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv, char **envp
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
   std::vector<ref<Expr> > arguments;
-  KFunction *kf = kmodule->functionMap[f];
+  KFunction *kf = functionMap[f];
   assert(kf);
   // force deterministic initialization of memory objects
   srand(1);
@@ -2783,7 +2783,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
         ki->info = &kmodule->infos->getInfo(ki->inst);
       } 
       kmodule->functions.push_back(kf);
-      kmodule->functionMap.insert(std::make_pair(it, kf));
+      functionMap.insert(std::make_pair(it, kf));
     }
   for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
     Function *f = (*it)->function;

@@ -124,6 +124,7 @@ private:
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;
   Cell *constantTable;
+  std::map<llvm::Function*, KFunction*> functionMap; 
 
   /// Used to track states that have been added during the current /// instructions step. 
   /// \invariant \ref addedStates is a subset of \ref states. 
