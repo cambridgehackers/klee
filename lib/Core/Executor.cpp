@@ -2659,7 +2659,15 @@ static void injectStaticConstructorsAndDestructors(Module *m) {
   }
 }
 
-void Executor::prepareModule(const Interpreter::ModuleOptions &opts) {
+const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
+{
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+  assert(!kmodule && module && "can only register one module"); // XXX gross
+  kmodule = new KModule(module);
+  DataLayout *TD = kmodule->targetData;
+  Context::initialize(TD->isLittleEndian(), (Expr::Width) TD->getPointerSizeInBits());
+  specialFunctionHandler = new SpecialFunctionHandler(*this);
+  specialFunctionHandler->prepare();
   // Inject checks prior to optimization... we also perform the // invariant transformations that we will end up doing later so that
   // optimize is seeing what is as close as possible to the final // module.
   legacy::PassManager pm;
@@ -2750,19 +2758,6 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       llvm::errs() << (*it)->getName() << ", ";
     llvm::errs() << "]\n";
   }
-}
-
-const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
-{
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-  assert(!kmodule && module && "can only register one module"); // XXX gross
-  kmodule = new KModule(module);
-  DataLayout *TD = kmodule->targetData;
-  Context::initialize(TD->isLittleEndian(), (Expr::Width) TD->getPointerSizeInBits());
-  specialFunctionHandler = new SpecialFunctionHandler(*this);
-  specialFunctionHandler->prepare();
-  //kmodule->
-  prepareModule(opts);
   specialFunctionHandler->bind();
   if (StatsTracker::useStatistics()) {
 printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
