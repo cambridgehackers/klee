@@ -2674,11 +2674,11 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   // deleted (via RAUW). This can be removed once LLVM fixes this // issue.
   pm.add(new IntrinsicCleanerPass(*kmodule->targetData, false));
 printf("[%s:%d] before run newstufffffff\n", __FUNCTION__, __LINE__);
-  pm.run(*kmodule->module);
+  pm.run(*module);
 printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 
   if (opts.Optimize)
-    Optimize(kmodule->module);
+    Optimize(module);
   // FIXME: Missing force import for various math functions.  
   // FIXME: Find a way that we can test programs without requiring
   // this to be linked in, it makes low level debugging much more
@@ -2687,7 +2687,7 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 #if 0 //jca
   SmallString<128> LibPath(opts.LibraryDir);
   llvm::sys::path::append(LibPath, "kleeRuntimeIntrinsic.bc");
-  kmodule->module = linkWithLibrary(kmodule->module, LibPath.str());
+  module = linkWithLibrary(module, LibPath.str());
 #endif
 
   // Add internal functions which are not used to check if instructions
@@ -2698,7 +2698,7 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 
   // Needs to happen after linking (since ctors/dtors can be modified)
   // and optimization (since global optimization can rewrite lists).
-  injectStaticConstructorsAndDestructors(kmodule->module);
+  injectStaticConstructorsAndDestructors(module);
 
   // Finally, run the passes that maintain invariants we expect during
   // interpretation. We run the intrinsic cleaner just in case we
@@ -2715,7 +2715,7 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
   }
   pm3.add(new IntrinsicCleanerPass(*kmodule->targetData));
   pm3.add(new PhiCleanerPass());
-  pm3.run(*kmodule->module);
+  pm3.run(*module);
 
   // Write out the .ll assembly file. We truncate long lines to work
   // around a kcachegrind parsing bug (it puts them on new lines), so
@@ -2724,13 +2724,13 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
     llvm::raw_fd_ostream *os = interpreterHandler->openOutputFile("assembly.ll");
     assert(os && !os->has_error() && "unable to open source output");
-    *os << *kmodule->module;
+    *os << *module;
     delete os;
   } 
-  kmodule->kleeMergeFn = kmodule->module->getFunction("klee_merge"); 
+  kmodule->kleeMergeFn = module->getFunction("klee_merge"); 
   /* Build shadow structures */ 
-  kmodule->infos = new InstructionInfoTable(kmodule->module);  
-  for (auto it = kmodule->module->begin(), ie = kmodule->module->end(); it != ie; ++it) {
+  kmodule->infos = new InstructionInfoTable(module);  
+  for (auto it = module->begin(), ie = module->end(); it != ie; ++it) {
     if (it->isDeclaration())
       continue; 
     KFunction *kf = new KFunction(it, kmodule); 
@@ -2743,9 +2743,9 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   } 
   /* Compute various interesting properties */ 
   for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
-    KFunction *kf = *it;
-    if (functionEscapes(kf->function))
-      kmodule->escapingFunctions.insert(kf->function);
+    Function *f = (*it)->function;
+    if (functionEscapes(f))
+      kmodule->escapingFunctions.insert(f);
   }
 
   if (!kmodule->escapingFunctions.empty()) {
