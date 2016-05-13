@@ -74,75 +74,73 @@ private:
   llvm::raw_ostream *m_infoFile; 
   unsigned m_pathsExplored; // number of paths explored so far
 public:
-  KleeHandler();
-  ~KleeHandler();
+  KleeHandler()
+    : m_interpreter(0),
+      m_pathWriter(0),
+      m_symPathWriter(0),
+      m_infoFile(0),
+      m_pathsExplored(0) {
+    klee_warning_file = stdout;
+    klee_message_file = stdout;
+    m_infoFile = openOutputFile("info");
+  }
+  ~KleeHandler() {
+    if (m_pathWriter) delete m_pathWriter;
+    if (m_symPathWriter) delete m_symPathWriter;
+    delete m_infoFile;
+  }
   llvm::raw_ostream &getInfoStream() const { return *m_infoFile; }
   void incPathsExplored() { m_pathsExplored++; }
-  void setInterpreter(Interpreter *i);
-  void processTestCase(const ExecutionState  &state, const char *errorMessage, const char *errorSuffix); 
-  std::string getOutputFilename(const std::string &filename);
-  llvm::raw_fd_ostream *openOutputFile(const std::string &filename);
-  std::string getTestFilename(const std::string &suffix, unsigned id);
-  llvm::raw_fd_ostream *openTestFile(const std::string &suffix, unsigned id);
-  static std::string getRunTimeLibraryPath(const char *argv0);
-};
-
-KleeHandler::KleeHandler()
-  : m_interpreter(0),
-    m_pathWriter(0),
-    m_symPathWriter(0),
-    m_infoFile(0),
-    m_pathsExplored(0) {
-  klee_warning_file = stdout;
-  klee_message_file = stdout;
-  m_infoFile = openOutputFile("info");
-}
-
-KleeHandler::~KleeHandler() {
-  if (m_pathWriter) delete m_pathWriter;
-  if (m_symPathWriter) delete m_symPathWriter;
-  delete m_infoFile;
-}
-
-void KleeHandler::setInterpreter(Interpreter *i) {
-    m_interpreter = i;
-    m_pathWriter = new TreeStreamWriter(getOutputFilename("paths.ts"));
-    assert(m_pathWriter->good());
-    m_interpreter->setPathWriter(m_pathWriter);
-    m_symPathWriter = new TreeStreamWriter(getOutputFilename("symPaths.ts"));
-    assert(m_symPathWriter->good());
-    m_interpreter->setSymbolicPathWriter(m_symPathWriter);
-}
-
-std::string KleeHandler::getOutputFilename(const std::string &filename) {
-  return "tmp/" + filename;
-}
-
-llvm::raw_fd_ostream *KleeHandler::openOutputFile(const std::string &filename) {
-  llvm::raw_fd_ostream *f;
-  std::string Error;
-  std::string path = getOutputFilename(filename);
-  std::error_code ec;
-  f = new llvm::raw_fd_ostream(path.c_str(), ec, llvm::sys::fs::F_None);
-  if (ec)
-    Error = ec.message();
-  if (!Error.empty()) {
-    klee_error("error opening file \"%s\".  (%s).", filename.c_str(), Error.c_str());
-    exit(-1);
+  void setInterpreter(Interpreter *i) {
+      m_interpreter = i;
+      m_pathWriter = new TreeStreamWriter(getOutputFilename("paths.ts"));
+      assert(m_pathWriter->good());
+      m_interpreter->setPathWriter(m_pathWriter);
+      m_symPathWriter = new TreeStreamWriter(getOutputFilename("symPaths.ts"));
+      assert(m_symPathWriter->good());
+      m_interpreter->setSymbolicPathWriter(m_symPathWriter);
   }
-
-  return f;
-}
-
-std::string KleeHandler::getTestFilename(const std::string &suffix, unsigned id) {
-  std::stringstream filename;
-  filename << "test" << std::setfill('0') << std::setw(6) << id << '.' << suffix;
-  return filename.str();
-}
-
-llvm::raw_fd_ostream *KleeHandler::openTestFile(const std::string &suffix, unsigned id) {
-  return openOutputFile(getTestFilename(suffix, id));
-}
+  std::string getOutputFilename(const std::string &filename) {
+    return "tmp/" + filename;
+  }
+  llvm::raw_fd_ostream *openOutputFile(const std::string &filename) {
+    llvm::raw_fd_ostream *f;
+    std::string Error;
+    std::string path = getOutputFilename(filename);
+    std::error_code ec;
+    f = new llvm::raw_fd_ostream(path.c_str(), ec, llvm::sys::fs::F_None);
+    if (ec)
+      Error = ec.message();
+    if (!Error.empty()) {
+      klee_error("error opening file \"%s\".  (%s).", filename.c_str(), Error.c_str());
+      exit(-1);
+    }
+    return f;
+  }
+  std::string getTestFilename(const std::string &suffix, unsigned id) {
+    std::stringstream filename;
+    filename << "test" << std::setfill('0') << std::setw(6) << id << '.' << suffix;
+    return filename.str();
+  }
+  llvm::raw_fd_ostream *openTestFile(const std::string &suffix, unsigned id) {
+    return openOutputFile(getTestFilename(suffix, id));
+  }
+  static std::string getRunTimeLibraryPath(const char *argv0) {
+    // Take any function from the execution binary but not main (as not allowed by // C++ standard)
+    void *MainExecAddr = (void *)(intptr_t)getRunTimeLibraryPath;
+    SmallString<128> toolRoot( llvm::sys::fs::getMainExecutable(argv0, MainExecAddr)); 
+    // Strip off executable so we have a directory path
+    llvm::sys::path::remove_filename(toolRoot); 
+    SmallString<128> libDir; 
+    KLEE_DEBUG_WITH_TYPE("klee_runtime", llvm::dbgs() << "Using build directory KLEE library runtime :");
+    libDir = KLEE_DIR;
+    llvm::sys::path::append(libDir,RUNTIME_CONFIGURATION);
+    llvm::sys::path::append(libDir,"lib"); 
+    KLEE_DEBUG_WITH_TYPE("klee_runtime", llvm::dbgs() << libDir.c_str() << "\n");
+    return libDir.str();
+  }
+  void processTestCase(const ExecutionState  &state, const char *errorMessage, const char *errorSuffix); 
+};
 
 /* Outputs all files (.ktest, .pc, .cov etc.) describing a test case */
 void KleeHandler::processTestCase(const ExecutionState &state, const char *errorMessage, const char *errorSuffix)
@@ -185,21 +183,6 @@ printf("[%s:%d] COVERED\n", __FUNCTION__, __LINE__);
           for (auto it2 = it->second.begin(), ie = it->second.end(); it2 != ie; ++it2)
               llvm::outs() << *it->first << ":" << *it2 << "\n";
 printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
-}
-
-std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
-  // Take any function from the execution binary but not main (as not allowed by // C++ standard)
-  void *MainExecAddr = (void *)(intptr_t)getRunTimeLibraryPath;
-  SmallString<128> toolRoot( llvm::sys::fs::getMainExecutable(argv0, MainExecAddr)); 
-  // Strip off executable so we have a directory path
-  llvm::sys::path::remove_filename(toolRoot); 
-  SmallString<128> libDir; 
-  KLEE_DEBUG_WITH_TYPE("klee_runtime", llvm::dbgs() << "Using build directory KLEE library runtime :");
-  libDir = KLEE_DIR;
-  llvm::sys::path::append(libDir,RUNTIME_CONFIGURATION);
-  llvm::sys::path::append(libDir,"lib"); 
-  KLEE_DEBUG_WITH_TYPE("klee_runtime", llvm::dbgs() << libDir.c_str() << "\n");
-  return libDir.str();
 }
 
 int main(int argc, char **argv, char **envp)
