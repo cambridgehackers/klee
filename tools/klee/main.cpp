@@ -203,7 +203,6 @@ int main(int argc, char **argv, char **envp)
   if (auto ec = mainModule->materializeAllPermanently())
     klee_error("error loading program '%s': %s", InputFile.c_str(), ec.message().c_str());
   std::string LibraryDir = KleeHandler::getRunTimeLibraryPath(argv[0]);
-  Interpreter::ModuleOptions Opts(LibraryDir.c_str(), OptimizeModule); 
   for (auto libs_it = LinkLibraries.begin(), libs_ie = LinkLibraries.end(); libs_it != libs_ie; ++libs_it) {
     const char * libFilename = libs_it->c_str();
     klee_message("Linking in library: %s.\n", libFilename);
@@ -230,6 +229,7 @@ int main(int argc, char **argv, char **envp)
 printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
   Interpreter *interpreter = Interpreter::create(IOpts, handler);
   handler->setInterpreter(interpreter);
+  Interpreter::ModuleOptions Opts(LibraryDir.c_str(), OptimizeModule); 
   const Module *finalModule = interpreter->setModule(mainModule, Opts);
 printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
   interpreter->runFunctionAsMain(mainFn, InputArgv.size() + 1, pArgv, envp);

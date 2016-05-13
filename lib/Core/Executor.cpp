@@ -791,29 +791,6 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   memory = new MemoryManager(&arrayCache);
 }
 
-const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
-{
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-  assert(!kmodule && module && "can only register one module"); // XXX gross
-  kmodule = new KModule(module);
-  DataLayout *TD = kmodule->targetData;
-  Context::initialize(TD->isLittleEndian(), (Expr::Width) TD->getPointerSizeInBits());
-  specialFunctionHandler = new SpecialFunctionHandler(*this);
-  specialFunctionHandler->prepare();
-  kmodule->prepare(opts, interpreterHandler);
-  specialFunctionHandler->bind();
-  if (StatsTracker::useStatistics()) {
-printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
-    statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly.ll"),
-       (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
-  }
-  return module;
-}
-
 Executor::~Executor() {
   delete memory;
   delete externalDispatcher;
@@ -2622,4 +2599,27 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   globalAddresses.clear();
   if (statsTracker)
     statsTracker->done();
+}
+
+const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
+{
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+  assert(!kmodule && module && "can only register one module"); // XXX gross
+  kmodule = new KModule(module);
+  DataLayout *TD = kmodule->targetData;
+  Context::initialize(TD->isLittleEndian(), (Expr::Width) TD->getPointerSizeInBits());
+  specialFunctionHandler = new SpecialFunctionHandler(*this);
+  specialFunctionHandler->prepare();
+  kmodule->prepareModule(opts, interpreterHandler);
+  specialFunctionHandler->bind();
+  if (StatsTracker::useStatistics()) {
+printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
+    statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly.ll"),
+       (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
+  }
+  return module;
 }

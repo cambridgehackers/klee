@@ -19,38 +19,25 @@ namespace klee {
 
   class QueryLogEntry {
   public:
-    enum Type {
-      Validity,
-      Truth,
-      Value,
-      Cex
-    };
-    
+    enum Type { Validity, Truth, Value, Cex }; 
     typedef std::vector< ref<Expr> > exprs_ty;
-    exprs_ty exprs;
-
+    exprs_ty exprs; 
     Type type;
     ref<Expr> query;
     unsigned instruction;
-    std::vector<const Array*> objects;
-    
+    std::vector<const Array*> objects; 
   public:
     QueryLogEntry() : query(ConstantExpr::alloc(0,Expr::Bool)) {}
     QueryLogEntry(const QueryLogEntry &b);
-    QueryLogEntry(const Query &_query, 
-                  Type _type,
-                  const std::vector<const Array*> *objects = 0);
-  };
-
+    QueryLogEntry(const Query &_query, Type _type, const std::vector<const Array*> *objects = 0);
+  }; 
   class QueryLogResult {
   public:
     uint64_t result;
-    double time;
-
+    double time; 
   public:
     QueryLogResult() {}
-    QueryLogResult(bool _success, uint64_t _result, double _time) 
-      : result(_result), time(_time) {
+    QueryLogResult(bool _success, uint64_t _result, double _time) : result(_result), time(_time) {
       if (!_success) { // la la la
         result = 0;
         time = -1;

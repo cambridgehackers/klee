@@ -37,46 +37,44 @@ using namespace llvm;
 using namespace klee;
 
 namespace {
-  enum SwitchImplType { eSwitchTypeSimple, eSwitchTypeLLVM, eSwitchTypeInternal }; 
-  cl::list<std::string>
-  MergeAtExit("merge-at-exit"); 
-  cl::opt<bool>
-  NoTruncateSourceLines("no-truncate-source-lines", cl::desc("Don't truncate long lines in the output source")); 
-  cl::opt<bool>
-  OutputSource("output-source", cl::desc("Write the assembly for the final transformed source"), cl::init(true)); 
-  cl::opt<bool>
-  OutputModule("output-module", cl::desc("Write the bitcode for the final transformed module"), cl::init(false)); 
-  cl::opt<SwitchImplType>
+  cl::opt<KModule::SwitchImplType>
   SwitchType("switch-type", cl::desc("Select the implementation of switch"),
-             cl::values(clEnumValN(eSwitchTypeSimple, "simple", "lower to ordered branches"),
-                        clEnumValN(eSwitchTypeLLVM, "llvm", "lower using LLVM"),
-                        clEnumValN(eSwitchTypeInternal, "internal", "execute switch internally"),
+             cl::values(clEnumValN(KModule::eSwitchTypeSimple, "simple", "lower to ordered branches"),
+                        clEnumValN(KModule::eSwitchTypeLLVM, "llvm", "lower using LLVM"),
+                        clEnumValN(KModule::eSwitchTypeInternal, "internal", "execute switch internally"),
                         clEnumValEnd),
-             cl::init(eSwitchTypeInternal)); 
-  cl::opt<bool>
-  DebugPrintEscapingFunctions("debug-print-escaping-functions", cl::desc("Print functions whose address is taken."));
+             cl::init(KModule::eSwitchTypeInternal)); 
 }
 
 KModule::KModule(Module *_module) 
   : module(_module),
     targetData(new DataLayout(module)),
     kleeMergeFn(0),
-    infos(0) {
+    infos(0),
+    m_SwitchType(SwitchType) {
 }
 
 KModule::~KModule() {
   delete infos; 
-  for (std::vector<KFunction*>::iterator it = functions.begin(), 
-         ie = functions.end(); it != ie; ++it)
+  for (std::vector<KFunction*>::iterator it = functions.begin(), ie = functions.end(); it != ie; ++it)
     delete *it; 
-  for (std::map<llvm::Constant*, KConstant*>::iterator it=constantMap.begin(),
-      itE=constantMap.end(); it!=itE;++it)
+  for (std::map<llvm::Constant*, KConstant*>::iterator it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
     delete it->second; 
   delete targetData;
   delete module;
 }
 
 /***/
+
+void KModule::addInternalFunction(const char* functionName){
+  Function* internalFunction = module->getFunction(functionName);
+  if (!internalFunction) {
+    KLEE_DEBUG(klee_warning( "Failed to add internal function %s. Not found.", functionName));
+    return ;
+  }
+  KLEE_DEBUG(klee_message("Added function %s.",functionName));
+  internalFunctions.insert(internalFunction);
+}
 
 namespace llvm {
 extern void Optimize(Module*);
@@ -133,57 +131,9 @@ static void injectStaticConstructorsAndDestructors(Module *m) {
   }
 }
 
-void KModule::addInternalFunction(const char* functionName){
-  Function* internalFunction = module->getFunction(functionName);
-  if (!internalFunction) {
-    KLEE_DEBUG(klee_warning( "Failed to add internal function %s. Not found.", functionName));
-    return ;
-  }
-  KLEE_DEBUG(klee_message("Added function %s.",functionName));
-  internalFunctions.insert(internalFunction);
-}
-
-void KModule::prepare(const Interpreter::ModuleOptions &opts, InterpreterHandler *ih) {
-  if (!MergeAtExit.empty()) {
-    Function *mergeFn = module->getFunction("klee_merge");
-    if (!mergeFn) {
-      LLVM_TYPE_Q llvm::FunctionType *Ty = FunctionType::get(Type::getVoidTy(getGlobalContext()), std::vector<LLVM_TYPE_Q Type*>(), false);
-      mergeFn = Function::Create(Ty, GlobalVariable::ExternalLinkage, "klee_merge", module);
-    } 
-    for (cl::list<std::string>::iterator it = MergeAtExit.begin(), ie = MergeAtExit.end(); it != ie; ++it) {
-      std::string &name = *it;
-      Function *f = module->getFunction(name);
-      if (!f) {
-        klee_error("cannot insert merge-at-exit for: %s (cannot find)", name.c_str());
-      } else if (f->isDeclaration()) {
-        klee_error("cannot insert merge-at-exit for: %s (external)", name.c_str());
-      } 
-      BasicBlock *exit = BasicBlock::Create(getGlobalContext(), "exit", f);
-      PHINode *result = 0;
-      if (f->getReturnType() != Type::getVoidTy(getGlobalContext()))
-        result = PHINode::Create(f->getReturnType(), 0, "retval", exit);
-      CallInst::Create(mergeFn, "", exit);
-      ReturnInst::Create(getGlobalContext(), result, exit); 
-      llvm::errs() << "KLEE: adding klee_merge at exit of: " << name << "\n";
-      for (llvm::Function::iterator bbit = f->begin(), bbie = f->end(); bbit != bbie; ++bbit) {
-        if (&*bbit != exit) {
-          Instruction *i = bbit->getTerminator();
-          if (i->getOpcode()==Instruction::Ret) {
-            if (result) {
-              result->addIncoming(i->getOperand(0), bbit);
-            }
-            i->eraseFromParent();
-	    BranchInst::Create(exit, bbit);
-          }
-        }
-      }
-    }
-  }
-
-  // Inject checks prior to optimization... we also perform the
-  // invariant transformations that we will end up doing later so that
-  // optimize is seeing what is as close as possible to the final
-  // module.
+void KModule::prepareModule(const Interpreter::ModuleOptions &opts, InterpreterHandler *ih) {
+  // Inject checks prior to optimization... we also perform the // invariant transformations that we will end up doing later so that
+  // optimize is seeing what is as close as possible to the final // module.
   legacy::PassManager pm;
   pm.add(new RaiseAsmPass());
   pm.add(new DivCheckPass());
@@ -226,7 +176,7 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
   // directly I think?
   legacy::PassManager pm3;
   pm3.add(createCFGSimplificationPass());
-  switch(SwitchType) {
+  switch(m_SwitchType) {
   case eSwitchTypeInternal: break;
   case eSwitchTypeSimple: pm3.add(new LowerSwitchPass()); break;
   case eSwitchTypeLLVM:  pm3.add(createLowerSwitchPass()); break;
@@ -239,43 +189,12 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
   // Write out the .ll assembly file. We truncate long lines to work
   // around a kcachegrind parsing bug (it puts them on new lines), so
   // that source browsing works.
-  if (OutputSource) {
+  {
 printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
     llvm::raw_fd_ostream *os = ih->openOutputFile("assembly.ll");
     assert(os && !os->has_error() && "unable to open source output");
-
-    // We have an option for this in case the user wants a .ll they // can compile.
-    if (NoTruncateSourceLines) {
-      *os << *module;
-    } else {
-      std::string string;
-      llvm::raw_string_ostream rss(string);
-      rss << *module;
-      rss.flush();
-      const char *position = string.c_str(); 
-      for (;;) {
-        const char *end = index(position, '\n');
-        if (!end) {
-          *os << position;
-          break;
-        } else {
-          unsigned count = (end - position) + 1;
-          if (count<255) {
-            os->write(position, count);
-          } else {
-            os->write(position, 254);
-            *os << "\n";
-          }
-          position = end+1;
-        }
-      }
-    }
+    *os << *module;
     delete os;
-  } 
-  if (OutputModule) {
-    llvm::raw_fd_ostream *f = ih->openOutputFile("final.bc");
-    WriteBitcodeToFile(module, *f);
-    delete f;
   } 
   kleeMergeFn = module->getFunction("klee_merge"); 
   /* Build shadow structures */ 
@@ -298,7 +217,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       escapingFunctions.insert(kf->function);
   }
 
-  if (DebugPrintEscapingFunctions && !escapingFunctions.empty()) {
+  if (!escapingFunctions.empty()) {
     llvm::errs() << "KLEE: escaping functions: [";
     for (std::set<Function*>::iterator it = escapingFunctions.begin(), ie = escapingFunctions.end(); it != ie; ++it) {
       llvm::errs() << (*it)->getName() << ", ";
