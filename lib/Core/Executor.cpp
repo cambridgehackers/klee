@@ -2531,14 +2531,10 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   std::vector<ref<Expr> > arguments;
   KFunction *kf = kmodule->functionMap[f];
   assert(kf);
-  if (kmodule->module->getModuleInlineAsm() != "")
-    klee_warning("executable has module level assembly (ignoring)");
   // force deterministic initialization of memory objects
   srand(1);
   srandom(1);
   MemoryObject *argvMO = 0;
-  std::set<std::string> undefinedSymbols;
-  GetAllUndefinedSymbols(kf->function->getParent(), undefinedSymbols);
   // In order to make uclibc happy and be closer to what the system is
   // doing we lay out the environments at the end of the argv array
   // (both are terminated by a null). There is also a final terminating
@@ -2768,5 +2764,9 @@ printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
   }
+  if (module->getModuleInlineAsm() != "")
+    klee_warning("executable has module level assembly (ignoring)");
+  std::set<std::string> undefinedSymbols;
+  GetAllUndefinedSymbols(module, undefinedSymbols);
   return module;
 }
