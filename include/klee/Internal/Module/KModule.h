@@ -29,7 +29,6 @@ namespace klee {
   class Expr;
   class InstructionInfoTable;
   struct KInstruction;
-  struct KFunction;
 
   class KConstant {
   public:
@@ -48,7 +47,6 @@ namespace klee {
     llvm::Module *module;
     llvm::DataLayout *targetData;
     llvm::Function *kleeMergeFn; 
-    // Functions which escape (may be called indirectly) // XXX change to KFunction
     std::set<llvm::Function*> escapingFunctions; 
     InstructionInfoTable *infos; 
     std::vector<llvm::Constant*> constants;
