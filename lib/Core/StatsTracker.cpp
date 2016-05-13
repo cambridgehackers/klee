@@ -122,8 +122,7 @@ static bool instructionIsCoverable(Instruction *i) {
   return true;
 }
 
-StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
-                           bool _updateMinDistToUncovered)
+StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, bool _updateMinDistToUncovered)
   : executor(_executor),
     objectFilename(_objectFilename),
     statsFile(0),
@@ -148,8 +147,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
   if (OutputIStats)
     theStatisticManager->useIndexedStats(km->infos->getMaxID());
 
-  for (std::vector<KFunction*>::iterator it = km->functions.begin(), 
-         ie = km->functions.end(); it != ie; ++it) {
+  for (std::vector<KFunction*>::iterator it = km->functions.begin(), ie = km->functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
