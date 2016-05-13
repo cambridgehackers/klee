@@ -518,7 +518,7 @@ ExecutionState &MergingSearcher::selectState() {
         llvm::errs() << "]\n";
       }
       for (auto it = toErase.begin(), ie = toErase.end(); it != ie; ++it) {
-        std::set<ExecutionState*>::iterator it2 = toMerge.find(*it);
+        auto it2 = toMerge.find(*it);
         assert(it2!=toMerge.end());
         executor.terminateState(**it);
         toMerge.erase(it2);
@@ -660,7 +660,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
   // also make understanding individual test cases much easier.
   for (unsigned i = 0; i != state.symbolics.size(); ++i) {
     const MemoryObject *mo = state.symbolics[i].first;
-    std::vector< ref<Expr> >::const_iterator pi = mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
+    auto pi = mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
     for (; pi != pie; ++pi) {
       bool mustBeTrue;
       // Attempt to bound byte to constraints held in cexPreferences
@@ -935,7 +935,7 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
       es->ptreeNode = res.second;
     }
   // If necessary redistribute seeds to match conditions, killing states if necessary due to OnlyReplaySeeds (inefficient but // simple).
-  std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
+  auto it = seedMap.find(&state);
   if (it != seedMap.end()) {
     std::vector<SeedInfo> seeds = it->second;
     seedMap.erase(it);
@@ -966,7 +966,7 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
 Executor::StatePair
 Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
-  std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&current);
+  auto it = seedMap.find(&current);
   osolver->setCoreSolverTimeout(0);
   if (!tsolver->solveEvaluate(current, condition, res)) {
     current.pc = current.prevPC;
@@ -1049,7 +1049,7 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
     return;
   }
   // Check to see if this constraint violates seeds.
-  std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
+  auto it = seedMap.find(&state);
   if (it != seedMap.end()) {
     bool warn = false;
     for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
@@ -1152,7 +1152,7 @@ Executor::toConstant(ExecutionState &state, ref<Expr> e, const char *reason) {
 
 void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction *target) {
   e = state.constraints.simplifyExpr(e);
-  std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
+  auto it = seedMap.find(&state);
   if (it==seedMap.end() || isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
     bool success = tsolver->solveGetValue(state, e, value);
@@ -1171,7 +1171,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
       conditions.push_back(EqExpr::create(e, *vit));
     std::vector<ExecutionState*> branches;
     branch(state, conditions, branches);
-    std::vector<ExecutionState*>::iterator bit = branches.begin();
+    auto bit = branches.begin();
     for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
       ExecutionState *es = *bit;
       if (es)
@@ -1473,7 +1473,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         (void)success;
         if (result) {
           BasicBlock *caseSuccessor = i.getCaseSuccessor();
-          std::map<BasicBlock *, ref<Expr> >::iterator it = targets.insert(std::make_pair(caseSuccessor, ConstantExpr::alloc(0, Expr::Bool))).first;
+          auto it = targets.insert(std::make_pair(caseSuccessor, ConstantExpr::alloc(0, Expr::Bool))).first;
           it->second = OrExpr::create(match, it->second);
         }
       }
@@ -1488,7 +1488,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         conditions.push_back(it->second);
       std::vector<ExecutionState *> branches;
       branch(state, conditions, branches);
-      std::vector<ExecutionState *>::iterator bit = branches.begin();
+      auto bit = branches.begin();
       for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
         ExecutionState *es = *bit;
         if (es)
@@ -2032,7 +2032,7 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
   }
 
   MemoryObject hack((unsigned) example);
-  MemoryMap::iterator lower = state.addressSpace.objects.upper_bound(&hack);
+  auto lower = state.addressSpace.objects.upper_bound(&hack);
   info << "\tnext: ";
   if (lower==state.addressSpace.objects.end())
     info << "none\n";
@@ -2060,13 +2060,13 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
 void Executor::terminateState(ExecutionState &state) {
   interpreterHandler->incPathsExplored();
 
-  std::set<ExecutionState*>::iterator it = addedStates.find(&state);
+  auto it = addedStates.find(&state);
   if (it==addedStates.end()) {
     state.pc = state.prevPC;
     removedStates.insert(&state);
   } else {
     // never reached searcher, just delete immediately
-    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it3 = seedMap.find(&state);
+    auto it3 = seedMap.find(&state);
     if (it3 != seedMap.end())
       seedMap.erase(it3);
     addedStates.erase(it);
@@ -2088,7 +2088,7 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
 const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const ExecutionState &state, Instruction ** lastInstruction) {
   // unroll the stack of the applications state and find
   // the last instruction which is not inside a KLEE internal function
-  ExecutionState::stack_ty::const_reverse_iterator it = state.stack.rbegin(), itE = state.stack.rend();
+  auto it = state.stack.rbegin(), itE = state.stack.rend();
   // don't check beyond the outermost function (i.e. main())
   itE--;
   const InstructionInfo * ii = 0;
@@ -2433,7 +2433,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
     bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
 
-    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = seedMap.find(&state);
+    auto it = seedMap.find(&state);
     if (it!=seedMap.end()) { // In seed mode we need to add this as a // binding.
       for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
         SeedInfo &si = *siit;
@@ -2511,10 +2511,10 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
     addedStates.clear();
     for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
       ExecutionState *es = *it;
-      std::set<ExecutionState*>::iterator it2 = states.find(es);
+      auto it2 = states.find(es);
       assert(it2!=states.end());
       states.erase(it2);
-      std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it3 = seedMap.find(es);
+      auto it3 = seedMap.find(es);
       if (it3 != seedMap.end())
         seedMap.erase(it3);
       processTree->remove(es->ptreeNode);
@@ -2651,7 +2651,7 @@ static void injectStaticConstructorsAndDestructors(Module *m) {
     CallInst::Create(getStubFunctionForCtorList(m, ctors, "klee.ctor_stub"), "", mainFn->begin()->begin());
     if (dtors) {
       Function *dtorStub = getStubFunctionForCtorList(m, dtors, "klee.dtor_stub");
-      for (Function::iterator it = mainFn->begin(), ie = mainFn->end(); it != ie; ++it) {
+      for (auto it = mainFn->begin(), ie = mainFn->end(); it != ie; ++it) {
         if (isa<ReturnInst>(it->getTerminator()))
 	  CallInst::Create(dtorStub, "", it->getTerminator());
       }
@@ -2659,7 +2659,7 @@ static void injectStaticConstructorsAndDestructors(Module *m) {
   }
 }
 
-void Executor::prepareModule(const Interpreter::ModuleOptions &opts, InterpreterHandler *ih) {
+void Executor::prepareModule(const Interpreter::ModuleOptions &opts) {
   // Inject checks prior to optimization... we also perform the // invariant transformations that we will end up doing later so that
   // optimize is seeing what is as close as possible to the final // module.
   legacy::PassManager pm;
@@ -2675,8 +2675,7 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 
   if (opts.Optimize)
     Optimize(kmodule->module);
-  // FIXME: Missing force import for various math functions.
-
+  // FIXME: Missing force import for various math functions.  
   // FIXME: Find a way that we can test programs without requiring
   // this to be linked in, it makes low level debugging much more
   // annoying.
@@ -2719,7 +2718,7 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
   // that source browsing works.
   {
 printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
-    llvm::raw_fd_ostream *os = ih->openOutputFile("assembly.ll");
+    llvm::raw_fd_ostream *os = interpreterHandler->openOutputFile("assembly.ll");
     assert(os && !os->has_error() && "unable to open source output");
     *os << *kmodule->module;
     delete os;
@@ -2727,7 +2726,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   kmodule->kleeMergeFn = kmodule->module->getFunction("klee_merge"); 
   /* Build shadow structures */ 
   kmodule->infos = new InstructionInfoTable(kmodule->module);  
-  for (Module::iterator it = kmodule->module->begin(), ie = kmodule->module->end(); it != ie; ++it) {
+  for (auto it = kmodule->module->begin(), ie = kmodule->module->end(); it != ie; ++it) {
     if (it->isDeclaration())
       continue; 
     KFunction *kf = new KFunction(it, kmodule); 
@@ -2739,7 +2738,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
     kmodule->functionMap.insert(std::make_pair(it, kf));
   } 
   /* Compute various interesting properties */ 
-  for (std::vector<KFunction*>::iterator it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
+  for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
     if (functionEscapes(kf->function))
       kmodule->escapingFunctions.insert(kf->function);
@@ -2747,9 +2746,8 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
 
   if (!kmodule->escapingFunctions.empty()) {
     llvm::errs() << "KLEE: escaping functions: [";
-    for (std::set<Function*>::iterator it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it) {
+    for (auto it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it)
       llvm::errs() << (*it)->getName() << ", ";
-    }
     llvm::errs() << "]\n";
   }
 }
@@ -2764,7 +2762,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   specialFunctionHandler = new SpecialFunctionHandler(*this);
   specialFunctionHandler->prepare();
   //kmodule->
-  prepareModule(opts, interpreterHandler);
+  prepareModule(opts);
   specialFunctionHandler->bind();
   if (StatsTracker::useStatistics()) {
 printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
