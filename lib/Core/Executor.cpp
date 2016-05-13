@@ -266,8 +266,15 @@ public:
     for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
       delete *it;
   }
-  ExecutionState &selectState();
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+  ExecutionState &selectState() {
+    Searcher *s = searchers[--index];
+    if (index==0) index = searchers.size();
+    return s->selectState();
+  }
+  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+    for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
+      (*it)->update(current, addedStates, removedStates);
+  }
   bool empty() { return searchers[0]->empty(); }
 };
 
@@ -525,8 +532,8 @@ ExecutionState &MergingSearcher::selectState() {
 }
 
 void MergingSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+  std::set<ExecutionState *> alt = removedStates;
   if (!removedStates.empty()) {
-    std::set<ExecutionState *> alt = removedStates;
     for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
       ExecutionState *es = *it;
       auto it2 = statesAtMerge.find(es);
@@ -535,10 +542,8 @@ void MergingSearcher::update(ExecutionState *current, const std::set<ExecutionSt
         alt.erase(alt.find(es));
       }
     }
-    baseSearcher->update(current, addedStates, alt);
-  } else {
-    baseSearcher->update(current, addedStates, removedStates);
   }
+  baseSearcher->update(current, addedStates, alt);
 }
 
 ExecutionState &BatchingSearcher::selectState() {
@@ -594,17 +599,6 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
     baseSearcher->update(0, pausedStates, std::set<ExecutionState*>());
     pausedStates.clear();
   }
-}
-
-ExecutionState &InterleavedSearcher::selectState() {
-  Searcher *s = searchers[--index];
-  if (index==0) index = searchers.size();
-  return s->selectState();
-}
-
-void InterleavedSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
-    (*it)->update(current, addedStates, removedStates);
 }
 
 Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
@@ -852,62 +846,60 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
     if (!isInternal && pathWriter)
         current.pathOS << "0";
     return StatePair(0, &current);
-  } else {
-    TimerStatIncrementer timer(stats::forkTime);
-    ExecutionState *falseState, *trueState = &current;
-    ++stats::forks;
-    falseState = trueState->branch();
-    addedStates.insert(falseState);
-    if (it != seedMap.end()) {
-      std::vector<SeedInfo> seeds = it->second;
-      it->second.clear();
-      std::vector<SeedInfo> &trueSeeds = seedMap[trueState];
-      std::vector<SeedInfo> &falseSeeds = seedMap[falseState];
-      for (auto siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
-        ref<ConstantExpr> res;
-        bool success = tsolver->solveGetValue(current, siit->assignment.evaluate(condition), res);
-        assert(success && "FIXME: Unhandled solver failure");
-        if (res->isTrue()) {
-          trueSeeds.push_back(*siit);
-        } else {
-          falseSeeds.push_back(*siit);
-        }
-      }
-
-      bool swapInfo = false;
-      if (trueSeeds.empty()) {
-        if (&current == trueState) swapInfo = true;
-        seedMap.erase(trueState);
-      }
-      if (falseSeeds.empty()) {
-        if (&current == falseState) swapInfo = true;
-        seedMap.erase(falseState);
-      }
-      if (swapInfo) {
-        std::swap(trueState->coveredNew, falseState->coveredNew);
-        std::swap(trueState->coveredLines, falseState->coveredLines);
-      }
-    }
-    current.ptreeNode->data = 0;
-    std::pair<PTreeNode*, PTreeNode*> res = processTree->split(current.ptreeNode, falseState, trueState);
-    falseState->ptreeNode = res.first;
-    trueState->ptreeNode = res.second;
-    if (!isInternal) {
-      if (pathWriter) {
-        falseState->pathOS = pathWriter->open(current.pathOS);
-        trueState->pathOS << "1";
-        falseState->pathOS << "0";
-      }
-      if (symPathWriter) {
-        falseState->symPathOS = symPathWriter->open(current.symPathOS);
-        trueState->symPathOS << "1";
-        falseState->symPathOS << "0";
-      }
-    }
-    addConstraint(*trueState, condition);
-    addConstraint(*falseState, Expr::createIsZero(condition));
-    return StatePair(trueState, falseState);
   }
+  TimerStatIncrementer timer(stats::forkTime);
+  ExecutionState *falseState, *trueState = &current;
+  ++stats::forks;
+  falseState = trueState->branch();
+  addedStates.insert(falseState);
+  if (it != seedMap.end()) {
+    std::vector<SeedInfo> seeds = it->second;
+    it->second.clear();
+    std::vector<SeedInfo> &trueSeeds = seedMap[trueState];
+    std::vector<SeedInfo> &falseSeeds = seedMap[falseState];
+    for (auto siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
+      ref<ConstantExpr> res;
+      bool success = tsolver->solveGetValue(current, siit->assignment.evaluate(condition), res);
+      assert(success && "FIXME: Unhandled solver failure");
+      if (res->isTrue())
+        trueSeeds.push_back(*siit);
+      else
+        falseSeeds.push_back(*siit);
+    }
+
+    bool swapInfo = false;
+    if (trueSeeds.empty()) {
+      if (&current == trueState) swapInfo = true;
+      seedMap.erase(trueState);
+    }
+    if (falseSeeds.empty()) {
+      if (&current == falseState) swapInfo = true;
+      seedMap.erase(falseState);
+    }
+    if (swapInfo) {
+      std::swap(trueState->coveredNew, falseState->coveredNew);
+      std::swap(trueState->coveredLines, falseState->coveredLines);
+    }
+  }
+  current.ptreeNode->data = 0;
+  std::pair<PTreeNode*, PTreeNode*> res2 = processTree->split(current.ptreeNode, falseState, trueState);
+  falseState->ptreeNode = res2.first;
+  trueState->ptreeNode = res2.second;
+  if (!isInternal) {
+    if (pathWriter) {
+      falseState->pathOS = pathWriter->open(current.pathOS);
+      trueState->pathOS << "1";
+      falseState->pathOS << "0";
+    }
+    if (symPathWriter) {
+      falseState->symPathOS = symPathWriter->open(current.symPathOS);
+      trueState->symPathOS << "1";
+      falseState->symPathOS << "0";
+    }
+  }
+  addConstraint(*trueState, condition);
+  addConstraint(*falseState, Expr::createIsZero(condition));
+  return StatePair(trueState, falseState);
 }
 
 void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
@@ -1085,7 +1077,6 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       // FIXME: We should validate that the target didn't do something bad
       // with vaeend, however (like call it twice).
       break;
-
     case Intrinsic::vacopy: // va_copy should have been lowered.
       // FIXME: It would be nice to check for errors in the usage of this as // well.
     default:
@@ -1160,8 +1151,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
         }
       }
     }
-    unsigned numFormals = f->arg_size();
-    getArgumentCell(state, kf, numFormals, arguments);
+    getArgumentCell(state, kf, f->arg_size(), arguments);
   }
 }
 
@@ -1271,9 +1261,9 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       state.popFrame();
       if (statsTracker)
         statsTracker->framePopped(state);
-      if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
+      if (InvokeInst *ii = dyn_cast<InvokeInst>(caller))
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
-      } else {
+      else {
         state.pc = kcaller;
         ++state.pc;
       }
@@ -1810,14 +1800,14 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     case FCmpInst::FCMP_ONE:
       Result = CmpRes != APFloat::cmpUnordered && CmpRes != APFloat::cmpEqual;
       break;
-    default:
-      assert(0 && "Invalid FCMP predicate!");
     case FCmpInst::FCMP_FALSE:
       Result = false;
       break;
     case FCmpInst::FCMP_TRUE:
       Result = true;
       break;
+    default:
+      assert(0 && "Invalid FCMP predicate!");
     }
     bindLocal(ki, state, ConstantExpr::alloc(Result, Expr::Bool));
     break;
@@ -1832,15 +1822,13 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       l = ExtractExpr::create(agg, 0, lOffset);
     if (rOffset < agg->getWidth())
       r = ExtractExpr::create(agg, rOffset, agg->getWidth() - rOffset);
-    ref<Expr> result;
+    ref<Expr> result = val;
     if (!l.isNull() && !r.isNull())
       result = ConcatExpr::create(r, ConcatExpr::create(val, l));
     else if (!l.isNull())
       result = ConcatExpr::create(val, l);
     else if (!r.isNull())
       result = ConcatExpr::create(r, val);
-    else
-      result = val;
     bindLocal(ki, state, result);
     break;
   }
