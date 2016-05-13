@@ -29,21 +29,7 @@ namespace klee {
   class Expr;
   class InstructionInfoTable;
   struct KInstruction;
-  class KModule;
-  template<class T> class ref; 
-  struct KFunction {
-    llvm::Function *function; 
-    unsigned numArgs, numRegisters; 
-    unsigned numInstructions;
-    KInstruction **instructions; 
-    std::map<llvm::BasicBlock*, unsigned> basicBlockEntry; 
-  private:
-    KFunction(const KFunction&);
-    KFunction &operator=(const KFunction&); 
-  public:
-    explicit KFunction(llvm::Function*, KModule *);
-    ~KFunction(); 
-  }; 
+  struct KFunction;
 
   class KConstant {
   public:

@@ -47,7 +47,6 @@ namespace klee {
   class ExternalDispatcher;
   class Expr;
   class InstructionInfoTable;
-  struct KFunction;
   class KInstIterator;
   class MemoryManager;
   class MemoryObject;
@@ -59,6 +58,22 @@ namespace klee {
   class StatsTracker;
   class TreeStreamWriter;
   template<class T> class ref;
+  class KModule;
+  template<class T> class ref; 
+
+  struct KFunction {
+    llvm::Function *function; 
+    unsigned numArgs, numRegisters; 
+    unsigned numInstructions;
+    KInstruction **instructions; 
+    std::map<llvm::BasicBlock*, unsigned> basicBlockEntry; 
+  private:
+    KFunction(const KFunction&);
+    KFunction &operator=(const KFunction&); 
+  public:
+    explicit KFunction(llvm::Function*, KModule *);
+    ~KFunction(); 
+  }; 
 
   class TimingSolver {
   public:

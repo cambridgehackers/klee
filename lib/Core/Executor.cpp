@@ -2629,6 +2629,74 @@ static Function *getStubFunctionForCtorList(Module *m, GlobalVariable *gv, std::
   return fn;
 }
 
+static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap, KModule *km, KInstruction *ki) {
+  if (Instruction *inst = dyn_cast<Instruction>(v))
+    return registerMap[inst];
+  else if (Argument *a = dyn_cast<Argument>(v))
+    return a->getArgNo(); // Metadata is no longer a Value
+  else if (isa<BasicBlock>(v) || isa<InlineAsm>(v))
+    return -1;
+  else {
+    assert(isa<Constant>(v));
+    Constant *c = cast<Constant>(v);
+    return -(km->getConstantID(c, ki) + 2);
+  }
+}
+
+KFunction::KFunction(llvm::Function *_function, KModule *km) 
+  : function(_function),
+    numArgs(function->arg_size()),
+    numInstructions(0) {
+  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit) {
+    BasicBlock *bb = bbit;
+    basicBlockEntry[bb] = numInstructions;
+    numInstructions += bb->size();
+  } 
+  instructions = new KInstruction*[numInstructions]; 
+  std::map<Instruction*, unsigned> registerMap; 
+  // The first arg_size() registers are reserved for formals.
+  unsigned rnum = numArgs;
+  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
+    for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it)
+      registerMap[it] = rnum++;
+  numRegisters = rnum; 
+  unsigned i = 0;
+  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
+    for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
+      KInstruction *ki; 
+      switch(it->getOpcode()) {
+      case Instruction::GetElementPtr: case Instruction::InsertValue: case Instruction::ExtractValue:
+        ki = new KGEPInstruction(); break;
+      default:
+        ki = new KInstruction(); break;
+      } 
+      ki->inst = it;      
+      ki->dest = registerMap[it]; 
+      if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
+        CallSite cs(it);
+        unsigned numArgs = cs.arg_size();
+        ki->operands = new int[numArgs+1];
+        ki->operands[0] = getOperandNum(cs.getCalledValue(), registerMap, km, ki);
+        for (unsigned j=0; j<numArgs; j++) {
+          Value *v = cs.getArgument(j);
+          ki->operands[j+1] = getOperandNum(v, registerMap, km, ki);
+        }
+      } else {
+        unsigned numOperands = it->getNumOperands();
+        ki->operands = new int[numOperands];
+        for (unsigned j=0; j<numOperands; j++)
+          ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, km, ki);
+      } 
+      instructions[i++] = ki;
+    }
+}
+
+KFunction::~KFunction() {
+  for (unsigned i=0; i<numInstructions; ++i)
+    delete instructions[i];
+  delete[] instructions;
+}
+
 const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
 {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
