@@ -906,9 +906,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
        || i->getName() == "_ZTVN10__cxxabiv120__si_class_type_infoE"
        || i->getName() == "_ZTVN10__cxxabiv121__vmi_class_type_infoE")
           size = 0x2C;
-      if (size == 0) {
+      if (size == 0)
         llvm::errs() << "Unable to find size for global variable: " << i->getName() << " (use will result in out of bounds access)\n";
-      }
     }
     MemoryObject *mo = memory->allocate(size, false, true, i);
     ObjectState *os = bindObjectInState(state, mo, false);
@@ -2037,75 +2036,6 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
   kgepi->offset = constantOffset->getZExtValue();
 }
 
-void Executor::runExecutor(ExecutionState &initialState) {
-printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
-  for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
-    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
-        KInstruction *KI = (*it)->instructions[i];
-        KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
-        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
-            computeOffsets(kgepi, gep_type_begin(gepi), gep_type_end(gepi));
-        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
-            computeOffsets(kgepi, iv_type_begin(ivi), iv_type_end(ivi));
-            assert(kgepi->indices.empty() && "InsertValue constant offset expected");
-        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
-            computeOffsets(kgepi, ev_type_begin(evi), ev_type_end(evi));
-            assert(kgepi->indices.empty() && "ExtractValue constant offset expected");
-        }
-    }
-  }
-  constantTable = new Cell[kmodule->constants.size()];
-  for (unsigned i=0; i<kmodule->constants.size(); ++i)
-      constantTable[i].value = evalConstant(kmodule->constants[i]);
-  // Delay init till now so that ticks don't accrue during optimization and such.
-  states.insert(&initialState);
-  if (CoreSearch.size() == 0) {
-    CoreSearch.push_back(Searcher::RandomPath);
-    CoreSearch.push_back(Searcher::NURS_CovNew);
-  }
-  std::vector<Searcher *> s;
-  for (unsigned i=0; i < CoreSearch.size(); i++) {
-      Searcher *searcher = NULL;
-      switch (CoreSearch[i]) {
-      case Searcher::DFS: searcher = new DFSSearcher(); break;
-      case Searcher::BFS: searcher = new BFSSearcher(); break;
-      case Searcher::RandomState: searcher = new RandomSearcher(); break;
-      case Searcher::RandomPath: searcher = new RandomPathSearcher(*this); break;
-      case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew); break;
-      case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered); break;
-      case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth); break;
-      case Searcher::NURS_ICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::InstCount); break;
-      case Searcher::NURS_CPICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CPInstCount); break;
-      case Searcher::NURS_QC: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost); break;
-      }
-      s.push_back(searcher);
-  }
-  Searcher *searcher = s[0];
-  if (CoreSearch.size() > 1)
-    searcher = new InterleavedSearcher(s);
-  searcher->update(0, states, std::set<ExecutionState*>());
-  while (!states.empty()) {
-    ExecutionState &state = searcher->selectState();
-    executeInstruction(state);
-    searcher->update(&state, addedStates, removedStates);
-    states.insert(addedStates.begin(), addedStates.end());
-    addedStates.clear();
-    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
-      ExecutionState *es = *it;
-      std::set<ExecutionState*>::iterator it2 = states.find(es);
-      assert(it2!=states.end());
-      states.erase(it2);
-      std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it3 = seedMap.find(es);
-      if (it3 != seedMap.end())
-        seedMap.erase(it3);
-      processTree->remove(es->ptreeNode);
-      delete es;
-    }
-    removedStates.clear();
-  }
-printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
-}
-
 std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) const{
   std::string Str;
   llvm::raw_string_ostream info(Str);
@@ -2548,23 +2478,93 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
     }
 }
 
-/***/
+void Executor::runExecutor(ExecutionState &initialState) {
+printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
+  for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
+    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
+        KInstruction *KI = (*it)->instructions[i];
+        KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
+        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
+            computeOffsets(kgepi, gep_type_begin(gepi), gep_type_end(gepi));
+        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
+            computeOffsets(kgepi, iv_type_begin(ivi), iv_type_end(ivi));
+            assert(kgepi->indices.empty() && "InsertValue constant offset expected");
+        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
+            computeOffsets(kgepi, ev_type_begin(evi), ev_type_end(evi));
+            assert(kgepi->indices.empty() && "ExtractValue constant offset expected");
+        }
+    }
+  }
+  constantTable = new Cell[kmodule->constants.size()];
+  for (unsigned i=0; i<kmodule->constants.size(); ++i)
+      constantTable[i].value = evalConstant(kmodule->constants[i]);
+  // Delay init till now so that ticks don't accrue during optimization and such.
+  states.insert(&initialState);
+  if (CoreSearch.size() == 0) {
+    CoreSearch.push_back(Searcher::RandomPath);
+    CoreSearch.push_back(Searcher::NURS_CovNew);
+  }
+  std::vector<Searcher *> s;
+  for (unsigned i=0; i < CoreSearch.size(); i++) {
+      Searcher *searcher = NULL;
+      switch (CoreSearch[i]) {
+      case Searcher::DFS: searcher = new DFSSearcher(); break;
+      case Searcher::BFS: searcher = new BFSSearcher(); break;
+      case Searcher::RandomState: searcher = new RandomSearcher(); break;
+      case Searcher::RandomPath: searcher = new RandomPathSearcher(*this); break;
+      case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew); break;
+      case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered); break;
+      case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth); break;
+      case Searcher::NURS_ICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::InstCount); break;
+      case Searcher::NURS_CPICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CPInstCount); break;
+      case Searcher::NURS_QC: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost); break;
+      }
+      s.push_back(searcher);
+  }
+  Searcher *searcher = s[0];
+  if (CoreSearch.size() > 1)
+    searcher = new InterleavedSearcher(s);
+  searcher->update(0, states, std::set<ExecutionState*>());
+  while (!states.empty()) {
+    ExecutionState &state = searcher->selectState();
+    executeInstruction(state);
+    searcher->update(&state, addedStates, removedStates);
+    states.insert(addedStates.begin(), addedStates.end());
+    addedStates.clear();
+    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+      ExecutionState *es = *it;
+      std::set<ExecutionState*>::iterator it2 = states.find(es);
+      assert(it2!=states.end());
+      states.erase(it2);
+      std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it3 = seedMap.find(es);
+      if (it3 != seedMap.end())
+        seedMap.erase(it3);
+      processTree->remove(es->ptreeNode);
+      delete es;
+    }
+    removedStates.clear();
+  }
+printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
+}
+
 void Executor::runFunctionAsMain(Function *f, int argc, char **argv, char **envp) {
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
+  unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
   std::vector<ref<Expr> > arguments;
+  KFunction *kf = kmodule->functionMap[f];
+  assert(kf);
   // force deterministic initialization of memory objects
   srand(1);
   srandom(1);
   MemoryObject *argvMO = 0;
+  std::set<std::string> undefinedSymbols;
+  GetAllUndefinedSymbols(kf->function->getParent(), undefinedSymbols);
   // In order to make uclibc happy and be closer to what the system is
   // doing we lay out the environments at the end of the argv array
   // (both are terminated by a null). There is also a final terminating
   // null that uclibc seems to expect, possibly the ELF header?
   int envc;
   for (envc=0; envp[envc]; ++envc) ;
-  unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
-  KFunction *kf = kmodule->functionMap[f];
-  assert(kf);
   Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
   if (ai!=ae) {
     arguments.push_back(ConstantExpr::alloc(argc, Expr::Int32));
@@ -2579,7 +2579,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       }
     }
   }
-  ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
+  ExecutionState *state = new ExecutionState(kf);
   if (pathWriter)
     state->pathOS = pathWriter->open();
   if (symPathWriter)
@@ -2591,10 +2591,9 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   if (argvMO) {
     ObjectState *argvOS = bindObjectInState(*state, argvMO, false);
     for (int i=0; i<argc+1+envc+1+1; i++) {
-      if (i==argc || i>=argc+1+envc) {
-        // Write NULL pointer
-        argvOS->write(i * NumPtrBytes, Expr::createPointer(0));
-      } else {
+      if (i==argc || i>=argc+1+envc)
+        argvOS->write(i * NumPtrBytes, Expr::createPointer(0)); // Write NULL pointer
+      else {
         char *s = i<argc ? argv[i] : envp[i-(argc+1)];
         int j, len = strlen(s);
 
@@ -2612,8 +2611,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
 printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
-  std::set<std::string> undefinedSymbols;
-  GetAllUndefinedSymbols(kf->function->getParent(), undefinedSymbols);
   runExecutor(*state);
 printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   delete processTree;
