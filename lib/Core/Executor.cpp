@@ -876,8 +876,6 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state, void *addr, un
 
 void Executor::initializeGlobals(ExecutionState &state) {
   Module *m = kmodule->module;
-  if (m->getModuleInlineAsm() != "")
-    klee_warning("executable has module level assembly (ignoring)");
   // represent function globals using the address of the actual llvm function
   // object. given that we use malloc to allocate memory in states this also
   // ensures that we won't conflict. we don't need to allocate a memory object
@@ -2553,6 +2551,8 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   std::vector<ref<Expr> > arguments;
   KFunction *kf = kmodule->functionMap[f];
   assert(kf);
+  if (kmodule->module->getModuleInlineAsm() != "")
+    klee_warning("executable has module level assembly (ignoring)");
   // force deterministic initialization of memory objects
   srand(1);
   srandom(1);

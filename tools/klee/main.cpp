@@ -91,6 +91,7 @@ public:
   }
   llvm::raw_ostream &getInfoStream() const { return *m_infoFile; }
   void incPathsExplored() { m_pathsExplored++; }
+  std::string getOutputFilename(const std::string &filename) { return "tmp/" + filename; }
   void setInterpreter(Interpreter *i) {
       m_interpreter = i;
       m_pathWriter = new TreeStreamWriter(getOutputFilename("paths.ts"));
@@ -99,9 +100,6 @@ public:
       m_symPathWriter = new TreeStreamWriter(getOutputFilename("symPaths.ts"));
       assert(m_symPathWriter->good());
       m_interpreter->setSymbolicPathWriter(m_symPathWriter);
-  }
-  std::string getOutputFilename(const std::string &filename) {
-    return "tmp/" + filename;
   }
   llvm::raw_fd_ostream *openOutputFile(const std::string &filename) {
     llvm::raw_fd_ostream *f;
@@ -216,14 +214,6 @@ int main(int argc, char **argv, char **envp)
     llvm::outs() << "'main' function not found in module.\n";
     return -1;
   }
-  Interpreter::InterpreterOptions IOpts;
-  IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
-  KleeHandler *handler = new KleeHandler();
-printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
-  Interpreter *interpreter = Interpreter::create(IOpts, handler);
-  handler->setInterpreter(interpreter);
-  const Module *finalModule = interpreter->setModule(mainModule, Opts);
-printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
   char **pArgv = new char *[InputArgv.size() + 1];
   for (unsigned i=0; i<InputArgv.size()+1; i++) {
     std::string &arg = (i==0 ? InputFile : InputArgv[i-1]);
@@ -233,6 +223,15 @@ printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
     pArg[size - 1] = 0; 
     pArgv[i] = pArg;
   } 
+
+  Interpreter::InterpreterOptions IOpts;
+  IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
+  KleeHandler *handler = new KleeHandler();
+printf("[%s:%d] create Interpreter\n", __FUNCTION__, __LINE__);
+  Interpreter *interpreter = Interpreter::create(IOpts, handler);
+  handler->setInterpreter(interpreter);
+  const Module *finalModule = interpreter->setModule(mainModule, Opts);
+printf("[%s:%d] before runFunctionAsMain\n", __FUNCTION__, __LINE__);
   interpreter->runFunctionAsMain(mainFn, InputArgv.size() + 1, pArgv, envp);
   uint64_t queries = stats::queries;
   llvm::outs() << "KLEE: done: explored paths = " << 1 + stats::forks << "\n";
