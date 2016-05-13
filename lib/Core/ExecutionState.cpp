@@ -138,23 +138,6 @@ void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) {
 }
 ///
 
-std::string ExecutionState::getFnAlias(std::string fn) {
-  auto it = fnAliases.find(fn);
-  if (it != fnAliases.end())
-    return it->second;
-  else return "";
-}
-
-void ExecutionState::addFnAlias(std::string old_fn, std::string new_fn) {
-  fnAliases[old_fn] = new_fn;
-}
-
-void ExecutionState::removeFnAlias(std::string fn) {
-  fnAliases.erase(fn);
-}
-
-/**/
-
 llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) {
   os << "{";
   auto it = mm.begin();

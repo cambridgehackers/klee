@@ -123,9 +123,6 @@ public:
   std::vector<std::pair<const MemoryObject *, const Array *> > symbolics; 
   /// @brief Set of used array names for this state.  Used to avoid collisions.
   std::set<std::string> arrayNames; 
-  std::string getFnAlias(std::string fn);
-  void addFnAlias(std::string old_fn, std::string new_fn);
-  void removeFnAlias(std::string fn); 
 private:
   ExecutionState() : ptreeNode(0) {} 
 public:
