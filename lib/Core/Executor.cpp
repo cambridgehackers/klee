@@ -1313,8 +1313,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src, ExecutionS
 
   // XXX this lookup has to go ?
   KFunction *kf = state.stack.back().deprkf;
-  unsigned entry = kf->basicBlockEntry[dst];
-  state.pc = &kf->instructions[entry];
+  state.pc = &kf->instructions[kf->basicBlockEntry[dst]];
   if (state.pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(state.pc->inst);
     state.incomingBBIndex = first->getBasicBlockIndex(src);
