@@ -7,7 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 #include "StatsTracker.h"
-#include "klee/ExecutionState.h"
 #include "klee/Statistics.h"
 #include "klee/Config/Version.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"

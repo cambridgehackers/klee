@@ -10,7 +10,6 @@
 //===----------------------------------------------------------------------===//
 #include "llvm/Support/Debug.h"
 #include "../lib/Core/CoreStats.h"
-#include "klee/ExecutionState.h"
 #include "klee/SolverStats.h"
 #include "klee/Expr.h"
 #include "klee/Interpreter.h"

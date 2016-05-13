@@ -8,7 +8,6 @@
 //===----------------------------------------------------------------------===//
 #include "Memory.h"
 #include "SpecialFunctionHandler.h"
-#include "klee/ExecutionState.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/Debug.h"

@@ -9,7 +9,6 @@
 #include "Memory.h"
 #include "SeedInfo.h"
 #include "Executor.h"
-#include "klee/ExecutionState.h"
 #include "klee/Expr.h"
 #include "klee/util/ExprUtil.h"
 #include "klee/Internal/ADT/KTest.h"
