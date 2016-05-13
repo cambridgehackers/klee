@@ -64,6 +64,10 @@
 #include <vector>
 #include <string>
 
+namespace llvm {
+extern void Optimize(Module*);
+}
+
 using namespace llvm;
 using namespace klee;
 
@@ -2600,10 +2604,6 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
     statsTracker->done();
 }
 
-namespace llvm {
-extern void Optimize(Module*);
-}
-
 // what a hack
 static Function *getStubFunctionForCtorList(Module *m, GlobalVariable *gv, std::string name) {
   assert(!gv->isDeclaration() && !gv->hasInternalLinkage() && "do not support old LLVM style constructor/destructor lists"); 
@@ -2611,11 +2611,8 @@ static Function *getStubFunctionForCtorList(Module *m, GlobalVariable *gv, std::
   Function *fn = Function::Create( FunctionType::get(Type::getVoidTy(getGlobalContext()), nullary, false),
       GlobalVariable::InternalLinkage, name, m);
   BasicBlock *bb = BasicBlock::Create(getGlobalContext(), "entry", fn); 
-  // From lli:
-  // Should be an array of '{ int, void ()* }' structs.  The first value is
-  // the init priority, which we ignore.
-  ConstantArray *arr = dyn_cast<ConstantArray>(gv->getInitializer());
-  if (arr) {
+  // From lli: // Should be an array of '{ int, void ()* }' structs.  The first value is // the init priority, which we ignore.
+  if (ConstantArray *arr = dyn_cast<ConstantArray>(gv->getInitializer()))
     for (unsigned i=0; i<arr->getNumOperands(); i++) {
       ConstantStruct *cs = cast<ConstantStruct>(arr->getOperand(i));
       // There is a third *optional* element in global_ctor elements (``i8 // @data``).
@@ -2624,35 +2621,14 @@ static Function *getStubFunctionForCtorList(Module *m, GlobalVariable *gv, std::
       if (!fp->isNullValue()) {
         if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(fp))
           fp = ce->getOperand(0); 
-        if (Function *f = dyn_cast<Function>(fp)) {
+        if (Function *f = dyn_cast<Function>(fp))
 	  CallInst::Create(f, "", bb);
-        } else {
+        else
           assert(0 && "unable to get function pointer from ctor initializer list");
-        }
       }
     }
-  } 
   ReturnInst::Create(getGlobalContext(), bb); 
   return fn;
-}
-
-static void injectStaticConstructorsAndDestructors(Module *m) {
-  GlobalVariable *ctors = m->getNamedGlobal("llvm.global_ctors");
-  GlobalVariable *dtors = m->getNamedGlobal("llvm.global_dtors"); 
-  if (ctors || dtors) {
-    Function *mainFn = m->getFunction("main");
-    if (!mainFn)
-      klee_error("Could not find main() function."); 
-    if (ctors)
-    CallInst::Create(getStubFunctionForCtorList(m, ctors, "klee.ctor_stub"), "", mainFn->begin()->begin());
-    if (dtors) {
-      Function *dtorStub = getStubFunctionForCtorList(m, dtors, "klee.dtor_stub");
-      for (auto it = mainFn->begin(), ie = mainFn->end(); it != ie; ++it) {
-        if (isa<ReturnInst>(it->getTerminator()))
-	  CallInst::Create(dtorStub, "", it->getTerminator());
-      }
-    }
-  }
 }
 
 const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
@@ -2673,32 +2649,41 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   // FIXME: This false here is to work around a bug in // IntrinsicLowering which caches values which may eventually be
   // deleted (via RAUW). This can be removed once LLVM fixes this // issue.
   pm.add(new IntrinsicCleanerPass(*kmodule->targetData, false));
-printf("[%s:%d] before run newstufffffff\n", __FUNCTION__, __LINE__);
+printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   pm.run(*module);
-printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
+printf("[%s:%d] after runpreprocessmodule\n", __FUNCTION__, __LINE__);
 
   if (opts.Optimize)
     Optimize(module);
-  // FIXME: Missing force import for various math functions.  
-  // FIXME: Find a way that we can test programs without requiring
-  // this to be linked in, it makes low level debugging much more
-  // annoying.
-
 #if 0 //jca
   SmallString<128> LibPath(opts.LibraryDir);
   llvm::sys::path::append(LibPath, "kleeRuntimeIntrinsic.bc");
   module = linkWithLibrary(module, LibPath.str());
 #endif
-
-  // Add internal functions which are not used to check if instructions
-  // have been already visited
-    kmodule->addInternalFunction("klee_div_zero_check");
-    kmodule->addInternalFunction("klee_overshift_check");
-
-
+  // Add internal functions which are not used to check if instructions // have been already visited
+  kmodule->addInternalFunction("klee_div_zero_check");
+  kmodule->addInternalFunction("klee_overshift_check");
   // Needs to happen after linking (since ctors/dtors can be modified)
   // and optimization (since global optimization can rewrite lists).
-  injectStaticConstructorsAndDestructors(module);
+//  injectStaticConstructorsAndDestructors(module);
+//static void injectStaticConstructorsAndDestructors(Module *module) 
+//{
+  GlobalVariable *ctors = module->getNamedGlobal("llvm.global_ctors");
+  GlobalVariable *dtors = module->getNamedGlobal("llvm.global_dtors"); 
+  if (ctors || dtors) {
+    Function *mainFn = module->getFunction("main");
+    if (!mainFn)
+      klee_error("Could not find main() function."); 
+    if (ctors)
+      CallInst::Create(getStubFunctionForCtorList(module, ctors, "klee.ctor_stub"), "", mainFn->begin()->begin());
+    if (dtors) {
+      Function *dtorStub = getStubFunctionForCtorList(module, dtors, "klee.dtor_stub");
+      for (auto it = mainFn->begin(), ie = mainFn->end(); it != ie; ++it)
+        if (isa<ReturnInst>(it->getTerminator()))
+	  CallInst::Create(dtorStub, "", it->getTerminator());
+    }
+  }
+//}
 
   // Finally, run the passes that maintain invariants we expect during
   // interpretation. We run the intrinsic cleaner just in case we
@@ -2730,24 +2715,21 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   kmodule->kleeMergeFn = module->getFunction("klee_merge"); 
   /* Build shadow structures */ 
   kmodule->infos = new InstructionInfoTable(module);  
-  for (auto it = module->begin(), ie = module->end(); it != ie; ++it) {
-    if (it->isDeclaration())
-      continue; 
-    KFunction *kf = new KFunction(it, kmodule); 
-    for (unsigned i=0; i<kf->numInstructions; ++i) {
-      KInstruction *ki = kf->instructions[i];
-      ki->info = &kmodule->infos->getInfo(ki->inst);
-    } 
-    kmodule->functions.push_back(kf);
-    kmodule->functionMap.insert(std::make_pair(it, kf));
-  } 
-  /* Compute various interesting properties */ 
+  for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
+    if (!it->isDeclaration()) {
+      KFunction *kf = new KFunction(it, kmodule); 
+      for (unsigned i=0; i<kf->numInstructions; ++i) {
+        KInstruction *ki = kf->instructions[i];
+        ki->info = &kmodule->infos->getInfo(ki->inst);
+      } 
+      kmodule->functions.push_back(kf);
+      kmodule->functionMap.insert(std::make_pair(it, kf));
+    }
   for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
     Function *f = (*it)->function;
     if (functionEscapes(f))
       kmodule->escapingFunctions.insert(f);
   }
-
   if (!kmodule->escapingFunctions.empty()) {
     llvm::errs() << "KLEE: escaping functions: [";
     for (auto it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it)
