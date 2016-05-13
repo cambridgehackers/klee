@@ -156,7 +156,7 @@ private:
   const ref<Expr> eval(KInstruction *ki, unsigned index, ExecutionState &state) const; 
   void getArgumentCell(ExecutionState &state, KFunction *kf, unsigned aSize, std::vector<ref<Expr>> &arguments) {
     for (unsigned i = 0; i < aSize; i++)
-        state.stack.back().locals[kf->getArgRegister(i)].value = arguments[i];
+        state.stack.back().locals[i].value = arguments[i];
   }
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce); 
   /// Return a constant value for the given expression, forcing it to

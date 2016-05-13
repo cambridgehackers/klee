@@ -43,7 +43,6 @@ namespace klee {
   public:
     explicit KFunction(llvm::Function*, KModule *);
     ~KFunction(); 
-    unsigned getArgRegister(unsigned index) { return index; }
   }; 
 
   class KConstant {
