@@ -169,6 +169,7 @@ private:
   void terminateStateEarly(ExecutionState &state, const llvm::Twine &message);
   template <typename TypeIt>
   void computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie); 
+  void prepareModule(const Interpreter::ModuleOptions &opts, InterpreterHandler *ih);
 
 public: //friends
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array = 0); 

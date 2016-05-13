@@ -2659,7 +2659,7 @@ static void injectStaticConstructorsAndDestructors(Module *m) {
   }
 }
 
-void KModule::prepareModule(const Interpreter::ModuleOptions &opts, InterpreterHandler *ih) {
+void Executor::prepareModule(const Interpreter::ModuleOptions &opts, InterpreterHandler *ih) {
   // Inject checks prior to optimization... we also perform the // invariant transformations that we will end up doing later so that
   // optimize is seeing what is as close as possible to the final // module.
   legacy::PassManager pm;
@@ -2668,13 +2668,13 @@ void KModule::prepareModule(const Interpreter::ModuleOptions &opts, InterpreterH
   pm.add(new OvershiftCheckPass());
   // FIXME: This false here is to work around a bug in // IntrinsicLowering which caches values which may eventually be
   // deleted (via RAUW). This can be removed once LLVM fixes this // issue.
-  pm.add(new IntrinsicCleanerPass(*targetData, false));
+  pm.add(new IntrinsicCleanerPass(*kmodule->targetData, false));
 printf("[%s:%d] before run newstufffffff\n", __FUNCTION__, __LINE__);
-  pm.run(*module);
+  pm.run(*kmodule->module);
 printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 
   if (opts.Optimize)
-    Optimize(module);
+    Optimize(kmodule->module);
   // FIXME: Missing force import for various math functions.
 
   // FIXME: Find a way that we can test programs without requiring
@@ -2684,18 +2684,18 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 #if 0 //jca
   SmallString<128> LibPath(opts.LibraryDir);
   llvm::sys::path::append(LibPath, "kleeRuntimeIntrinsic.bc");
-  module = linkWithLibrary(module, LibPath.str());
+  kmodule->module = linkWithLibrary(kmodule->module, LibPath.str());
 #endif
 
   // Add internal functions which are not used to check if instructions
   // have been already visited
-    addInternalFunction("klee_div_zero_check");
-    addInternalFunction("klee_overshift_check");
+    kmodule->addInternalFunction("klee_div_zero_check");
+    kmodule->addInternalFunction("klee_overshift_check");
 
 
   // Needs to happen after linking (since ctors/dtors can be modified)
   // and optimization (since global optimization can rewrite lists).
-  injectStaticConstructorsAndDestructors(module);
+  injectStaticConstructorsAndDestructors(kmodule->module);
 
   // Finally, run the passes that maintain invariants we expect during
   // interpretation. We run the intrinsic cleaner just in case we
@@ -2704,15 +2704,15 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
   // directly I think?
   legacy::PassManager pm3;
   pm3.add(createCFGSimplificationPass());
-  switch(m_SwitchType) {
-  case eSwitchTypeInternal: break;
-  case eSwitchTypeSimple: pm3.add(new LowerSwitchPass()); break;
-  case eSwitchTypeLLVM:  pm3.add(createLowerSwitchPass()); break;
+  switch(kmodule->m_SwitchType) {
+  case KModule::eSwitchTypeInternal: break;
+  case KModule::eSwitchTypeSimple: pm3.add(new LowerSwitchPass()); break;
+  case KModule::eSwitchTypeLLVM:  pm3.add(createLowerSwitchPass()); break;
   default: klee_error("invalid --switch-type");
   }
-  pm3.add(new IntrinsicCleanerPass(*targetData));
+  pm3.add(new IntrinsicCleanerPass(*kmodule->targetData));
   pm3.add(new PhiCleanerPass());
-  pm3.run(*module);
+  pm3.run(*kmodule->module);
 
   // Write out the .ll assembly file. We truncate long lines to work
   // around a kcachegrind parsing bug (it puts them on new lines), so
@@ -2721,33 +2721,33 @@ printf("[%s:%d] after run newstufffffff\n", __FUNCTION__, __LINE__);
 printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
     llvm::raw_fd_ostream *os = ih->openOutputFile("assembly.ll");
     assert(os && !os->has_error() && "unable to open source output");
-    *os << *module;
+    *os << *kmodule->module;
     delete os;
   } 
-  kleeMergeFn = module->getFunction("klee_merge"); 
+  kmodule->kleeMergeFn = kmodule->module->getFunction("klee_merge"); 
   /* Build shadow structures */ 
-  infos = new InstructionInfoTable(module);  
-  for (Module::iterator it = module->begin(), ie = module->end(); it != ie; ++it) {
+  kmodule->infos = new InstructionInfoTable(kmodule->module);  
+  for (Module::iterator it = kmodule->module->begin(), ie = kmodule->module->end(); it != ie; ++it) {
     if (it->isDeclaration())
       continue; 
-    KFunction *kf = new KFunction(it, this); 
+    KFunction *kf = new KFunction(it, kmodule); 
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
-      ki->info = &infos->getInfo(ki->inst);
+      ki->info = &kmodule->infos->getInfo(ki->inst);
     } 
-    functions.push_back(kf);
-    functionMap.insert(std::make_pair(it, kf));
+    kmodule->functions.push_back(kf);
+    kmodule->functionMap.insert(std::make_pair(it, kf));
   } 
   /* Compute various interesting properties */ 
-  for (std::vector<KFunction*>::iterator it = functions.begin(), ie = functions.end(); it != ie; ++it) {
+  for (std::vector<KFunction*>::iterator it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
     if (functionEscapes(kf->function))
-      escapingFunctions.insert(kf->function);
+      kmodule->escapingFunctions.insert(kf->function);
   }
 
-  if (!escapingFunctions.empty()) {
+  if (!kmodule->escapingFunctions.empty()) {
     llvm::errs() << "KLEE: escaping functions: [";
-    for (std::set<Function*>::iterator it = escapingFunctions.begin(), ie = escapingFunctions.end(); it != ie; ++it) {
+    for (std::set<Function*>::iterator it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it) {
       llvm::errs() << (*it)->getName() << ", ";
     }
     llvm::errs() << "]\n";
@@ -2763,7 +2763,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   Context::initialize(TD->isLittleEndian(), (Expr::Width) TD->getPointerSizeInBits());
   specialFunctionHandler = new SpecialFunctionHandler(*this);
   specialFunctionHandler->prepare();
-  kmodule->prepareModule(opts, interpreterHandler);
+  //kmodule->
+  prepareModule(opts, interpreterHandler);
   specialFunctionHandler->bind();
   if (StatsTracker::useStatistics()) {
 printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
