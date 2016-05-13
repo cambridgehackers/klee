@@ -1233,7 +1233,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
-    state.pushFrame(state.prevPC, kf);
+    state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
     state.pc = kf->instructions;
     if (statsTracker)
       statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
@@ -1311,7 +1311,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src, ExecutionS
   // instructions know which argument to eval, set the pc, and continue.
 
   // XXX this lookup has to go ?
-  KFunction *kf = state.stack.back().deprkf;
+  KFunction *kf = kmodule->functionMap[state.stack.back().func];
   state.pc = &kf->instructions[kf->basicBlockEntry[dst]];
   if (state.pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(state.pc->inst);
@@ -2557,7 +2557,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       }
     }
   }
-  ExecutionState *state = new ExecutionState(kf);
+  ExecutionState *state = new ExecutionState(kf->instructions, kf->function, kf->numRegisters);
   if (pathWriter)
     state->pathOS = pathWriter->open();
   if (symPathWriter)

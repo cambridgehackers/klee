@@ -29,7 +29,6 @@ namespace klee {
 class Array;
 class CallPathNode;
 struct Cell;
-struct KFunction;
 struct KInstruction;
 class MemoryObject;
 class PTreeNode;
@@ -39,7 +38,6 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
 
 struct StackFrame {
   KInstIterator caller;
-  KFunction *deprkf;
   llvm::Function *func;
   unsigned numRegisters;
   CallPathNode *callPathNode;
@@ -61,7 +59,7 @@ struct StackFrame {
   // of intrinsic lowering.
   MemoryObject *varargs;
 
-  StackFrame(KInstIterator caller, KFunction *kf);
+  StackFrame(KInstIterator _caller, llvm::Function *_kf, unsigned _numRegisters);
   StackFrame(const StackFrame &s);
   ~StackFrame();
 };
@@ -126,13 +124,13 @@ public:
 private:
   ExecutionState() : ptreeNode(0) {} 
 public:
-  ExecutionState(KFunction *kf); 
+  ExecutionState(KInstruction **_instructions, llvm::Function *_func, unsigned _numRegisters);
   // XXX total hack, just used to make a state so solver can // use on structure
   ExecutionState(const std::vector<ref<Expr> > &assumptions); 
   ExecutionState(const ExecutionState &state); 
   ~ExecutionState(); 
   ExecutionState *branch(); 
-  void pushFrame(KInstIterator caller, KFunction *kf);
+  void pushFrame(KInstIterator caller, llvm::Function *_func, unsigned _numRegisters);
   void popFrame(); 
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); } 
