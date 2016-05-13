@@ -361,13 +361,13 @@ void SpecialFunctionHandler::handleStackTrace(ExecutionState &state, KInstructio
 void SpecialFunctionHandler::handleWarning(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to klee_warning"); 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning("%s: %s", state.stack.back().kf->function->getName().data(), msg_str.c_str());
+  klee_warning("%s: %s", state.stack.back().func->getName().data(), msg_str.c_str());
 }
 
 void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to klee_warning_once"); 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning_once(0, "%s: %s", state.stack.back().kf->function->getName().data(), msg_str.c_str());
+  klee_warning_once(0, "%s: %s", state.stack.back().func->getName().data(), msg_str.c_str());
 }
 
 void SpecialFunctionHandler::handlePrintRange(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {

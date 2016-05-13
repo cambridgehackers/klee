@@ -249,7 +249,7 @@ void StatsTracker::framePushed(ExecutionState &es, StackFrame *parentFrame) {
     StackFrame &sf = es.stack.back(); 
     if (UseCallPaths) {
       CallPathNode *parent = parentFrame ? parentFrame->callPathNode : 0;
-      CallPathNode *cp = callPathManager.getCallPath(parent, sf.caller ? sf.caller->inst : 0, sf.kf->function);
+      CallPathNode *cp = callPathManager.getCallPath(parent, sf.caller ? sf.caller->inst : 0, sf.func);
       sf.callPathNode = cp;
       cp->count++;
     }

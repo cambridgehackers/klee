@@ -34,14 +34,14 @@ namespace {
 /***/
 
 StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
-  : caller(_caller), kf(_kf), func(_kf->function), numRegisters(_kf->numRegisters), callPathNode(0), 
+  : caller(_caller), deprkf(_kf), func(_kf->function), numRegisters(_kf->numRegisters), callPathNode(0), 
     minDistToUncoveredOnReturn(0), varargs(0) {
   locals = new Cell[numRegisters];
 }
 
 StackFrame::StackFrame(const StackFrame &s) 
   : caller(s.caller),
-    kf(s.kf),
+    deprkf(s.deprkf),
     func(s.func),
     numRegisters(s.numRegisters),
     callPathNode(s.callPathNode),
@@ -185,7 +185,7 @@ bool ExecutionState::mergeState(const ExecutionState &b) {
     auto itB = b.stack.begin();
     while (itA!=stack.end() && itB!=b.stack.end()) {
       // XXX vaargs?
-      if (itA->caller != itB->caller || itA->kf->function != itB->kf->function)
+      if (itA->caller != itB->caller || itA->func != itB->func)
         return false;
       ++itA;
       ++itB;
@@ -276,7 +276,7 @@ bool ExecutionState::mergeState(const ExecutionState &b) {
   for (; itA!=stack.end(); ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
-    for (unsigned i=0; i<af.kf->numRegisters; i++) {
+    for (unsigned i=0; i<af.numRegisters; i++) {
       ref<Expr> &av = af.locals[i].value;
       const ref<Expr> &bv = bf.locals[i].value;
       if (av.isNull() || bv.isNull()) {
@@ -315,7 +315,7 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
   const KInstruction *target = prevPC;
   for (auto it = stack.rbegin(), ie = stack.rend(); it != ie; ++it) {
     const StackFrame &sf = *it;
-    Function *f = sf.kf->function;
+    Function *f = sf.func;
     const InstructionInfo &ii = *target->info;
     out << "\t#" << idx++;
     std::stringstream AssStream;
@@ -328,7 +328,7 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
       if (ai!=f->arg_begin()) out << ", "; 
       out << ai->getName().str();
       // XXX should go through function
-      ref<Expr> value = sf.locals[sf.kf->getArgRegister(index++)].value; 
+      ref<Expr> value = sf.locals[sf.deprkf->getArgRegister(index++)].value; 
       if (isa<ConstantExpr>(value))
         out << "=" << value;
     }

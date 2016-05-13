@@ -1312,7 +1312,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src, ExecutionS
   // instructions know which argument to eval, set the pc, and continue.
 
   // XXX this lookup has to go ?
-  KFunction *kf = state.stack.back().kf;
+  KFunction *kf = state.stack.back().deprkf;
   unsigned entry = kf->basicBlockEntry[dst];
   state.pc = &kf->instructions[entry];
   if (state.pc->inst->getOpcode() == Instruction::PHI) {
@@ -2096,7 +2096,7 @@ const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const Execut
   // don't check beyond the outermost function (i.e. main())
   itE--;
   const InstructionInfo * ii = 0;
-  if (kmodule->internalFunctions.count(it->kf->function) == 0){
+  if (kmodule->internalFunctions.count(it->func) == 0){
     ii =  state.prevPC->info;
     *lastInstruction = state.prevPC->inst;
     // Cannot return yet because even though it->function is not an internal function it might of been called from an internal function
