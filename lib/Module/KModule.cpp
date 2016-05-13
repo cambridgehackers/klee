@@ -53,8 +53,6 @@ KModule::KModule(Module *_module)
 
 KModule::~KModule() {
   delete infos; 
-  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it)
-    delete *it; 
   for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
     delete it->second; 
   delete targetData;

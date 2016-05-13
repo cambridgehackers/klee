@@ -2460,7 +2460,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
 
 void Executor::runExecutor(ExecutionState &initialState) {
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
-  for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
+  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
     for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
         KInstruction *KI = (*it)->instructions[i];
         KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
@@ -2782,10 +2782,10 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
         KInstruction *ki = kf->instructions[i];
         ki->info = &kmodule->infos->getInfo(ki->inst);
       } 
-      kmodule->functions.push_back(kf);
+      functions.push_back(kf);
       functionMap.insert(std::make_pair(it, kf));
     }
-  for (auto it = kmodule->functions.begin(), ie = kmodule->functions.end(); it != ie; ++it) {
+  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
     Function *f = (*it)->function;
     if (functionEscapes(f))
       kmodule->escapingFunctions.insert(f);
@@ -2804,7 +2804,7 @@ printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
+         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()), functions);
   }
   if (module->getModuleInlineAsm() != "")
     klee_warning("executable has module level assembly (ignoring)");

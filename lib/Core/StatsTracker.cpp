@@ -122,7 +122,7 @@ static bool instructionIsCoverable(Instruction *i) {
   return true;
 }
 
-StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, bool _updateMinDistToUncovered)
+StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, bool _updateMinDistToUncovered, std::vector<KFunction*> &_functions)
   : executor(_executor),
     objectFilename(_objectFilename),
     statsFile(0),
@@ -147,7 +147,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
   if (OutputIStats)
     theStatisticManager->useIndexedStats(km->infos->getMaxID());
 
-  for (std::vector<KFunction*>::iterator it = km->functions.begin(), ie = km->functions.end(); it != ie; ++it) {
+  for (std::vector<KFunction*>::iterator it = _functions.begin(), ie = _functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
@@ -491,7 +491,7 @@ void StatsTracker::computeReachableUncovered() {
     init = false;
 
     // Compute call targets. It would be nice to use alias information
-    // instead of assuming all indirect calls hit all escaping // functions, eh?
+    // instead of assuming all indirect calls hit all escaping // funcs, eh?
     for (Module::iterator fnIt = m->begin(), fn_ie = m->end(); 
          fnIt != fn_ie; ++fnIt) {
       for (Function::iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
@@ -520,7 +520,7 @@ void StatsTracker::computeReachableUncovered() {
              fie = it->second.end(); fit != fie; ++fit) 
         functionCallers[*fit].push_back(it->first);
 
-    // Initialize minDistToReturn to shortest paths through // functions. 0 is unreachable.
+    // Initialize minDistToReturn to shortest paths through // funcs. 0 is unreachable.
     std::vector<Instruction *> instructions;
     for (Module::iterator fnIt = m->begin(), fn_ie = m->end(); 
          fnIt != fn_ie; ++fnIt) {

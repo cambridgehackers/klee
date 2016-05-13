@@ -27,6 +27,7 @@ namespace klee {
   class InstructionInfoTable;
   class InterpreterHandler;
   struct KInstruction;
+  struct KFunction;
   struct StackFrame;
 
   class StatsTracker {
@@ -56,8 +57,7 @@ namespace klee {
     void writeIStats();
 
   public:
-    StatsTracker(Executor &_executor, std::string _objectFilename,
-                 bool _updateMinDistToUncovered);
+    StatsTracker(Executor &_executor, std::string _objectFilename, bool _updateMinDistToUncovered, std::vector<KFunction*> &_functions);
     ~StatsTracker();
 
     // called after a new StackFrame has been pushed (for callpath tracing)

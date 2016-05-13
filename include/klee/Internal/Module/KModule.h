@@ -47,10 +47,7 @@ namespace klee {
     enum SwitchImplType { eSwitchTypeSimple, eSwitchTypeLLVM, eSwitchTypeInternal }; 
     llvm::Module *module;
     llvm::DataLayout *targetData;
-    // Some useful functions to know the address of
     llvm::Function *kleeMergeFn; 
-    // Our shadow versions of LLVM structures.
-    std::vector<KFunction*> functions;
     // Functions which escape (may be called indirectly) // XXX change to KFunction
     std::set<llvm::Function*> escapingFunctions; 
     InstructionInfoTable *infos; 
