@@ -997,8 +997,7 @@ void StatsTracker::computeReachableUncovered() {
         if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
           std::vector<Function*> &targets = callTargets[inst];
           for (auto fnIt = targets.begin(), ie = targets.end(); fnIt != ie; ++fnIt) {
-            uint64_t dist = functionShortestPath[*fnIt];
-            if (dist) {
+            if (uint64_t dist = functionShortestPath[*fnIt]) {
               dist = 1+dist; // count instruction itself
               if (bestThrough==0 || dist<bestThrough)
                 bestThrough = dist;
@@ -1050,32 +1049,28 @@ void StatsTracker::computeReachableUncovered() {
     for (auto it = instructions.begin(), ie = instructions.end(); it != ie; ++it) {
       Instruction *inst = *it;
       uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToUncovered, infos.getInfo(inst).id);
-      unsigned bestThrough = 0; 
+      unsigned bestThrough = 1;
       if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
+        bestThrough = 0; 
         std::vector<Function*> &targets = callTargets[inst];
         for (auto fnIt = targets.begin(), ie = targets.end(); fnIt != ie; ++fnIt) {
-          uint64_t dist = functionShortestPath[*fnIt];
-          if (dist) {
+          if (uint64_t dist = functionShortestPath[*fnIt]) {
             dist = 1+dist; // count instruction itself
             if (bestThrough==0 || dist<bestThrough)
               bestThrough = dist;
           } 
-          if (!(*fnIt)->isDeclaration()) {
-            uint64_t calleeDist = sm.getIndexedValue(stats::minDistToUncovered, infos.getFunctionInfo(*fnIt).id);
-            if (calleeDist) {
+          if (!(*fnIt)->isDeclaration())
+            if (uint64_t calleeDist =sm.getIndexedValue(stats::minDistToUncovered,infos.getFunctionInfo(*fnIt).id)) {
               calleeDist = 1+calleeDist; // count instruction itself
               if (best==0 || calleeDist<best)
                 best = calleeDist;
             }
-          }
         }
-      } else
-        bestThrough = 1;
+      }
       if (bestThrough) {
         std::vector<Instruction*> succs = getSuccs(inst);
         for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2) {
-          uint64_t dist = sm.getIndexedValue(stats::minDistToUncovered, infos.getInfo(*it2).id);
-          if (dist) {
+          if (uint64_t dist = sm.getIndexedValue(stats::minDistToUncovered, infos.getInfo(*it2).id)) {
             uint64_t val = bestThrough + dist;
             if (best==0 || val<best)
               best = val;
