@@ -14,6 +14,7 @@
 #include "Memory.h"
 #include "MemoryManager.h"
 #include "SeedInfo.h"
+#include "CallPathManager.h"
 #include "SpecialFunctionHandler.h"
 #include "klee/Expr.h"
 #include "klee/Interpreter.h"
@@ -58,7 +59,6 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/Scalar.h"
 #include "../Module/Passes.h"
-#include "CallPathManager.h"
 #include <cassert>
 #include <vector>
 #include <string>
@@ -122,7 +122,7 @@ namespace klee {
     // process stats for a single instruction step, es is the state // about to be stepped
     void stepInstruction(ExecutionState &es); 
     /// Return time in seconds since execution start.
-    double elapsed(); 
+    double elapsed() { return util::getWallTime() - startWallTime; } 
     void computeReachableUncovered();
   }; 
   uint64_t computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA); 
@@ -662,39 +662,10 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
     pausedStates.clear();
   }
 }
-//#include "StatsTracker.h"
-//#include "klee/Statistics.h"
-//#include "klee/Config/Version.h"
-//#include "klee/Internal/Module/InstructionInfoTable.h"
-//#include "klee/Internal/Module/KModule.h"
-//#include "klee/Internal/Module/KInstruction.h"
-//#include "klee/Internal/Support/ModuleUtil.h"
-//#include "klee/Internal/System/MemoryUsage.h"
-//#include "klee/Internal/System/Time.h"
-//#include "klee/Internal/Support/ErrorHandling.h"
-//#include "klee/SolverStats.h"
-//#include "CallPathManager.h"
-//#include "CoreStats.h"
-//#include "Executor.h"
-//#include "MemoryManager.h"
-//#include "llvm/IR/BasicBlock.h"
-//#include "llvm/IR/Function.h"
-//#include "llvm/IR/Instructions.h"
-//#include "llvm/IR/IntrinsicInst.h"
-//#include "llvm/IR/InlineAsm.h"
-//#include "llvm/IR/Module.h"
-//#include "llvm/IR/Type.h"
-//#include "llvm/Support/CommandLine.h"
-//#include "llvm/Support/Process.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/FileSystem.h"
-//#include "llvm/IR/CallSite.h"
 #include "llvm/IR/CFG.h"
-//#include <fstream>
 #include <unistd.h>
-
-//using namespace klee;
-//using namespace llvm;
 
 namespace {
   cl::opt<bool>
@@ -785,11 +756,9 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
         objectFilename = current.c_str();
       }
     }
-  }
-
+  } 
   if (OutputIStats)
-    theStatisticManager->useIndexedStats(km->infos->getMaxID());
-
+    theStatisticManager->useIndexedStats(km->infos->getMaxID()); 
   for (std::vector<KFunction*>::iterator it = _functions.begin(), ie = _functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
     for (unsigned i=0; i<kf->numInstructions; ++i) {
@@ -804,8 +773,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
           if (!bi->isUnconditional())
             numBranches++;
     }
-  }
-
+  } 
   if (OutputStats) {
     statsFile = executor.interpreterHandler->openOutputFile("run.stats");
     assert(statsFile && "unable to open statistics trace file");
@@ -932,10 +900,6 @@ void StatsTracker::writeStatsHeader() {
 #endif
              << ")\n";
   statsFile->flush();
-}
-
-double StatsTracker::elapsed() {
-  return util::getWallTime() - startWallTime;
 }
 
 void StatsTracker::writeStatsLine() {
