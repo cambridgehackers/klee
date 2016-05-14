@@ -69,20 +69,17 @@
 #include <unistd.h>
 
 namespace llvm {
-extern void Optimize(Module*);
+  extern void Optimize(Module*);
+  class BranchInst;
+  class Function;
+  class Instruction;
+  class raw_fd_ostream;
 }
 
 using namespace llvm;
 using namespace klee;
 
 static RNG theRNG;
-
-namespace llvm {
-  class BranchInst;
-  class Function;
-  class Instruction;
-  class raw_fd_ostream;
-}
 
 namespace klee {
   class ExecutionState;
@@ -92,6 +89,20 @@ namespace klee {
   struct KInstruction;
   struct KFunction;
   struct StackFrame;
+
+  struct KFunction {
+    llvm::Function *function; 
+    unsigned numArgs, numRegisters; 
+    unsigned numInstructions;
+    KInstruction **instructions; 
+    std::map<llvm::BasicBlock*, unsigned> basicBlockEntry; 
+  private:
+    KFunction(const KFunction&);
+    KFunction &operator=(const KFunction&); 
+  public:
+    explicit KFunction(llvm::Function*, KModule *);
+    ~KFunction(); 
+  }; 
 
   class StatsTracker {
     friend class WriteStatsTimer;
