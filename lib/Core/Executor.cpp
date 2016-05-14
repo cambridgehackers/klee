@@ -113,17 +113,14 @@ namespace klee {
     unsigned fullBranches, partialBranches; 
     CallPathManager callPathManager;    
     bool updateMinDistToUncovered; 
-  public:
-    unsigned numBranches;
-    static bool useStatistics(); 
-  private:
     void updateStateStatistics(uint64_t addend);
     void writeStatsHeader();
     void writeStatsLine();
     void writeIStats(); 
   public:
+    unsigned numBranches;
     StatsTracker(Executor &_executor, std::string _objectFilename, bool _updateMinDistToUncovered);
-    ~StatsTracker(); 
+    ~StatsTracker() {}
     // called after a new StackFrame has been pushed (for callpath tracing)
     void framePushed(ExecutionState &es, StackFrame *parentFrame); 
     // called after a StackFrame has been popped 
@@ -132,7 +129,10 @@ namespace klee {
     // imperative that this be called when the statistics index is at // the index for the branch itself.
     void markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse); 
     // called when execution is done and stats files should be flushed
-    void done(); 
+    void done() {
+        writeStatsLine();
+        writeIStats();
+    }
     // process stats for a single instruction step, es is the state // about to be stepped
     void stepInstruction(ExecutionState &es); 
     /// Return time in seconds since execution start.
@@ -578,9 +578,8 @@ ExecutionState &MergingSearcher::selectState() {
       std::set<ExecutionState*> toErase;
       for (auto it = toMerge.begin(), ie = toMerge.end(); it != ie; ++it) {
         ExecutionState *mergeWith = *it;
-        if (base->mergeState(*mergeWith)) {
+        if (base->mergeState(*mergeWith))
           toErase.insert(mergeWith);
-        }
       }
       if (DebugLogMerge && !toErase.empty()) {
         llvm::errs() << "\t\tmerged: " << base << " with [";
@@ -739,9 +738,8 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
     SmallString<128> current(objectFilename);
     if(sys::fs::make_absolute(current)) {
       Twine current_twine(current.str()); // requires a twine for this. so silly
-      if (!sys::fs::exists(current_twine)) {
+      if (!sys::fs::exists(current_twine))
         objectFilename = current.c_str();
-      }
     }
   } 
     theStatisticManager->useIndexedStats(km->infos->getMaxID()); 
@@ -755,19 +753,13 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
     //executor.addTimer(new WriteIStatsTimer(this), IStatsWriteInterval);
 }
 
-StatsTracker::~StatsTracker() {  } 
-void StatsTracker::done() {
-    writeStatsLine();
-    writeIStats();
-}
-
 void StatsTracker::stepInstruction(ExecutionState &es) {
       static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0); 
-      if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0) {
-        sys::TimeValue sys(0,0);
+      sys::TimeValue sys(0,0);
+      if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0)
         sys::Process::GetTimeUsage(lastNowTime,lastUserTime,sys);
-      } else {
-        sys::TimeValue now(0,0),user(0,0),sys(0,0);
+      else {
+        sys::TimeValue now(0,0),user(0,0);
         sys::Process::GetTimeUsage(now,user,sys);
         sys::TimeValue delta = user - lastUserTime;
         sys::TimeValue deltaNow = now - lastNowTime;
@@ -797,11 +789,10 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 /* Should be called _after_ the es->pushFrame() */
 void StatsTracker::framePushed(ExecutionState &es, StackFrame *parentFrame) {
     StackFrame &sf = es.stack.back(); 
-      CallPathNode *parent = parentFrame ? parentFrame->callPathNode : 0;
-      CallPathNode *cp = callPathManager.getCallPath(parent, sf.caller ? sf.caller->inst : 0, sf.func);
-      sf.callPathNode = cp;
-      cp->count++;
-
+    CallPathNode *parent = parentFrame ? parentFrame->callPathNode : 0;
+    CallPathNode *cp = callPathManager.getCallPath(parent, sf.caller ? sf.caller->inst : 0, sf.func);
+    sf.callPathNode = cp;
+    cp->count++;
     if (updateMinDistToUncovered) {
       uint64_t minDistAtRA = 0;
       if (parentFrame)
@@ -834,29 +825,29 @@ void StatsTracker::markBranchVisited(ExecutionState *visitedTrue, ExecutionState
 
 void StatsTracker::writeStatsHeader() {
   llvm::outs() << "('Instructions'," << "'FullBranches'," << "'PartialBranches',"
-             << "'NumBranches'," << "'UserTime'," << "'NumStates',"
-             << "'MallocUsage'," << "'NumQueries'," << "'NumQueryConstructs',"
-             << "'NumObjects'," << "'WallTime'," << "'CoveredInstructions',"
-             << "'UncoveredInstructions'," << "'QueryTime'," << "'SolverTime',"
-             << "'CexCacheTime'," << "'ForkTime'," << "'ResolveTime',"
+       << "'NumBranches'," << "'UserTime'," << "'NumStates',"
+       << "'MallocUsage'," << "'NumQueries'," << "'NumQueryConstructs',"
+       << "'NumObjects'," << "'WallTime'," << "'CoveredInstructions',"
+       << "'UncoveredInstructions'," << "'QueryTime'," << "'SolverTime',"
+       << "'CexCacheTime'," << "'ForkTime'," << "'ResolveTime',"
 #ifdef DEBUG
-	     << "'ArrayHashTime',"
+       << "'ArrayHashTime',"
 #endif
-             << ")\n";
+       << ")\n";
 }
 
 void StatsTracker::writeStatsLine() {
   llvm::outs() << "(" << stats::instructions << "," << fullBranches << "," << partialBranches
-             << "," << numBranches << "," << util::getUserTime() << "," << executor.states.size()
-             << "," << util::GetTotalMallocUsage() << "," << stats::queries << "," << stats::queryConstructs
-             << "," << 0 << "," << elapsed() << "," << stats::coveredInstructions
-             << "," << stats::uncoveredInstructions << "," << stats::queryTime / 1000000.
-             << "," << stats::solverTime / 1000000.  << "," << stats::cexCacheTime / 1000000.
-             << "," << stats::forkTime / 1000000.  << "," << stats::resolveTime / 1000000.
+       << "," << numBranches << "," << util::getUserTime() << "," << executor.states.size()
+       << "," << util::GetTotalMallocUsage() << "," << stats::queries << "," << stats::queryConstructs
+       << "," << 0 << "," << elapsed() << "," << stats::coveredInstructions
+       << "," << stats::uncoveredInstructions << "," << stats::queryTime / 1000000.
+       << "," << stats::solverTime / 1000000.  << "," << stats::cexCacheTime / 1000000.
+       << "," << stats::forkTime / 1000000.  << "," << stats::resolveTime / 1000000.
 #ifdef DEBUG
-             << "," << stats::arrayHashTime / 1000000.
+       << "," << stats::arrayHashTime / 1000000.
 #endif
-             << ")\n";
+       << ")\n";
 }
 
 void StatsTracker::updateStateStatistics(uint64_t addend) {
@@ -923,19 +914,19 @@ static std::map<Function*, unsigned> functionShortestPath;
 static std::vector<Instruction*> getSuccs(Instruction *i) {
   BasicBlock *bb = i->getParent();
   std::vector<Instruction*> res; 
-  if (i==bb->getTerminator()) {
+  if (i==bb->getTerminator())
     for (succ_iterator it = succ_begin(bb), ie = succ_end(bb); it != ie; ++it)
       res.push_back(it->begin());
-  } else
+  else
     res.push_back(++BasicBlock::iterator(i));
   return res;
 }
 
 uint64_t klee::computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA) {
   StatisticManager &sm = *theStatisticManager;
-  if (minDistAtRA==0) { // unreachable on return, best is local
+  if (minDistAtRA==0)  // unreachable on return, best is local
     return sm.getIndexedValue(stats::minDistToUncovered, ki->info->id);
-  } else {
+  else {
     uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, ki->info->id);
     uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn, ki->info->id); 
     if (distToReturn==0) // return unreachable, best is local
@@ -973,7 +964,6 @@ void StatsTracker::computeReachableUncovered() {
         }
       }
     }
-
     // Compute function callers as reflexion of callTargets.
     for (auto it = callTargets.begin(), ie = callTargets.end(); it != ie; ++it)
       for (auto fit = it->second.begin(), fie = it->second.end(); fit != fie; ++fit) 
@@ -989,13 +979,12 @@ void StatsTracker::computeReachableUncovered() {
       } else
         functionShortestPath[fnIt] = 0;
       // Not sure if I should bother to preorder here. XXX I should.
-      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
+      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt)
         for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
           instructions.push_back(it);
           unsigned id = infos.getInfo(it).id;
           sm.setIndexedValue(stats::minDistToReturn, id, isa<ReturnInst>(it));
         }
-      }
     } 
     std::reverse(instructions.begin(), instructions.end()); 
     // I'm so lazy it's not even worklisted.
@@ -1021,14 +1010,12 @@ void StatsTracker::computeReachableUncovered() {
           unsigned id = infos.getInfo(*it).id;
           uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToReturn, id);
           std::vector<Instruction*> succs = getSuccs(*it);
-          for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2) {
-            uint64_t dist = sm.getIndexedValue(stats::minDistToReturn, infos.getInfo(*it2).id);
-            if (dist) {
+          for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2)
+            if (uint64_t dist = sm.getIndexedValue(stats::minDistToReturn, infos.getInfo(*it2).id)) {
               uint64_t val = bestThrough + dist;
               if (best==0 || val<best)
                 best = val;
             }
-          }
           // there's a corner case here when a function only includes a single
           // instruction (a ret). in that case, we MUST update
           // functionShortestPath, or it will remain 0 (erroneously indicating
@@ -1047,16 +1034,14 @@ void StatsTracker::computeReachableUncovered() {
   } 
   // compute minDistToUncovered, 0 is unreachable
   std::vector<Instruction *> instructions;
-  for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
+  for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt)
     // Not sure if I should bother to preorder here.
-    for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
+    for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt)
       for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
         unsigned id = infos.getInfo(it).id;
         instructions.push_back(&*it);
         sm.setIndexedValue(stats::minDistToUncovered, id, sm.getIndexedValue(stats::uncoveredInstructions, id));
       }
-    }
-  } 
   std::reverse(instructions.begin(), instructions.end()); 
   // I'm so lazy it's not even worklisted.
   bool changed;
@@ -1133,7 +1118,6 @@ unsigned Executor::getSymbolicPathStreamID(const ExecutionState &state) {
 
 void Executor::getConstraintLog(const ExecutionState &state, std::string &res, Interpreter::LogType logFormat) {
   std::ostringstream info;
-
   switch (logFormat) {
   case STP: {
     Query query(state.constraints, ConstantExpr::alloc(0, Expr::Bool));
@@ -1141,14 +1125,12 @@ void Executor::getConstraintLog(const ExecutionState &state, std::string &res, I
     res = std::string(log);
     free(log);
   } break;
-
   case KQUERY: {
     std::string Str;
     llvm::raw_string_ostream info(Str);
     ExprPPrinter::printConstraints(info, state.constraints);
     res = info.str();
   } break;
-
   case SMTLIB2: {
     std::string Str;
     llvm::raw_string_ostream info(Str);
@@ -1159,7 +1141,6 @@ void Executor::getConstraintLog(const ExecutionState &state, std::string &res, I
     printer.generateOutput();
     res = info.str();
   } break;
-
   default:
     klee_warning("Executor::getConstraintLog() : Log format not supported!");
   }
@@ -1306,7 +1287,6 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_SMT2_FILE_NAME),
       interpreterHandler->getOutputFilename(ALL_QUERIES_PC_FILE_NAME),
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_PC_FILE_NAME));
-
   tsolver = new TimingSolver(osolver);
   memory = new MemoryManager(&arrayCache);
 }
@@ -1437,7 +1417,6 @@ void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &con
   TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
   assert(N);
-
     stats::forks += N-1;
     // XXX do proper balance or keep random?
     result.push_back(&state);
@@ -1785,10 +1764,8 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
         }
       }
       MemoryObject *mo = sf.varargs = memory->allocate(size, true, false, state.prevPC->inst);
-      if ((WordSize == Expr::Int64) && (mo->address & 15)) {
-        // Both 64bit Linux/Glibc and 64bit MacOSX should align to 16 bytes.
+      if ((WordSize == Expr::Int64) && (mo->address & 15))
         klee_warning_once(0, "While allocating varargs: malloc did not align to 16 bytes.");
-      }
       ObjectState *os = bindObjectInState(state, mo, true);
       unsigned offset = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -2638,16 +2615,15 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::string message = messaget.str();
   Instruction * lastInst;
   const InstructionInfo &ii = getLastNonKleeInternalInstruction(state, &lastInst);
-    if (ii.file != "") {
+    if (ii.file != "")
       klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
-    } else {
+    else
       klee_message("ERROR: (location information missing) %s", message.c_str());
-    }
     std::string MsgString;
     llvm::raw_string_ostream msg(MsgString);
     msg << "Error: " << message << "\n";
     if (ii.file != "")
-      msg << "File: " << ii.file << "\n" << "Line: " << ii.line << "\n" << "assembly.ll line: " << ii.assemblyLine << "\n";
+      msg << "File: " << ii.file << "\nLine: " << ii.line << "\nassembly.ll line: " << ii.assemblyLine << "\n";
     msg << "Stack: \n";
     state.dumpStack(msg);
     std::string info_str = info.str();
@@ -2750,11 +2726,9 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     // exactly two values and just fork (but we need to get rid of
     // return argument first). This shows up in pcre when llvm
     // collapses the size expression with a select.
-
     ref<ConstantExpr> example;
     bool success = tsolver->solveGetValue(state, size, example);
     assert(success && "FIXME: Unhandled solver failure");
-
     // Try and start with a small example.
     Expr::Width W = example->getWidth();
     while (example->Ugt(ConstantExpr::alloc(128, W))->isTrue()) {
@@ -2775,12 +2749,12 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       bool res;
       success = tsolver->mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), res);
       assert(success && "FIXME: Unhandled solver failure");
-      if (res) {
+      if (res)
         executeAlloc(*fixedSize.second, tmp, isLocal, target, zeroMemory, reallocFrom);
-      } else {
+      else {
         // See if a *really* big value is possible. If so assume
         // malloc will fail for it, so lets fork and return 0.
-        StatePair hugeSize = stateFork(*fixedSize.second, UltExpr::create(ConstantExpr::alloc(1<<31, W), size), true);
+        StatePair hugeSize = stateFork(*fixedSize.second,UltExpr::create(ConstantExpr::alloc(1<<31,W),size), true);
         if (hugeSize.first) {
           klee_message("NOTE: found huge malloc, returning 0");
           bindLocal(target, *hugeSize.first, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
@@ -2789,7 +2763,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
           std::string Str;
           llvm::raw_string_ostream info(Str);
           ExprPPrinter::printOne(info, "  size expr", size);
-          info << "  concretization : " << example << "\n" << "  unbound example: " << tmp << "\n";
+          info << "  concretization : " << example << "\n  unbound example: " << tmp << "\n";
           terminateStateOnError(*hugeSize.second, "concretized symbolic size", "model.err", info.str());
         }
       }
@@ -2810,11 +2784,9 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
     resolveExact(*zeroPointer.second, address, rl, "free");
     for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
       const MemoryObject *mo = it->first.first;
-      if (mo->isLocal) {
-        terminateStateOnError(*it->second, "free of alloca", "free.err", getAddressInfo(*it->second, address));
-      } else if (mo->isGlobal) {
+      if (mo->isLocal || mo->isGlobal)
         terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
-      } else {
+      else {
         it->second->addressSpace.unbindObject(mo);
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
@@ -2924,7 +2896,6 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
         bindLocal(target, *bound, result);
       }
     }
-
     unbound = branches.second;
     if (!unbound)
       break;
