@@ -92,16 +92,17 @@ namespace klee {
 
   struct KFunction {
     llvm::Function *function; 
-    unsigned numArgs, numRegisters; 
+    unsigned numRegisters; 
     unsigned numInstructions;
     KInstruction **instructions; 
     std::map<llvm::BasicBlock*, unsigned> basicBlockEntry; 
-  private:
-    KFunction(const KFunction&);
-    KFunction &operator=(const KFunction&); 
   public:
     explicit KFunction(llvm::Function*, KModule *);
-    ~KFunction(); 
+    ~KFunction() {
+      for (unsigned i=0; i<numInstructions; ++i)
+        delete instructions[i];
+      delete[] instructions;
+    }
   }; 
 
   class StatsTracker {
@@ -3236,9 +3237,7 @@ static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap
 }
 
 KFunction::KFunction(llvm::Function *_function, KModule *km) 
-  : function(_function),
-    numArgs(function->arg_size()),
-    numInstructions(0) {
+  : function(_function), numInstructions(0) {
   for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit) {
     BasicBlock *bb = bbit;
     basicBlockEntry[bb] = numInstructions;
@@ -3247,7 +3246,7 @@ KFunction::KFunction(llvm::Function *_function, KModule *km)
   instructions = new KInstruction*[numInstructions]; 
   std::map<Instruction*, unsigned> registerMap; 
   // The first arg_size() registers are reserved for formals.
-  unsigned rnum = numArgs;
+  unsigned rnum = function->arg_size();
   for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
     for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it)
       registerMap[it] = rnum++;
@@ -3269,10 +3268,8 @@ KFunction::KFunction(llvm::Function *_function, KModule *km)
         unsigned numArgs = cs.arg_size();
         ki->operands = new int[numArgs+1];
         ki->operands[0] = getOperandNum(cs.getCalledValue(), registerMap, km, ki);
-        for (unsigned j=0; j<numArgs; j++) {
-          Value *v = cs.getArgument(j);
-          ki->operands[j+1] = getOperandNum(v, registerMap, km, ki);
-        }
+        for (unsigned j=0; j<numArgs; j++)
+          ki->operands[j+1] = getOperandNum(cs.getArgument(j), registerMap, km, ki);
       } else {
         unsigned numOperands = it->getNumOperands();
         ki->operands = new int[numOperands];
@@ -3281,12 +3278,6 @@ KFunction::KFunction(llvm::Function *_function, KModule *km)
       } 
       instructions[i++] = ki;
     }
-}
-
-KFunction::~KFunction() {
-  for (unsigned i=0; i<numInstructions; ++i)
-    delete instructions[i];
-  delete[] instructions;
 }
 
 const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
