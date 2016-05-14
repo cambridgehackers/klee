@@ -58,11 +58,15 @@
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/IR/CFG.h"
 #include "../Module/Passes.h"
 #include <cassert>
 #include <vector>
 #include <string>
 #include <set>
+#include <unistd.h>
 
 namespace llvm {
 extern void Optimize(Module*);
@@ -662,10 +666,6 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
     pausedStates.clear();
   }
 }
-#include "llvm/Support/Path.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/IR/CFG.h"
-#include <unistd.h>
 
 namespace {
   cl::opt<bool>
@@ -759,7 +759,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
   } 
   if (OutputIStats)
     theStatisticManager->useIndexedStats(km->infos->getMaxID()); 
-  for (std::vector<KFunction*>::iterator it = _functions.begin(), ie = _functions.end(); it != ie; ++it) {
+  for (auto it = _functions.begin(), ie = _functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
@@ -809,8 +809,7 @@ void StatsTracker::done() {
 void StatsTracker::stepInstruction(ExecutionState &es) {
   if (OutputIStats) {
     if (TrackInstructionTime) {
-      static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0);
-    
+      static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0); 
       if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0) {
         sys::TimeValue sys(0,0);
         sys::Process::GetTimeUsage(lastNowTime,lastUserTime,sys);
@@ -918,8 +917,7 @@ void StatsTracker::writeStatsLine() {
 }
 
 void StatsTracker::updateStateStatistics(uint64_t addend) {
-  for (std::set<ExecutionState*>::iterator it = executor.states.begin(),
-         ie = executor.states.end(); it != ie; ++it) {
+  for (auto it = executor.states.begin(), ie = executor.states.end(); it != ie; ++it) {
     ExecutionState &state = **it;
     const InstructionInfo &ii = *state.pc->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
@@ -941,8 +939,7 @@ void StatsTracker::writeIStats() {
   if (UseCallPaths)
     callPathManager.getSummaryStatistics(callSiteStats); 
   of << "ob=" << objectFilename << "\n"; 
-  for (Module::iterator fnIt = m->begin(), fn_ie = m->end(); 
-       fnIt != fn_ie; ++fnIt) {
+  for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
     if (!fnIt->isDeclaration()) {
       // Always try to write the filename before the function name, as otherwise
       // KCachegrind can create two entries for the function, one with an // unnamed file and one without.
@@ -950,33 +947,24 @@ void StatsTracker::writeIStats() {
       if (ii.file != sourceFile) {
         of << "fl=" << ii.file << "\n";
         sourceFile = ii.file;
-      }
-      
+      } 
       of << "fn=" << fnIt->getName().str() << "\n";
-      for (Function::iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
-           bbIt != bb_ie; ++bbIt) {
-        for (BasicBlock::iterator it = bbIt->begin(), ie = bbIt->end(); 
-             it != ie; ++it) {
+      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
+        for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
           Instruction *instr = &*it;
           const InstructionInfo &ii = executor.kmodule->infos->getInfo(instr);
           if (ii.file!=sourceFile) {
             of << "fl=" << ii.file << "\n";
             sourceFile = ii.file;
           }
-          of << ii.assemblyLine << " "; of << ii.line << " "; of << "\n";
-
-          if (UseCallPaths && 
-              (isa<CallInst>(instr) || isa<InvokeInst>(instr))) {
+          of << ii.assemblyLine << " "; of << ii.line << " "; of << "\n"; 
+          if (UseCallPaths && (isa<CallInst>(instr) || isa<InvokeInst>(instr))) {
             CallSiteSummaryTable::iterator it = callSiteStats.find(instr);
             if (it!=callSiteStats.end()) {
-              for (std::map<llvm::Function*, CallSiteInfo>::iterator
-                     fit = it->second.begin(), fie = it->second.end(); 
-                   fit != fie; ++fit) {
+              for (auto fit = it->second.begin(), fie = it->second.end(); fit != fie; ++fit) {
                 Function *f = fit->first;
                 CallSiteInfo &csi = fit->second;
-                const InstructionInfo &fii = 
-                  executor.kmodule->infos->getFunctionInfo(f);
-  
+                const InstructionInfo &fii = executor.kmodule->infos->getFunctionInfo(f); 
                 if (fii.file!="" && fii.file!=sourceFile)
                   of << "cfl=" << fii.file << "\n";
                 of << "cfn=" << f->getName().str() << "\n"; of << "calls=" << csi.count << " "; of << fii.assemblyLine << " "; of << fii.line << "\n"; of << ii.assemblyLine << " "; of << ii.line << " "; of << "\n";
@@ -998,18 +986,15 @@ void StatsTracker::writeIStats() {
 typedef std::map<Instruction*, std::vector<Function*> > calltargets_ty;
 static calltargets_ty callTargets;
 static std::map<Function*, std::vector<Instruction*> > functionCallers;
-static std::map<Function*, unsigned> functionShortestPath;
-
+static std::map<Function*, unsigned> functionShortestPath; 
 static std::vector<Instruction*> getSuccs(Instruction *i) {
   BasicBlock *bb = i->getParent();
   std::vector<Instruction*> res; 
   if (i==bb->getTerminator()) {
     for (succ_iterator it = succ_begin(bb), ie = succ_end(bb); it != ie; ++it)
       res.push_back(it->begin());
-  } else {
+  } else
     res.push_back(++BasicBlock::iterator(i));
-  }
-
   return res;
 }
 
@@ -1020,13 +1005,12 @@ uint64_t klee::computeMinDistToUncovered(const KInstruction *ki, uint64_t minDis
   } else {
     uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, ki->info->id);
     uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn, ki->info->id); 
-    if (distToReturn==0) { // return unreachable, best is local
+    if (distToReturn==0) // return unreachable, best is local
       return minDistLocal;
-    } else if (!minDistLocal) { // no local reachable
+    else if (!minDistLocal) // no local reachable
       return distToReturn + minDistAtRA;
-    } else {
+    else
       return std::min(minDistLocal, distToReturn + minDistAtRA);
-    }
   }
 }
 
@@ -1035,78 +1019,62 @@ void StatsTracker::computeReachableUncovered() {
   Module *m = km->module;
   static bool init = true;
   const InstructionInfoTable &infos = *km->infos;
-  StatisticManager &sm = *theStatisticManager;
-  
+  StatisticManager &sm = *theStatisticManager; 
   if (init) {
-    init = false;
-
+    init = false; 
     // Compute call targets. It would be nice to use alias information
     // instead of assuming all indirect calls hit all escaping // funcs, eh?
-    for (Module::iterator fnIt = m->begin(), fn_ie = m->end(); 
-         fnIt != fn_ie; ++fnIt) {
-      for (Function::iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
-           bbIt != bb_ie; ++bbIt) {
-        for (BasicBlock::iterator it = bbIt->begin(), ie = bbIt->end(); 
-             it != ie; ++it) {
+    for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
+      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
+        for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
           if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
             CallSite cs(it);
-            if (isa<InlineAsm>(cs.getCalledValue())) {
-              // We can never call through here so assume no targets // (which should be correct anyhow).
+            if (isa<InlineAsm>(cs.getCalledValue()))
               callTargets.insert(std::make_pair(it, std::vector<Function*>()));
-            } else if (Function *target = getDirectCallTarget(cs)) {
+              // We can never call through here so assume no targets // (which should be correct anyhow).
+            else if (Function *target = getDirectCallTarget(cs))
               callTargets[it].push_back(target);
-            } else {
+            else
               callTargets[it] = std::vector<Function*>(km->escapingFunctions.begin(), km->escapingFunctions.end());
-            }
           }
         }
       }
     }
 
     // Compute function callers as reflexion of callTargets.
-    for (calltargets_ty::iterator it = callTargets.begin(), 
-           ie = callTargets.end(); it != ie; ++it)
-      for (std::vector<Function*>::iterator fit = it->second.begin(), 
-             fie = it->second.end(); fit != fie; ++fit) 
-        functionCallers[*fit].push_back(it->first);
-
+    for (auto it = callTargets.begin(), ie = callTargets.end(); it != ie; ++it)
+      for (auto fit = it->second.begin(), fie = it->second.end(); fit != fie; ++fit) 
+        functionCallers[*fit].push_back(it->first); 
     // Initialize minDistToReturn to shortest paths through // funcs. 0 is unreachable.
     std::vector<Instruction *> instructions;
-    for (Module::iterator fnIt = m->begin(), fn_ie = m->end(); 
-         fnIt != fn_ie; ++fnIt) {
+    for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
       if (fnIt->isDeclaration()) {
-        if (fnIt->doesNotReturn()) {
+        if (fnIt->doesNotReturn())
           functionShortestPath[fnIt] = 0;
-        } else {
+        else
           functionShortestPath[fnIt] = 1; // whatever
-        }
-      } else {
+      } else
         functionShortestPath[fnIt] = 0;
-      }
-
       // Not sure if I should bother to preorder here. XXX I should.
-      for (Function::iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
-        for (BasicBlock::iterator it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
+      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
+        for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
           instructions.push_back(it);
           unsigned id = infos.getInfo(it).id;
           sm.setIndexedValue(stats::minDistToReturn, id, isa<ReturnInst>(it));
         }
       }
-    }
-  
-    std::reverse(instructions.begin(), instructions.end());
-    
+    } 
+    std::reverse(instructions.begin(), instructions.end()); 
     // I'm so lazy it's not even worklisted.
     bool changed;
     do {
       changed = false;
-      for (std::vector<Instruction*>::iterator it = instructions.begin(), ie = instructions.end(); it != ie; ++it) {
+      for (auto it = instructions.begin(), ie = instructions.end(); it != ie; ++it) {
         Instruction *inst = *it;
-        unsigned bestThrough = 0;
-
+        unsigned bestThrough = 0; 
         if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
           std::vector<Function*> &targets = callTargets[inst];
-          for (std::vector<Function*>::iterator fnIt = targets.begin(), ie = targets.end(); fnIt != ie; ++fnIt) {
+          for (auto fnIt = targets.begin(), ie = targets.end(); fnIt != ie; ++fnIt) {
             uint64_t dist = functionShortestPath[*fnIt];
             if (dist) {
               dist = 1+dist; // count instruction itself
@@ -1114,15 +1082,13 @@ void StatsTracker::computeReachableUncovered() {
                 bestThrough = dist;
             }
           }
-        } else {
+        } else
           bestThrough = 1;
-        }
-       
         if (bestThrough) {
           unsigned id = infos.getInfo(*it).id;
           uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToReturn, id);
           std::vector<Instruction*> succs = getSuccs(*it);
-          for (std::vector<Instruction*>::iterator it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2) {
+          for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2) {
             uint64_t dist = sm.getIndexedValue(stats::minDistToReturn, infos.getInfo(*it2).id);
             if (dist) {
               uint64_t val = bestThrough + dist;
@@ -1137,8 +1103,7 @@ void StatsTracker::computeReachableUncovered() {
           Function *f = inst->getParent()->getParent();
           if (best != cur || (inst == f->begin()->begin() && functionShortestPath[f] != best)) {
             sm.setIndexedValue(stats::minDistToReturn, id, best);
-            changed = true;
-
+            changed = true; 
             // Update shortest path if this is the entry point.
             if (inst==f->begin()->begin())
               functionShortestPath[f] = best;
@@ -1146,46 +1111,39 @@ void StatsTracker::computeReachableUncovered() {
         }
       }
     } while (changed);
-  }
-
+  } 
   // compute minDistToUncovered, 0 is unreachable
   std::vector<Instruction *> instructions;
-  for (Module::iterator fnIt = m->begin(), fn_ie = m->end(); 
-       fnIt != fn_ie; ++fnIt) {
+  for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
     // Not sure if I should bother to preorder here.
-    for (Function::iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
-      for (BasicBlock::iterator it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
+    for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
+      for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
         unsigned id = infos.getInfo(it).id;
         instructions.push_back(&*it);
         sm.setIndexedValue(stats::minDistToUncovered, id, sm.getIndexedValue(stats::uncoveredInstructions, id));
       }
     }
-  }
-  
-  std::reverse(instructions.begin(), instructions.end());
-  
+  } 
+  std::reverse(instructions.begin(), instructions.end()); 
   // I'm so lazy it's not even worklisted.
   bool changed;
   do {
     changed = false;
-    for (std::vector<Instruction*>::iterator it = instructions.begin(), ie = instructions.end(); it != ie; ++it) {
+    for (auto it = instructions.begin(), ie = instructions.end(); it != ie; ++it) {
       Instruction *inst = *it;
       uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToUncovered, infos.getInfo(inst).id);
-      unsigned bestThrough = 0;
-      
+      unsigned bestThrough = 0; 
       if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
         std::vector<Function*> &targets = callTargets[inst];
-        for (std::vector<Function*>::iterator fnIt = targets.begin(), ie = targets.end(); fnIt != ie; ++fnIt) {
+        for (auto fnIt = targets.begin(), ie = targets.end(); fnIt != ie; ++fnIt) {
           uint64_t dist = functionShortestPath[*fnIt];
           if (dist) {
             dist = 1+dist; // count instruction itself
             if (bestThrough==0 || dist<bestThrough)
               bestThrough = dist;
-          }
-
+          } 
           if (!(*fnIt)->isDeclaration()) {
-            uint64_t calleeDist = sm.getIndexedValue(stats::minDistToUncovered,
-                                                     infos.getFunctionInfo(*fnIt).id);
+            uint64_t calleeDist = sm.getIndexedValue(stats::minDistToUncovered, infos.getFunctionInfo(*fnIt).id);
             if (calleeDist) {
               calleeDist = 1+calleeDist; // count instruction itself
               if (best==0 || calleeDist<best)
@@ -1193,13 +1151,11 @@ void StatsTracker::computeReachableUncovered() {
             }
           }
         }
-      } else {
+      } else
         bestThrough = 1;
-      }
-      
       if (bestThrough) {
         std::vector<Instruction*> succs = getSuccs(inst);
-        for (std::vector<Instruction*>::iterator it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2) {
+        for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2) {
           uint64_t dist = sm.getIndexedValue(stats::minDistToUncovered, infos.getInfo(*it2).id);
           if (dist) {
             uint64_t val = bestThrough + dist;
@@ -1213,12 +1169,11 @@ void StatsTracker::computeReachableUncovered() {
         changed = true;
       }
     }
-  } while (changed);
-
-  for (std::set<ExecutionState*>::iterator it = executor.states.begin(), ie = executor.states.end(); it != ie; ++it) {
+  } while (changed); 
+  for (auto it = executor.states.begin(), ie = executor.states.end(); it != ie; ++it) {
     ExecutionState *es = *it;
     uint64_t currentFrameMinDist = 0;
-    for (ExecutionState::stack_ty::iterator sfIt = es->stack.begin(), sf_ie = es->stack.end(); sfIt != sf_ie; ++sfIt) {
+    for (auto sfIt = es->stack.begin(), sf_ie = es->stack.end(); sfIt != sf_ie; ++sfIt) {
       ExecutionState::stack_ty::iterator next = sfIt + 1;
       KInstIterator kii; 
       if (next==es->stack.end())
