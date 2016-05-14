@@ -90,17 +90,20 @@ namespace klee {
   struct StackFrame;
 
   struct KFunction {
+public:
     llvm::Function *function; 
     unsigned numRegisters; 
     unsigned numInstructions;
     KInstruction **instructions; 
     std::map<llvm::BasicBlock*, unsigned> basicBlockEntry; 
   public:
-    explicit KFunction(llvm::Function*, KModule *);
+    KFunction(llvm::Function *_function) : function(_function), numInstructions(0), instructions(NULL) {}
     ~KFunction() {
-      for (unsigned i=0; i<numInstructions; ++i)
-        delete instructions[i];
-      delete[] instructions;
+      if (instructions) {
+        for (unsigned i=0; i<numInstructions; ++i)
+          delete instructions[i];
+        delete[] instructions;
+      }
     }
   }; 
 
@@ -3123,50 +3126,6 @@ static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap
   }
 }
 
-KFunction::KFunction(llvm::Function *_function, KModule *km) 
-  : function(_function), numInstructions(0) {
-  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit) {
-    BasicBlock *bb = bbit;
-    basicBlockEntry[bb] = numInstructions;
-    numInstructions += bb->size();
-  } 
-  instructions = new KInstruction*[numInstructions]; 
-  std::map<Instruction*, unsigned> registerMap; 
-  // The first arg_size() registers are reserved for formals.
-  unsigned rnum = function->arg_size();
-  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
-    for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it)
-      registerMap[it] = rnum++;
-  numRegisters = rnum; 
-  unsigned i = 0;
-  for (auto bbit = function->begin(), bbie = function->end(); bbit != bbie; ++bbit)
-    for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
-      KInstruction *ki; 
-      switch(it->getOpcode()) {
-      case Instruction::GetElementPtr: case Instruction::InsertValue: case Instruction::ExtractValue:
-        ki = new KGEPInstruction(); break;
-      default:
-        ki = new KInstruction(); break;
-      } 
-      ki->inst = it;      
-      ki->dest = registerMap[it]; 
-      if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
-        CallSite cs(it);
-        unsigned numArgs = cs.arg_size();
-        ki->operands = new int[numArgs+1];
-        ki->operands[0] = getOperandNum(cs.getCalledValue(), registerMap, km, ki);
-        for (unsigned j=0; j<numArgs; j++)
-          ki->operands[j+1] = getOperandNum(cs.getArgument(j), registerMap, km, ki);
-      } else {
-        unsigned numOperands = it->getNumOperands();
-        ki->operands = new int[numOperands];
-        for (unsigned j=0; j<numOperands; j++)
-          ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, km, ki);
-      } 
-      instructions[i++] = ki;
-    }
-}
-
 const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
 {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
@@ -3247,7 +3206,48 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   kmodule->infos = new InstructionInfoTable(module);  
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
     if (!it->isDeclaration()) {
-      KFunction *kf = new KFunction(it, kmodule); 
+      KFunction *kf = new KFunction(it);
+      llvm::Function *func = it;
+      for (auto bbit = func->begin(), bbie = func->end(); bbit != bbie; ++bbit) {
+        BasicBlock *bb = bbit;
+        kf->basicBlockEntry[bb] = kf->numInstructions;
+        kf->numInstructions += bb->size();
+      } 
+      kf->instructions = new KInstruction*[kf->numInstructions]; 
+      std::map<Instruction*, unsigned> registerMap; 
+      // The first arg_size() registers are reserved for formals.
+      unsigned rnum = func->arg_size();
+      for (auto bbit = func->begin(), bbie = func->end(); bbit != bbie; ++bbit)
+        for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it)
+          registerMap[it] = rnum++;
+      kf->numRegisters = rnum; 
+      unsigned i = 0;
+      for (auto bbit = func->begin(), bbie = func->end(); bbit != bbie; ++bbit)
+        for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
+          KInstruction *ki; 
+          switch(it->getOpcode()) {
+          case Instruction::GetElementPtr: case Instruction::InsertValue: case Instruction::ExtractValue:
+            ki = new KGEPInstruction(); break;
+          default:
+            ki = new KInstruction(); break;
+          } 
+          ki->inst = it;      
+          ki->dest = registerMap[it]; 
+          if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
+            CallSite cs(it);
+            unsigned numArgs = cs.arg_size();
+            ki->operands = new int[numArgs+1];
+            ki->operands[0] = getOperandNum(cs.getCalledValue(), registerMap, kmodule, ki);
+            for (unsigned j=0; j<numArgs; j++)
+              ki->operands[j+1] = getOperandNum(cs.getArgument(j), registerMap, kmodule, ki);
+          } else {
+            unsigned numOperands = it->getNumOperands();
+            ki->operands = new int[numOperands];
+            for (unsigned j=0; j<numOperands; j++)
+              ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, kmodule, ki);
+          } 
+          kf->instructions[i++] = ki;
+        }
       for (unsigned i=0; i<kf->numInstructions; ++i) {
         KInstruction *ki = kf->instructions[i];
         ki->info = &kmodule->infos->getInfo(ki->inst);
