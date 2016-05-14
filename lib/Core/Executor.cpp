@@ -677,19 +677,6 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
   }
 }
 
-namespace {
-  cl::opt<bool>
-  TrackInstructionTime("track-instruction-time", cl::init(false), cl::desc("Enable tracking of time for individual instructions (default=off)")); 
-  cl::opt<double>
-  StatsWriteInterval("stats-write-interval", cl::init(1.), cl::desc("Approximate number of seconds between stats writes (default=1.0s)")); 
-  cl::opt<double>
-  IStatsWriteInterval("istats-write-interval", cl::init(10.), cl::desc("Approximate number of seconds between istats writes (default: 10.0s)")); 
-  cl::opt<double>
-  UncoveredUpdateInterval("uncovered-update-interval", cl::init(30.), cl::desc("(default=30.0s)")); 
-  cl::opt<bool>
-  UseCallPaths("use-call-paths", cl::init(true), cl::desc("Enable calltree tracking for instruction level statistics (default=on)")); 
-}
-
 #if 0
 namespace klee {
   class WriteIStatsTimer : public Executor::Timer {
@@ -775,7 +762,6 @@ void StatsTracker::done() {
 }
 
 void StatsTracker::stepInstruction(ExecutionState &es) {
-    if (TrackInstructionTime) {
       static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0); 
       if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0) {
         sys::TimeValue sys(0,0);
@@ -790,7 +776,6 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
         lastUserTime = user;
         lastNowTime = now;
       }
-    } 
     Instruction *inst = es.pc->inst;
     const InstructionInfo &ii = *es.pc->info;
     theStatisticManager->setIndex(ii.id);
@@ -812,12 +797,10 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 /* Should be called _after_ the es->pushFrame() */
 void StatsTracker::framePushed(ExecutionState &es, StackFrame *parentFrame) {
     StackFrame &sf = es.stack.back(); 
-    if (UseCallPaths) {
       CallPathNode *parent = parentFrame ? parentFrame->callPathNode : 0;
       CallPathNode *cp = callPathManager.getCallPath(parent, sf.caller ? sf.caller->inst : 0, sf.func);
       sf.callPathNode = cp;
       cp->count++;
-    }
 
     if (updateMinDistToUncovered) {
       uint64_t minDistAtRA = 0;
@@ -881,7 +864,6 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
     ExecutionState &state = **it;
     const InstructionInfo &ii = *state.pc->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
-    if (UseCallPaths)
       stats::states += addend;
   }
 }
@@ -893,7 +875,6 @@ void StatsTracker::writeIStats() {
     updateStateStatistics(1); 
   std::string sourceFile = ""; 
   CallSiteSummaryTable callSiteStats;
-  if (UseCallPaths)
     callPathManager.getSummaryStatistics(callSiteStats); 
   llvm::outs() << "ob=" << objectFilename << "\n"; 
   for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
@@ -915,7 +896,7 @@ void StatsTracker::writeIStats() {
             sourceFile = ii.file;
           }
           llvm::outs() << ii.assemblyLine << " " << ii.line << " " << "\n"; 
-          if (UseCallPaths && (isa<CallInst>(instr) || isa<InvokeInst>(instr))) {
+          if (isa<CallInst>(instr) || isa<InvokeInst>(instr)) {
             CallSiteSummaryTable::iterator it = callSiteStats.find(instr);
             if (it!=callSiteStats.end()) {
               for (auto fit = it->second.begin(), fie = it->second.end(); fit != fie; ++fit) {
