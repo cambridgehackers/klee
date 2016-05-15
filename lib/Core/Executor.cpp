@@ -645,9 +645,8 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
 void StatsTracker::writeIStats() {
   Module *m = executor.kmodule->module;
   // We assume that we didn't move the file pointer
-  llvm::outs() << "version: 1\n" << "creator: klee\n" << "pid: " << getpid() << "\n" << "cmd: " << m->getModuleIdentifier() << "\n\n" << "\n" << "positions: instr line\n" << "events: " << "\n"; 
+  llvm::outs() << "version: 1;" << "creator: klee;" << "pid: " << getpid() << ";cmd: " << m->getModuleIdentifier() << "; positions: instr line;" << "events: " << "\n"; 
   updateStateStatistics(1); 
-  std::string sourceFile = ""; 
   CallSiteSummaryTable callSiteStats;
   callPathManager.getSummaryStatistics(callSiteStats); 
   llvm::outs() << "ob=" << objectFilename << "\n"; 
