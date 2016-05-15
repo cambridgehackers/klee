@@ -2574,7 +2574,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
   for (auto ai = arguments.begin(), ae = arguments.end(); ai!=ae; ++ai) {
       ref<Expr> arg = toUnique(state, *ai);
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(arg)) {
-        // XXX kick toMemory functions from here
+        // XXX kick toMemory fns from here
         ce->toMemory(&args[wordIndex]);
         wordIndex += (ce->getWidth()+63)/64;
       } else {
@@ -2843,49 +2843,28 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
     const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
     bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
-
     auto it = seedMap.find(&state);
-    if (it!=seedMap.end()) { // In seed mode we need to add this as a // binding.
+    if (it!=seedMap.end())        // In seed mode we need to add this as a binding
       for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
         SeedInfo &si = *siit;
         KTestObject *obj = si.getNextInput(mo, false);
         if (!obj) {
             terminateStateOnError(state, "ran out of inputs during seeding", "user.err");
             break;
-        } else {
-          if (obj->numBytes > mo->size) {
+        }
+        if (obj->numBytes > mo->size) {
 	    std::stringstream msg;
 	    msg << "replace size mismatch: " << mo->name << "[" << mo->size << "]" << " vs " << obj->name << "[" << obj->numBytes << "]" << " in test\n";
             terminateStateOnError(state, msg.str(), "user.err");
             break;
-          } else {
-            std::vector<unsigned char> &values = si.assignment.bindings[array];
-            values.insert(values.begin(), obj->bytes, obj->bytes + std::min(obj->numBytes, mo->size));
-          }
         }
+        std::vector<unsigned char> &values = si.assignment.bindings[array];
+        values.insert(values.begin(), obj->bytes, obj->bytes + std::min(obj->numBytes, mo->size));
       }
-    }
 }
 
 void Executor::runExecutor(ExecutionState &initialState) {
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
-  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
-    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
-        KInstruction *KI = (*it)->instructions[i];
-        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
-            computeOffsets(KI, gep_type_begin(gepi), gep_type_end(gepi));
-        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
-            computeOffsets(KI, iv_type_begin(ivi), iv_type_end(ivi));
-            assert(KI->indices.empty() && "InsertValue constant offset expected");
-        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
-            computeOffsets(KI, ev_type_begin(evi), ev_type_end(evi));
-            assert(KI->indices.empty() && "ExtractValue constant offset expected");
-        }
-    }
-  }
-  constantTable = new Cell[kmodule->constants.size()];
-  for (unsigned i=0; i<kmodule->constants.size(); ++i)
-      constantTable[i].value = evalConstant(kmodule->constants[i]);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(&initialState);
   if (CoreSearch.size() == 0) {
@@ -2996,6 +2975,23 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   initializeGlobals(*state);
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
+  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
+    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
+        KInstruction *KI = (*it)->instructions[i];
+        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
+            computeOffsets(KI, gep_type_begin(gepi), gep_type_end(gepi));
+        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
+            computeOffsets(KI, iv_type_begin(ivi), iv_type_end(ivi));
+            assert(KI->indices.empty() && "InsertValue constant offset expected");
+        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
+            computeOffsets(KI, ev_type_begin(evi), ev_type_end(evi));
+            assert(KI->indices.empty() && "ExtractValue constant offset expected");
+        }
+    }
+  }
+  constantTable = new Cell[kmodule->constants.size()];
+  for (unsigned i=0; i<kmodule->constants.size(); ++i)
+      constantTable[i].value = evalConstant(kmodule->constants[i]);
 printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
   runExecutor(*state);
 printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
@@ -3079,7 +3075,7 @@ printf("[%s:%d] after runpreprocessmodule\n", __FUNCTION__, __LINE__);
   llvm::sys::path::append(LibPath, "kleeRuntimeIntrinsic.bc");
   module = linkWithLibrary(module, LibPath.str());
 #endif
-  // Add internal functions which are not used to check if instructions // have been already visited
+  // Add internal fns which are not used to check if instructions // have been already visited
   kmodule->addInternalFunction("klee_div_zero_check");
   kmodule->addInternalFunction("klee_overshift_check");
   // After linking (since ctors/dtors can be modified) and optimization (global optimization can rewrite lists).
@@ -3188,7 +3184,7 @@ printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
             statsTracker->numBranches++;
       }
   if (!kmodule->escapingFunctions.empty()) {
-    llvm::errs() << "KLEE: escaping functions: [";
+    llvm::errs() << "KLEE: escaping fns: [";
     for (auto it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it)
       llvm::errs() << (*it)->getName() << ", ";
     llvm::errs() << "]\n";
