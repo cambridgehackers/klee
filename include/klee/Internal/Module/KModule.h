@@ -44,7 +44,6 @@ namespace klee {
     enum SwitchImplType { eSwitchTypeSimple, eSwitchTypeLLVM, eSwitchTypeInternal }; 
     llvm::Module *module;
     llvm::DataLayout *targetData;
-    llvm::Function *kleeMergeFn; 
     std::set<llvm::Function*> escapingFunctions; 
     std::vector<llvm::Constant*> constants;
     std::map<llvm::Constant*, KConstant*> constantMap;

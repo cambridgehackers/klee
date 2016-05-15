@@ -45,7 +45,6 @@ namespace {
 KModule::KModule(Module *_module) 
   : module(_module),
     targetData(new DataLayout(module)),
-    kleeMergeFn(0),
     m_SwitchType(SwitchType) {
 }
 
