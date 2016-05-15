@@ -432,7 +432,7 @@ double WeightedRandomSearcher::getWeight(ExecutionState *es) {
   case Depth:
     return es->weight;
   case InstCount: {
-    uint64_t count = theStatisticManager->getIndexedValue(stats::instructions, es->pc->info->id);
+    uint64_t count = theStatisticManager->getIndexedValue(stats::instructions, 0/*es->pc->info->id*/);
     double inv = 1. / std::max((uint64_t) 1, count);
     return inv * inv;
   }
@@ -735,8 +735,6 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
     partialBranches(0),
     updateMinDistToUncovered(_updateMinDistToUncovered),
     numBranches(0) {
-  KModule *km = executor.kmodule;
-
   if (!sys::path::is_absolute(objectFilename)) {
     SmallString<128> current(objectFilename);
     if(sys::fs::make_absolute(current)) {
@@ -745,7 +743,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
         objectFilename = current.c_str();
     }
   } 
-    theStatisticManager->useIndexedStats(km->infos->getMaxID()); 
+    theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/); 
     writeStatsHeader();
     writeStatsLine(); 
     //executor.addTimer(new WriteStatsTimer(this), StatsWriteInterval); 
@@ -772,15 +770,11 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
         lastNowTime = now;
       }
     Instruction *inst = es.pc->inst;
-    const InstructionInfo &ii = *es.pc->info;
-    theStatisticManager->setIndex(ii.id);
+    theStatisticManager->setIndex(0/*ii.id*/);
     if (es.instsSinceCovNew)
       ++es.instsSinceCovNew;
     if (instructionIsCoverable(inst)) {
-      if (!theStatisticManager->getIndexedValue(stats::coveredInstructions, ii.id)) {
-        // Checking for actual stoppoints avoids inconsistencies due // to line number propogation.  //
-        // FIXME: This trick no longer works, we should fix this in the line // number propogation.
-          es.coveredLines[&ii.file].insert(ii.line);
+      if (!theStatisticManager->getIndexedValue(stats::coveredInstructions, 0/*ii.id*/)) {
 	es.coveredNew = true;
         es.instsSinceCovNew = 1;
 	++stats::coveredInstructions;
@@ -855,10 +849,8 @@ void StatsTracker::writeStatsLine() {
 
 void StatsTracker::updateStateStatistics(uint64_t addend) {
   for (auto it = executor.states.begin(), ie = executor.states.end(); it != ie; ++it) {
-    ExecutionState &state = **it;
-    const InstructionInfo &ii = *state.pc->info;
-    theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
-      stats::states += addend;
+    theStatisticManager->incrementIndexedValue(stats::states, 0/*ii.id*/, addend);
+    stats::states += addend;
   }
 }
 
@@ -873,33 +865,17 @@ void StatsTracker::writeIStats() {
   llvm::outs() << "ob=" << objectFilename << "\n"; 
   for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
     if (!fnIt->isDeclaration()) {
-      // Always try to write the filename before the function name, as otherwise
-      // KCachegrind can create two entries for the function, one with an // unnamed file and one without.
-      const InstructionInfo &ii = executor.kmodule->infos->getFunctionInfo(fnIt);
-      if (ii.file != sourceFile) {
-        llvm::outs() << "fl=" << ii.file << "\n";
-        sourceFile = ii.file;
-      } 
       llvm::outs() << "fn=" << fnIt->getName().str() << "\n";
       for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
         for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
           Instruction *instr = &*it;
-          const InstructionInfo &ii = executor.kmodule->infos->getInfo(instr);
-          if (ii.file!=sourceFile) {
-            llvm::outs() << "fl=" << ii.file << "\n";
-            sourceFile = ii.file;
-          }
-          llvm::outs() << ii.assemblyLine << " " << ii.line << " " << "\n"; 
           if (isa<CallInst>(instr) || isa<InvokeInst>(instr)) {
             CallSiteSummaryTable::iterator it = callSiteStats.find(instr);
             if (it!=callSiteStats.end()) {
               for (auto fit = it->second.begin(), fie = it->second.end(); fit != fie; ++fit) {
                 Function *f = fit->first;
                 CallSiteInfo &csi = fit->second;
-                const InstructionInfo &fii = executor.kmodule->infos->getFunctionInfo(f); 
-                if (fii.file!="" && fii.file!=sourceFile)
-                  llvm::outs() << "cfl=" << fii.file << "\n";
-                llvm::outs() << "cfn=" << f->getName().str() << "\n" << "calls=" << csi.count << " " << fii.assemblyLine << " " << fii.line << "\n" << ii.assemblyLine << " " << ii.line << " " << "\n";
+                llvm::outs() << "cfn=" << f->getName().str() << "\n" << "calls=" << csi.count << "\n";
               }
             }
           }
@@ -928,10 +904,10 @@ static std::vector<Instruction*> getSuccs(Instruction *i) {
 uint64_t klee::computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA) {
   StatisticManager &sm = *theStatisticManager;
   if (minDistAtRA==0)  // unreachable on return, best is local
-    return sm.getIndexedValue(stats::minDistToUncovered, ki->info->id);
+    return sm.getIndexedValue(stats::minDistToUncovered, 0/*ki->info->id*/);
   else {
-    uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, ki->info->id);
-    uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn, ki->info->id); 
+    uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, 0/*ki->info->id*/);
+    uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn, 0/*ki->info->id*/); 
     if (distToReturn==0) // return unreachable, best is local
       return minDistLocal;
     else if (!minDistLocal) // no local reachable
@@ -945,7 +921,6 @@ void StatsTracker::computeReachableUncovered() {
   KModule *km = executor.kmodule;
   Module *m = km->module;
   static bool init = true;
-  const InstructionInfoTable &infos = *km->infos;
   StatisticManager &sm = *theStatisticManager; 
   if (init) {
     init = false; 
@@ -985,7 +960,7 @@ void StatsTracker::computeReachableUncovered() {
       for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt)
         for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
           instructions.push_back(it);
-          unsigned id = infos.getInfo(it).id;
+          unsigned id = 0;
           sm.setIndexedValue(stats::minDistToReturn, id, isa<ReturnInst>(it));
         }
     } 
@@ -1009,11 +984,11 @@ void StatsTracker::computeReachableUncovered() {
         } else
           bestThrough = 1;
         if (bestThrough) {
-          unsigned id = infos.getInfo(*it).id;
+          unsigned id = 0;
           uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToReturn, id);
           std::vector<Instruction*> succs = getSuccs(*it);
           for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2)
-            if (uint64_t dist = sm.getIndexedValue(stats::minDistToReturn, infos.getInfo(*it2).id)) {
+            if (uint64_t dist = sm.getIndexedValue(stats::minDistToReturn, 0)) {
               uint64_t val = bestThrough + dist;
               if (best==0 || val<best)
                 best = val;
@@ -1040,7 +1015,7 @@ void StatsTracker::computeReachableUncovered() {
     // Not sure if I should bother to preorder here.
     for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt)
       for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
-        unsigned id = infos.getInfo(it).id;
+        unsigned id = 0;
         instructions.push_back(&*it);
         sm.setIndexedValue(stats::minDistToUncovered, id, sm.getIndexedValue(stats::uncoveredInstructions, id));
       }
@@ -1051,7 +1026,7 @@ void StatsTracker::computeReachableUncovered() {
     changed = false;
     for (auto it = instructions.begin(), ie = instructions.end(); it != ie; ++it) {
       Instruction *inst = *it;
-      uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToUncovered, infos.getInfo(inst).id);
+      uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToUncovered, 0);
       unsigned bestThrough = 1;
       if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
         bestThrough = 0; 
@@ -1063,7 +1038,7 @@ void StatsTracker::computeReachableUncovered() {
               bestThrough = dist;
           } 
           if (!(*fnIt)->isDeclaration())
-            if (uint64_t calleeDist =sm.getIndexedValue(stats::minDistToUncovered,infos.getFunctionInfo(*fnIt).id)) {
+            if (uint64_t calleeDist =sm.getIndexedValue(stats::minDistToUncovered,0)) {
               calleeDist = 1+calleeDist; // count instruction itself
               if (best==0 || calleeDist<best)
                 best = calleeDist;
@@ -1073,7 +1048,7 @@ void StatsTracker::computeReachableUncovered() {
       if (bestThrough) {
         std::vector<Instruction*> succs = getSuccs(inst);
         for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2) {
-          if (uint64_t dist = sm.getIndexedValue(stats::minDistToUncovered, infos.getInfo(*it2).id)) {
+          if (uint64_t dist = sm.getIndexedValue(stats::minDistToUncovered, 0)) {
             uint64_t val = bestThrough + dist;
             if (best==0 || val<best)
               best = val;
@@ -1081,7 +1056,7 @@ void StatsTracker::computeReachableUncovered() {
         }
       } 
       if (best != cur) {
-        sm.setIndexedValue(stats::minDistToUncovered, infos.getInfo(inst).id, best);
+        sm.setIndexedValue(stats::minDistToUncovered, 0, best);
         changed = true;
       }
     }
@@ -1637,8 +1612,7 @@ Executor::toConstant(ExecutionState &state, ref<Expr> e, const char *reason) {
   assert(success && "FIXME: Unhandled solver failure");
   std::string str;
   llvm::raw_string_ostream os(str);
-  os << "silently concretizing (reason: " << reason << ") expression " << e
-     << " to value " << value << " (" << (*(state.pc)).info->file << ":" << (*(state.pc)).info->line << ")";
+  os << "silently concretizing (reason: " << reason << ") expression " << e << " to value " << value;
   klee_warning(reason, os.str().c_str());
   addConstraint(state, EqExpr::create(e, value));
   return value;
@@ -1840,11 +1814,7 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 }
 
 void Executor::stepInstruction(ExecutionState &state) {
-    const InstructionInfo &ii = *state.pc->info;
-    if (ii.file != "")
-      llvm::errs() << "     " << ii.file << ":" << ii.line << ":";
-    else
-      llvm::errs() << "     [no debug info]:";
+    llvm::errs() << "     [no debug info]:";
     llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
   if (statsTracker)
     statsTracker->stepInstruction(state);
@@ -2576,52 +2546,13 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
   terminateState(state);
 }
 
-const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const ExecutionState &state, Instruction ** lastInstruction) {
-  // unroll the stack of the applications state and find
-  // the last instruction which is not inside a KLEE internal function
-  auto it = state.stack.rbegin(), itE = state.stack.rend();
-  // don't check beyond the outermost function (i.e. main())
-  itE--;
-  const InstructionInfo * ii = 0;
-  if (kmodule->internalFunctions.count(it->func) == 0){
-    ii =  state.prevPC->info;
-    *lastInstruction = state.prevPC->inst;
-    // Cannot return yet because even though it->function is not an internal function it might of been called from an internal function
-  }
-  // Wind up the stack and check if we are in a KLEE internal function.
-  // We visit the entire stack because we want to return a CallInstruction
-  // that was not reached via any KLEE internal functions.
-  for (;it != itE; ++it) {
-    // check calling instruction and if it is contained in a KLEE internal function
-    const Function * f = (*it->caller).inst->getParent()->getParent();
-    if (kmodule->internalFunctions.count(f))
-      ii = 0;
-    else if (!ii){
-      ii = (*it->caller).info;
-      *lastInstruction = (*it->caller).inst;
-    }
-  }
-  if (!ii) {
-    // something went wrong, play safe and return the current instruction info
-    *lastInstruction = state.prevPC->inst;
-    return *state.prevPC->info;
-  }
-  return *ii;
-}
 void Executor::terminateStateOnError(ExecutionState &state, const llvm::Twine &messaget, const char *suffix, const llvm::Twine &info) {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::string message = messaget.str();
-  Instruction * lastInst;
-  const InstructionInfo &ii = getLastNonKleeInternalInstruction(state, &lastInst);
-    if (ii.file != "")
-      klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
-    else
-      klee_message("ERROR: (location information missing) %s", message.c_str());
+    klee_message("ERROR: (location information missing) %s", message.c_str());
     std::string MsgString;
     llvm::raw_string_ostream msg(MsgString);
     msg << "Error: " << message << "\n";
-    if (ii.file != "")
-      msg << "File: " << ii.file << "\nLine: " << ii.line << "\nassembly.ll line: " << ii.assemblyLine << "\n";
     msg << "Stack: \n";
     state.dumpStack(msg);
     std::string info_str = info.str();
@@ -3248,10 +3179,6 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
           } 
           kf->instructions[i++] = ki;
         }
-      for (unsigned i=0; i<kf->numInstructions; ++i) {
-        KInstruction *ki = kf->instructions[i];
-        ki->info = &kmodule->infos->getInfo(ki->inst);
-      } 
       functions.push_back(kf);
       functionMap.insert(std::make_pair(it, kf));
     }
@@ -3278,8 +3205,7 @@ printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
       KFunction *kf = *it;
       for (unsigned i=0; i<kf->numInstructions; ++i) {
         KInstruction *ki = kf->instructions[i];
-          unsigned id = ki->info->id;
-          theStatisticManager->setIndex(id);
+          theStatisticManager->setIndex(0);
           if (instructionIsCoverable(ki->inst))
             ++stats::uncoveredInstructions;
         if (BranchInst *bi = dyn_cast<BranchInst>(ki->inst))

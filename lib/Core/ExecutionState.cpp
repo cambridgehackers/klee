@@ -298,10 +298,9 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
   for (auto it = stack.rbegin(), ie = stack.rend(); it != ie; ++it) {
     const StackFrame &sf = *it;
     Function *f = sf.func;
-    const InstructionInfo &ii = *target->info;
     out << "\t#" << idx++;
     std::stringstream AssStream;
-    AssStream << std::setw(8) << std::setfill('0') << ii.assemblyLine;
+    AssStream << std::setw(8) << std::setfill('0');
     out << AssStream.str();
     out << " in " << f->getName().str() << " (";
     // Yawn, we could go up and print varargs if we wanted to.
@@ -315,8 +314,6 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
         out << "=" << value;
     }
     out << ")";
-    if (ii.file != "")
-      out << " at " << ii.file << ":" << ii.line;
     out << "\n";
     target = sf.caller;
   }

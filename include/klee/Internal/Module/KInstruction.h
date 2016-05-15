@@ -20,37 +20,28 @@ namespace llvm {
 
 namespace klee {
   class Executor;
-  struct InstructionInfo;
-  class KModule;
-
-
-  /// KInstruction - Intermediate instruction representation used
-  /// during execution.
+  //struct InstructionInfo;
+  class KModule; 
+  /// KInstruction - Intermediate instruction representation used /// during execution.
   struct KInstruction {
     llvm::Instruction *inst;    
-    const InstructionInfo *info;
-
+    //const InstructionInfo *info; 
     /// Value numbers for each operand. -1 is an invalid value,
     /// otherwise negative numbers are indices (negated and offset by
-    /// 2) into the module constant table and positive numbers are
-    /// register indices.
+    /// 2) into the module constant table and positive numbers are /// register indices.
     int *operands;
     /// Destination register index.
-    unsigned dest;
-
+    unsigned dest; 
   public:
     virtual ~KInstruction(); 
-  };
-
+  }; 
   struct KGEPInstruction : KInstruction {
     /// indices - The list of variable sized adjustments to add to the pointer
     /// operand to execute the instruction. The first element is the operand
     /// index into the GetElementPtr instruction, and the second element is the
     /// element size to multiple that index by.
     std::vector< std::pair<unsigned, uint64_t> > indices;
-
-    /// offset - A constant offset to add to the pointer operand to execute the
-    /// instruction.
+    /// offset - A constant offset to add to the pointer operand to execute the /// instruction.
     uint64_t offset;
   };
 }

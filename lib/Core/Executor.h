@@ -167,8 +167,6 @@ private:
   /// necessary. Note that this function breaks completeness and
   /// should generally be avoided.  /// /// \param purpose An identify string to printed in case of concretization.
   ref<klee::ConstantExpr> toConstant(ExecutionState &state, ref<Expr> e, const char *purpose); 
-  // Determines the \param lastInstruction of the \param state which is not KLEE // internal and returns its InstructionInfo
-  const InstructionInfo & getLastNonKleeInternalInstruction(const ExecutionState &state, llvm::Instruction** lastInstruction); 
   void terminateStateEarly(ExecutionState &state, const llvm::Twine &message);
   template <typename TypeIt>
   void computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie); 

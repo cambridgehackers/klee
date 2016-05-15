@@ -78,12 +78,10 @@ bool InstructionInfoTable::getInstructionDebugInfo(const llvm::Instruction *I, c
   return false;
 }
 
-InstructionInfoTable::InstructionInfoTable(Module *m) 
-  : dummyString(""), dummyInfo(0, dummyString, 0, 0) {
+InstructionInfoTable::InstructionInfoTable(Module *m) : dummyString(""), dummyInfo(0, dummyString, 0, 0) {
   unsigned id = 0;
   std::map<const Instruction*, unsigned> lineTable;
-  buildInstructionToLineMap(m, lineTable);
-
+  buildInstructionToLineMap(m, lineTable); 
   for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) { 
     // We want to ensure that as all instructions have source information, if
     // available. Clang sometimes will not write out debug information on the
@@ -112,7 +110,7 @@ InstructionInfoTable::~InstructionInfoTable() {
 }
 
 const std::string *InstructionInfoTable::internString(std::string s) {
-  std::set<const std::string *, ltstr>::iterator it = internedStrings.find(&s);
+  auto it = internedStrings.find(&s);
   if (it==internedStrings.end()) {
     std::string *interned = new std::string(s);
     internedStrings.insert(interned);
@@ -127,8 +125,7 @@ unsigned InstructionInfoTable::getMaxID() const {
 
 const InstructionInfo &
 InstructionInfoTable::getInfo(const Instruction *inst) const {
-  std::map<const llvm::Instruction*, InstructionInfo>::const_iterator it = 
-    infos.find(inst);
+  auto it = infos.find(inst);
   if (it == infos.end())
     llvm::report_fatal_error("invalid instruction, not present in initial module!");
   return it->second;
@@ -136,13 +133,12 @@ InstructionInfoTable::getInfo(const Instruction *inst) const {
 
 const InstructionInfo &
 InstructionInfoTable::getFunctionInfo(const Function *f) const {
-  if (f->isDeclaration()) {
+  if (f->isDeclaration())
+    return dummyInfo;
     // FIXME: We should probably eliminate this dummyInfo object, and instead
     // allocate a per-function object to track the stats for that function
     // (otherwise, anyone actually trying to use those stats is getting ones
     // shared across all functions). I'd like to see if this matters in practice
     // and construct a test case for it if it does, though.
-    return dummyInfo;
-  }
   return getInfo(f->begin()->begin());
 }
