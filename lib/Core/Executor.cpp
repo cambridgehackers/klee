@@ -7,53 +7,26 @@
 //
 //===----------------------------------------------------------------------===//
 #include "Executor.h"
-#include "Context.h"
 #include "CoreStats.h"
 #include "ExternalDispatcher.h"
-#include "ImpliedValue.h"
 #include "Memory.h"
 #include "MemoryManager.h"
 #include "SeedInfo.h"
 #include "CallPathManager.h"
 #include "SpecialFunctionHandler.h"
-#include "klee/Expr.h"
-#include "klee/Interpreter.h"
-#include "klee/TimerStatIncrementer.h"
 #include "klee/Common.h"
-#include "klee/util/Assignment.h"
 #include "klee/util/ExprPPrinter.h"
 #include "klee/util/ExprSMTLIBPrinter.h"
-#include "klee/util/ExprUtil.h"
 #include "klee/util/GetElementPtrTypeIterator.h"
-#include "klee/Config/Version.h"
 #include "klee/Internal/ADT/DiscretePDF.h"
 #include "klee/Internal/ADT/KTest.h"
 #include "klee/Internal/ADT/RNG.h"
-#include "klee/Internal/Module/Cell.h"
-#include "klee/Internal/Module/KInstruction.h"
-#include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/ErrorHandling.h"
-#include "klee/Internal/Support/FloatEvaluation.h"
 #include "klee/Internal/System/Time.h"
 #include "klee/Internal/System/MemoryUsage.h"
-#include "klee/SolverStats.h"
 #include "klee/Internal/Support/ModuleUtil.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Attributes.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/TypeBuilder.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Process.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/Scalar.h"
@@ -124,8 +97,6 @@ public:
     ~StatsTracker() {}
     // called after a new StackFrame has been pushed (for callpath tracing)
     void framePushed(ExecutionState &es, StackFrame *parentFrame); 
-    // called after a StackFrame has been popped 
-    void framePopped(ExecutionState &es); 
     // called when some side of a branch has been visited. it is
     // imperative that this be called when the statistics index is at // the index for the branch itself.
     void markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse); 
@@ -614,19 +585,15 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 /* Should be called _after_ the es->pushFrame() */
 void StatsTracker::framePushed(ExecutionState &es, StackFrame *parentFrame) {
     StackFrame &sf = es.stack.back(); 
-    CallPathNode *parent = parentFrame ? parentFrame->callPathNode : 0;
-    CallPathNode *cp = callPathManager.getCallPath(parent, sf.caller ? sf.caller->inst : 0, sf.func);
+    CallPathNode *cp = callPathManager.getCallPath(parentFrame ? parentFrame->callPathNode : 0,
+       sf.caller ? sf.caller->inst : 0, sf.func);
     sf.callPathNode = cp;
     cp->count++;
-    if (updateMinDistToUncovered) {
-      uint64_t minDistAtRA = 0;
-      if (parentFrame)
-        minDistAtRA = parentFrame->minDistToUncoveredOnReturn; 
-      sf.minDistToUncoveredOnReturn = sf.caller ?  computeMinDistToUncovered(sf.caller, minDistAtRA) : 0;
-    }
+    if (updateMinDistToUncovered)
+      sf.minDistToUncoveredOnReturn = sf.caller ?  computeMinDistToUncovered(sf.caller,
+          parentFrame ? parentFrame->minDistToUncoveredOnReturn : 0) : 0;
 }
 
-void StatsTracker::framePopped(ExecutionState &es) { } 
 void StatsTracker::markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse) {
     unsigned id = theStatisticManager->getIndex();
     uint64_t hasTrue = theStatisticManager->getIndexedValue(stats::trueBranches, id);
@@ -1687,8 +1654,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       terminateStateOnExit(state);
     } else {
       state.popFrame();
-      if (statsTracker)
-        statsTracker->framePopped(state);
       if (InvokeInst *ii = dyn_cast<InvokeInst>(caller))
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       else {
