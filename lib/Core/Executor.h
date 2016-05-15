@@ -168,7 +168,7 @@ private:
   ref<klee::ConstantExpr> toConstant(ExecutionState &state, ref<Expr> e, const char *purpose); 
   void terminateStateEarly(ExecutionState &state, const llvm::Twine &message);
   template <typename TypeIt>
-  void computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie); 
+  void computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie); 
   void prepareModule(const Interpreter::ModuleOptions &opts);
 
 public: //friends

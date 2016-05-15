@@ -6,10 +6,8 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
 #ifndef KLEE_KINSTRUCTION_H
 #define KLEE_KINSTRUCTION_H
-
 #include "klee/Config/Version.h"
 #include "llvm/Support/DataTypes.h"
 #include <vector>
@@ -17,7 +15,6 @@
 namespace llvm {
   class Instruction;
 }
-
 namespace klee {
   class Executor;
   class KModule; 
@@ -30,10 +27,6 @@ namespace klee {
     int *operands;
     /// Destination register index.
     unsigned dest; 
-  public:
-    virtual ~KInstruction(); 
-  }; 
-  struct KGEPInstruction : KInstruction {
     /// indices - The list of variable sized adjustments to add to the pointer
     /// operand to execute the instruction. The first element is the operand
     /// index into the GetElementPtr instruction, and the second element is the
@@ -41,8 +34,8 @@ namespace klee {
     std::vector< std::pair<unsigned, uint64_t> > indices;
     /// offset - A constant offset to add to the pointer operand to execute the /// instruction.
     uint64_t offset;
-  };
+  public:
+    virtual ~KInstruction(); 
+  }; 
 }
-
 #endif
-
