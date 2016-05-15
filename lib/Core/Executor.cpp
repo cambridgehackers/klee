@@ -2274,32 +2274,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-template <typename TypeIt>
-void Executor::computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie) {
-  ref<ConstantExpr> constantOffset = ConstantExpr::alloc(0, Context::get().getPointerWidth());
-  uint64_t index = 1;
-  for (TypeIt ii = ib; ii != ie; ++ii) {
-    if (LLVM_TYPE_Q StructType *st = dyn_cast<StructType>(*ii)) {
-      const StructLayout *sl = kmodule->targetData->getStructLayout(st);
-      const ConstantInt *ci = cast<ConstantInt>(ii.getOperand());
-      uint64_t addend = sl->getElementOffset((unsigned) ci->getZExtValue());
-      constantOffset = constantOffset->Add(ConstantExpr::alloc(addend, Context::get().getPointerWidth()));
-    } else {
-      const SequentialType *set = cast<SequentialType>(*ii);
-      uint64_t elementSize = kmodule->targetData->getTypeStoreSize(set->getElementType());
-      Value *operand = ii.getOperand();
-      if (Constant *c = dyn_cast<Constant>(operand)) {
-        ref<ConstantExpr> index = evalConstant(c)->SExt(Context::get().getPointerWidth());
-        ref<ConstantExpr> addend = index->Mul(ConstantExpr::alloc(elementSize, Context::get().getPointerWidth()));
-        constantOffset = constantOffset->Add(addend);
-      } else
-        ki->indices.push_back(std::make_pair(index, elementSize));
-    }
-    index++;
-  }
-  ki->offset = constantOffset->getZExtValue();
-}
-
 std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) const{
   std::string Str;
   llvm::raw_string_ostream info(Str);
@@ -2851,6 +2825,32 @@ static Function *getStubFunctionForCtorList(Module *m, GlobalVariable *gv, std::
   return fn;
 }
 
+template <typename TypeIt>
+void Executor::computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie) {
+  ref<ConstantExpr> constantOffset = ConstantExpr::alloc(0, Context::get().getPointerWidth());
+  uint64_t index = 1;
+  for (TypeIt ii = ib; ii != ie; ++ii) {
+    if (LLVM_TYPE_Q StructType *st = dyn_cast<StructType>(*ii)) {
+      const StructLayout *sl = kmodule->targetData->getStructLayout(st);
+      const ConstantInt *ci = cast<ConstantInt>(ii.getOperand());
+      uint64_t addend = sl->getElementOffset((unsigned) ci->getZExtValue());
+      constantOffset = constantOffset->Add(ConstantExpr::alloc(addend, Context::get().getPointerWidth()));
+    } else {
+      const SequentialType *set = cast<SequentialType>(*ii);
+      uint64_t elementSize = kmodule->targetData->getTypeStoreSize(set->getElementType());
+      Value *operand = ii.getOperand();
+      if (Constant *c = dyn_cast<Constant>(operand)) {
+        ref<ConstantExpr> index = evalConstant(c)->SExt(Context::get().getPointerWidth());
+        ref<ConstantExpr> addend = index->Mul(ConstantExpr::alloc(elementSize, Context::get().getPointerWidth()));
+        constantOffset = constantOffset->Add(addend);
+      } else
+        ki->indices.push_back(std::make_pair(index, elementSize));
+    }
+    index++;
+  }
+  ki->offset = constantOffset->getZExtValue();
+}
+
 static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap, KModule *km, KInstruction *ki) {
   if (Instruction *inst = dyn_cast<Instruction>(v))
     return registerMap[inst];
@@ -2940,6 +2940,13 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
     *os << *module;
     delete os;
   } 
+printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
+  statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly2.ll"),
+     (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
+   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
+   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
+   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
+   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
   /* Build shadow structures */ 
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
     if (!it->isDeclaration()) {
@@ -2961,6 +2968,15 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
           ki->inst = it;      
           registerMap[it] = rnum++;
           ki->dest = registerMap[it]; 
+          if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(it))
+            computeOffsets(ki, gep_type_begin(gepi), gep_type_end(gepi));
+          else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(it)) {
+            computeOffsets(ki, iv_type_begin(ivi), iv_type_end(ivi));
+            assert(ki->indices.empty() && "InsertValue constant offset expected");
+          } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(it)) {
+            computeOffsets(ki, ev_type_begin(evi), ev_type_end(evi));
+            assert(ki->indices.empty() && "ExtractValue constant offset expected");
+          }
           if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
             CallSite cs(it);
             unsigned numArgs = cs.arg_size();
@@ -2974,15 +2990,6 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
             for (unsigned j=0; j<numOperands; j++)
               ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, kmodule, ki);
           } 
-          if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(ki->inst)) {
-            computeOffsets(ki, gep_type_begin(gepi), gep_type_end(gepi));
-          } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(ki->inst)) {
-            computeOffsets(ki, iv_type_begin(ivi), iv_type_end(ivi));
-            assert(ki->indices.empty() && "InsertValue constant offset expected");
-          } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(ki->inst)) {
-            computeOffsets(ki, ev_type_begin(evi), ev_type_end(evi));
-            assert(ki->indices.empty() && "ExtractValue constant offset expected");
-          }
           kf->instructions[insInd++] = ki;
         }
       kf->numRegisters = rnum; 
@@ -2992,13 +2999,6 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
         kmodule->escapingFunctions.insert(it);
     }
   specialFunctionHandler->bind();
-printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
-    statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly2.ll"),
-       (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
-         || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
     for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it)
       for (unsigned i=0; i<(*it)->numInstructions; ++i) {
         KInstruction *ki = (*it)->instructions[i];
