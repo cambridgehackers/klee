@@ -77,7 +77,6 @@ public:
       }
     }
   }; 
-
   class StatsTracker {
     friend class WriteStatsTimer;
     friend class WriteIStatsTimer; 
@@ -647,29 +646,26 @@ void StatsTracker::writeIStats() {
   Module *m = executor.kmodule->module;
   // We assume that we didn't move the file pointer
   llvm::outs() << "version: 1\n" << "creator: klee\n" << "pid: " << getpid() << "\n" << "cmd: " << m->getModuleIdentifier() << "\n\n" << "\n" << "positions: instr line\n" << "events: " << "\n"; 
-    updateStateStatistics(1); 
+  updateStateStatistics(1); 
   std::string sourceFile = ""; 
   CallSiteSummaryTable callSiteStats;
-    callPathManager.getSummaryStatistics(callSiteStats); 
+  callPathManager.getSummaryStatistics(callSiteStats); 
   llvm::outs() << "ob=" << objectFilename << "\n"; 
   for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
     if (!fnIt->isDeclaration()) {
       llvm::outs() << "fn=" << fnIt->getName().str() << "\n";
-      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
-        for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
-          Instruction *instr = &*it;
-          if (isa<CallInst>(instr) || isa<InvokeInst>(instr)) {
-            CallSiteSummaryTable::iterator it = callSiteStats.find(instr);
-            if (it!=callSiteStats.end()) {
-              for (auto fit = it->second.begin(), fie = it->second.end(); fit != fie; ++fit) {
+      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt)
+        for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it)
+          if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
+            CallSiteSummaryTable::iterator callInst = callSiteStats.find(it);
+            if (callInst!=callSiteStats.end()) {
+              for (auto fit = callInst->second.begin(), fie = callInst->second.end(); fit != fie; ++fit) {
                 Function *f = fit->first;
                 CallSiteInfo &csi = fit->second;
                 llvm::outs() << "cfn=" << f->getName().str() << "\n" << "calls=" << csi.count << "\n";
               }
             }
           }
-        }
-      }
     }
   }
     updateStateStatistics((uint64_t)-1); 
