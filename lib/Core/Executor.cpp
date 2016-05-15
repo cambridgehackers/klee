@@ -30,7 +30,6 @@
 #include "klee/Internal/ADT/KTest.h"
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Internal/Module/Cell.h"
-#include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/ErrorHandling.h"
@@ -84,7 +83,6 @@ static RNG theRNG;
 namespace klee {
   class ExecutionState;
   class Executor;  
-  class InstructionInfoTable;
   class InterpreterHandler;
   struct KInstruction;
   struct StackFrame;
@@ -3134,7 +3132,6 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   } 
   kmodule->kleeMergeFn = module->getFunction("klee_merge"); 
   /* Build shadow structures */ 
-  kmodule->infos = new InstructionInfoTable(module);  
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
     if (!it->isDeclaration()) {
       KFunction *kf = new KFunction(it);

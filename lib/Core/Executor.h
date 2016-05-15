@@ -46,7 +46,6 @@ namespace klee {
   class ExecutionState;
   class ExternalDispatcher;
   class Expr;
-  class InstructionInfoTable;
   class KInstIterator;
   class MemoryManager;
   class MemoryObject;

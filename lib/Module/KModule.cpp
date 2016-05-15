@@ -13,7 +13,6 @@
 #include "klee/Interpreter.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
-#include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Support/Debug.h"
 #include "klee/Internal/Support/ModuleUtil.h"
 #include "llvm/Bitcode/ReaderWriter.h"
@@ -47,12 +46,10 @@ KModule::KModule(Module *_module)
   : module(_module),
     targetData(new DataLayout(module)),
     kleeMergeFn(0),
-    infos(0),
     m_SwitchType(SwitchType) {
 }
 
 KModule::~KModule() {
-  delete infos; 
   for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
     delete it->second; 
   delete targetData;

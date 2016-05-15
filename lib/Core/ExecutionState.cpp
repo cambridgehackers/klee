@@ -8,7 +8,6 @@
 //===----------------------------------------------------------------------===//
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Module/Cell.h"
-#include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Expr.h"

@@ -27,9 +27,7 @@ namespace klee {
   struct Cell;
   class Executor;
   class Expr;
-  class InstructionInfoTable;
   struct KInstruction;
-
   class KConstant {
   public:
     /// Actual LLVM constant this represents.
@@ -48,7 +46,6 @@ namespace klee {
     llvm::DataLayout *targetData;
     llvm::Function *kleeMergeFn; 
     std::set<llvm::Function*> escapingFunctions; 
-    InstructionInfoTable *infos; 
     std::vector<llvm::Constant*> constants;
     std::map<llvm::Constant*, KConstant*> constantMap;
     KConstant* getKConstant(llvm::Constant *c);
