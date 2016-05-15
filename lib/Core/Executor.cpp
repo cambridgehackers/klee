@@ -3140,17 +3140,13 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       kf->instructions = new KInstruction*[kf->numInstructions]; 
       std::map<Instruction*, unsigned> registerMap; 
       unsigned insInd = 0;
-      // The first arg_size() registers are reserved for formals.
-      unsigned rnum = func->arg_size();
-      for (auto bbit = func->begin(), bbie = func->end(); bbit != bbie; ++bbit)
-        for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it)
-          registerMap[it] = rnum++;
-      kf->numRegisters = rnum; 
+      unsigned rnum = func->arg_size(); // The first arg_size() registers are reserved for formals.
       for (auto bbit = func->begin(), bbie = func->end(); bbit != bbie; ++bbit)
         for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
           KInstruction *ki = new KInstruction();
           ki->offset = -1;
           ki->inst = it;      
+          registerMap[it] = rnum++;
           ki->dest = registerMap[it]; 
           if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
             CallSite cs(it);
@@ -3167,40 +3163,36 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
           } 
           kf->instructions[insInd++] = ki;
         }
+      kf->numRegisters = rnum; 
       functions.push_back(kf);
       functionMap.insert(std::make_pair(it, kf));
+      if (functionEscapes(it))
+        kmodule->escapingFunctions.insert(it);
     }
-  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
-    Function *f = (*it)->function;
-    if (functionEscapes(f))
-      kmodule->escapingFunctions.insert(f);
-  }
-  if (!kmodule->escapingFunctions.empty()) {
-    llvm::errs() << "KLEE: escaping functions: [";
-    for (auto it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it)
-      llvm::errs() << (*it)->getName() << ", ";
-    llvm::errs() << "]\n";
-  }
   specialFunctionHandler->bind();
-printf("[%s:%d] create assembly.ll\n", __FUNCTION__, __LINE__);
+printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
     statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly2.ll"),
        (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
          || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
-    for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
-      KFunction *kf = *it;
-      for (unsigned i=0; i<kf->numInstructions; ++i) {
-        KInstruction *ki = kf->instructions[i];
-          theStatisticManager->setIndex(0);
-          if (instructionIsCoverable(ki->inst))
-            ++stats::uncoveredInstructions;
+    for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it)
+      for (unsigned i=0; i<(*it)->numInstructions; ++i) {
+        KInstruction *ki = (*it)->instructions[i];
+        theStatisticManager->setIndex(0);
+        if (instructionIsCoverable(ki->inst))
+          ++stats::uncoveredInstructions;
         if (BranchInst *bi = dyn_cast<BranchInst>(ki->inst))
           if (!bi->isUnconditional())
             statsTracker->numBranches++;
       }
-    } 
+  if (!kmodule->escapingFunctions.empty()) {
+    llvm::errs() << "KLEE: escaping functions: [";
+    for (auto it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it)
+      llvm::errs() << (*it)->getName() << ", ";
+    llvm::errs() << "]\n";
+  }
   if (module->getModuleInlineAsm() != "")
     klee_warning("executable has module level assembly (ignoring)");
   std::set<std::string> undefinedSymbols;

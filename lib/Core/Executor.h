@@ -224,9 +224,7 @@ public: //friends
   void terminateStateOnExit(ExecutionState &state);
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();
-  const InterpreterHandler& getHandler() {
-    return *interpreterHandler;
-  }
+  const InterpreterHandler& getHandler() { return *interpreterHandler; }
   // XXX should just be moved out to utility module
   ref<klee::ConstantExpr> evalConstant(const llvm::Constant *c);
   virtual void setPathWriter(TreeStreamWriter *tsw) { pathWriter = tsw; }
