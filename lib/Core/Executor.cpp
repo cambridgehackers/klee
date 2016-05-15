@@ -2756,20 +2756,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   srand(1);
   srandom(1);
   MemoryObject *argvMO = 0;
-  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
-    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
-        KInstruction *KI = (*it)->instructions[i];
-        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
-            computeOffsets(KI, gep_type_begin(gepi), gep_type_end(gepi));
-        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
-            computeOffsets(KI, iv_type_begin(ivi), iv_type_end(ivi));
-            assert(KI->indices.empty() && "InsertValue constant offset expected");
-        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
-            computeOffsets(KI, ev_type_begin(evi), ev_type_end(evi));
-            assert(KI->indices.empty() && "ExtractValue constant offset expected");
-        }
-    }
-  }
   // In order to make uclibc happy and be closer to what the system is
   // doing we lay out the environments at the end of the argv array
   // (both are terminated by a null). There is also a final terminating
@@ -2996,6 +2982,20 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       if (functionEscapes(it))
         kmodule->escapingFunctions.insert(it);
     }
+  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
+    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
+        KInstruction *KI = (*it)->instructions[i];
+        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
+            computeOffsets(KI, gep_type_begin(gepi), gep_type_end(gepi));
+        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
+            computeOffsets(KI, iv_type_begin(ivi), iv_type_end(ivi));
+            assert(KI->indices.empty() && "InsertValue constant offset expected");
+        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
+            computeOffsets(KI, ev_type_begin(evi), ev_type_end(evi));
+            assert(KI->indices.empty() && "ExtractValue constant offset expected");
+        }
+    }
+  }
   specialFunctionHandler->bind();
 printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
     statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly2.ll"),
