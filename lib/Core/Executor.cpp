@@ -89,9 +89,9 @@ public:
     bool updateMinDistToUncovered; 
     void updateStateStatistics(uint64_t addend);
     void writeStatsHeader();
+  public:
     void writeStatsLine();
     void writeIStats(); 
-  public:
     unsigned numBranches;
     StatsTracker(Executor &_executor, std::string _objectFilename, bool _updateMinDistToUncovered);
     ~StatsTracker() {}
@@ -100,11 +100,6 @@ public:
     // called when some side of a branch has been visited. it is
     // imperative that this be called when the statistics index is at // the index for the branch itself.
     void markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse); 
-    // called when execution is done and stats files should be flushed
-    void done() {
-        writeStatsLine();
-        writeIStats();
-    }
     // process stats for a single instruction step, es is the state // about to be stepped
     void stepInstruction(ExecutionState &es); 
     /// Return time in seconds since execution start.
@@ -168,7 +163,7 @@ class PTree {
     typedef ExecutionState* data_type;
 public:
     PTreeNode *root;
-    PTree(const data_type &_root);
+    PTree(const data_type &_root) : root(new PTreeNode(0,_root)) { }
     ~PTree() {}
     std::pair<PTreeNode*,PTreeNode*> split(PTreeNode *n, const data_type &leftData, const data_type &rightData) {
       assert(n && !n->left && !n->right);
@@ -194,7 +189,6 @@ public:
     }
 };
 }
-PTree::PTree(const data_type &_root) : root(new PTreeNode(0,_root)) { }
 
 class DFSSearcher : public Searcher {
   std::vector<ExecutionState*> states;
@@ -698,10 +692,10 @@ static std::vector<Instruction*> getSuccs(Instruction *i) {
 
 uint64_t klee::computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA) {
   StatisticManager &sm = *theStatisticManager;
+  uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, 0/*ki->info->id*/);
   if (minDistAtRA==0)  // unreachable on return, best is local
-    return sm.getIndexedValue(stats::minDistToUncovered, 0/*ki->info->id*/);
+    return minDistLocal;
   else {
-    uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, 0/*ki->info->id*/);
     uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn, 0/*ki->info->id*/); 
     if (distToReturn==0) // return unreachable, best is local
       return minDistLocal;
@@ -1608,16 +1602,6 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
   }
 }
 
-void Executor::stepInstruction(ExecutionState &state) {
-    llvm::errs() << "     [no debug info]:";
-    llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
-  if (statsTracker)
-    statsTracker->stepInstruction(state);
-  ++stats::instructions;
-  state.prevPC = state.pc;
-  ++state.pc;
-}
-
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> value) {
   state.stack.back().locals[target->dest].value = value;
 }
@@ -1636,7 +1620,13 @@ void Executor::executeInstruction(ExecutionState &state)
 {
   KInstruction *ki = state.pc;
   Instruction *i = ki->inst;
-  stepInstruction(state);
+  llvm::errs() << "     [no debug info]:";
+  llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
+  if (statsTracker)
+    statsTracker->stepInstruction(state);
+  ++stats::instructions;
+  state.prevPC = state.pc;
+  ++state.pc;
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   int opcode = i->getOpcode();
   switch (opcode) {
@@ -2759,8 +2749,10 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   memory = new MemoryManager(NULL);
   globalObjects.clear();
   globalAddresses.clear();
-  if (statsTracker)
-    statsTracker->done();
+  if (statsTracker) {
+      statsTracker->writeStatsLine();
+      statsTracker->writeIStats();
+  }
 }
 
 // what a hack
