@@ -2990,25 +2990,20 @@ printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
             for (unsigned j=0; j<numOperands; j++)
               ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, kmodule, ki);
           } 
+          theStatisticManager->setIndex(0);
+          if (instructionIsCoverable(ki->inst))
+            ++stats::uncoveredInstructions;
+          if (BranchInst *bi = dyn_cast<BranchInst>(ki->inst))
+            if (!bi->isUnconditional())
+              statsTracker->numBranches++;
           kf->instructions[insInd++] = ki;
         }
       kf->numRegisters = rnum; 
-      functions.push_back(kf);
       functionMap.insert(std::make_pair(it, kf));
       if (functionEscapes(it))
         kmodule->escapingFunctions.insert(it);
     }
   specialFunctionHandler->bind();
-    for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it)
-      for (unsigned i=0; i<(*it)->numInstructions; ++i) {
-        KInstruction *ki = (*it)->instructions[i];
-        theStatisticManager->setIndex(0);
-        if (instructionIsCoverable(ki->inst))
-          ++stats::uncoveredInstructions;
-        if (BranchInst *bi = dyn_cast<BranchInst>(ki->inst))
-          if (!bi->isUnconditional())
-            statsTracker->numBranches++;
-      }
   if (!kmodule->escapingFunctions.empty()) {
     llvm::errs() << "KLEE: escaping fns: [";
     for (auto it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it)
