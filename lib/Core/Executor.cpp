@@ -2398,9 +2398,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     // XXX For now we just pick a size. Ideally we would support
     // symbolic sizes fully but even if we don't it would be better to
     // "smartly" pick a value, for example we could fork and pick the
-    // min and max values and perhaps some intermediate (reasonable
-    // value).
-    //
+    // min and max values and perhaps some intermediate (reasonable // value).
     // It would also be nice to recognize the case when size has
     // exactly two values and just fork (but we need to get rid of
     // return argument first). This shows up in pcre when llvm
@@ -2454,10 +2452,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
 
 void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
   StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
-  if (zeroPointer.first) {
-    if (target)
+  if (zeroPointer.first && target)
       bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
-  }
   if (zeroPointer.second) { // address != 0
     ExactResolutionList rl;
     resolveExact(*zeroPointer.second, address, rl, "free");
@@ -2688,15 +2684,15 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   int envc;
   for (envc=0; envp[envc]; ++envc) ;
   Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
-  if (ai!=ae) {
+  if (ai != ae) {
     arguments.push_back(ConstantExpr::alloc(argc, Expr::Int32));
-    if (++ai!=ae) {
+    if (++ai != ae) {
       argvMO = memory->allocate((argc+1+envc+1+1) * NumPtrBytes, false, true, f->begin()->begin());
       arguments.push_back(argvMO->getBaseExpr());
-      if (++ai!=ae) {
+      if (++ai != ae) {
         uint64_t envp_start = argvMO->address + (argc+1)*NumPtrBytes;
         arguments.push_back(Expr::createPointer(envp_start));
-        if (++ai!=ae)
+        if (++ai != ae)
           klee_error("invalid main function (expect 0-3 arguments)");
       }
     }
@@ -2718,12 +2714,10 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       else {
         char *s = i<argc ? argv[i] : envp[i-(argc+1)];
         int j, len = strlen(s);
-
         MemoryObject *arg = memory->allocate(len+1, false, true, state->pc->inst);
         ObjectState *os = bindObjectInState(*state, arg, false);
         for (j=0; j<len+1; j++)
           os->write8(j, s[j]);
-
         // Write pointer to newly allocated and initialised argv/envp c-string
         argvOS->write(i * NumPtrBytes, arg->getBaseExpr());
       }
@@ -2837,8 +2831,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   pm.add(new IntrinsicCleanerPass(*kmodule->targetData, false));
 printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   pm.run(*module);
-printf("[%s:%d] after runpreprocessmodule\n", __FUNCTION__, __LINE__);
-
   if (opts.Optimize)
     Optimize(module);
 #if 0 //jca
