@@ -2693,7 +2693,8 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
       }
 }
 
-void Executor::runExecutor(ExecutionState &initialState) {
+void Executor::runExecutor(ExecutionState &initialState)
+{
 printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(&initialState);
@@ -2744,7 +2745,8 @@ printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
 printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
 }
 
-void Executor::runFunctionAsMain(Function *f, int argc, char **argv, char **envp) {
+void Executor::runFunctionAsMain(Function *f, int argc, char **argv, char **envp)
+{
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
   std::vector<ref<Expr> > arguments;
@@ -2754,6 +2756,20 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   srand(1);
   srandom(1);
   MemoryObject *argvMO = 0;
+  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
+    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
+        KInstruction *KI = (*it)->instructions[i];
+        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
+            computeOffsets(KI, gep_type_begin(gepi), gep_type_end(gepi));
+        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
+            computeOffsets(KI, iv_type_begin(ivi), iv_type_end(ivi));
+            assert(KI->indices.empty() && "InsertValue constant offset expected");
+        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
+            computeOffsets(KI, ev_type_begin(evi), ev_type_end(evi));
+            assert(KI->indices.empty() && "ExtractValue constant offset expected");
+        }
+    }
+  }
   // In order to make uclibc happy and be closer to what the system is
   // doing we lay out the environments at the end of the argv array
   // (both are terminated by a null). There is also a final terminating
@@ -2805,20 +2821,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   initializeGlobals(*state);
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
-  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
-    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
-        KInstruction *KI = (*it)->instructions[i];
-        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
-            computeOffsets(KI, gep_type_begin(gepi), gep_type_end(gepi));
-        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
-            computeOffsets(KI, iv_type_begin(ivi), iv_type_end(ivi));
-            assert(KI->indices.empty() && "InsertValue constant offset expected");
-        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
-            computeOffsets(KI, ev_type_begin(evi), ev_type_end(evi));
-            assert(KI->indices.empty() && "ExtractValue constant offset expected");
-        }
-    }
-  }
   constantTable = new Cell[kmodule->constants.size()];
   for (unsigned i=0; i<kmodule->constants.size(); ++i)
       constantTable[i].value = evalConstant(kmodule->constants[i]);
