@@ -2974,6 +2974,15 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
             for (unsigned j=0; j<numOperands; j++)
               ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, kmodule, ki);
           } 
+          if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(ki->inst)) {
+            computeOffsets(ki, gep_type_begin(gepi), gep_type_end(gepi));
+          } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(ki->inst)) {
+            computeOffsets(ki, iv_type_begin(ivi), iv_type_end(ivi));
+            assert(ki->indices.empty() && "InsertValue constant offset expected");
+          } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(ki->inst)) {
+            computeOffsets(ki, ev_type_begin(evi), ev_type_end(evi));
+            assert(ki->indices.empty() && "ExtractValue constant offset expected");
+          }
           kf->instructions[insInd++] = ki;
         }
       kf->numRegisters = rnum; 
@@ -2982,20 +2991,6 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       if (functionEscapes(it))
         kmodule->escapingFunctions.insert(it);
     }
-  for (auto it = functions.begin(), ie = functions.end(); it != ie; ++it) {
-    for (unsigned i = 0; i < (*it)->numInstructions; ++i) {
-        KInstruction *KI = (*it)->instructions[i];
-        if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
-            computeOffsets(KI, gep_type_begin(gepi), gep_type_end(gepi));
-        } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
-            computeOffsets(KI, iv_type_begin(ivi), iv_type_end(ivi));
-            assert(KI->indices.empty() && "InsertValue constant offset expected");
-        } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
-            computeOffsets(KI, ev_type_begin(evi), ev_type_end(evi));
-            assert(KI->indices.empty() && "ExtractValue constant offset expected");
-        }
-    }
-  }
   specialFunctionHandler->bind();
 printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
     statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly2.ll"),
