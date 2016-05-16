@@ -4,7 +4,7 @@
 
 #include <klee/klee.h>
 
-int get_sign(int x) {
+int get_sign(char x) {
   if (x == 0)
      return 0;
   
@@ -15,7 +15,7 @@ int get_sign(int x) {
 } 
 
 int main() {
-  int a;
+  char a;
   klee_make_symbolic(&a, sizeof(a), "a");
   return get_sign(a);
 } 
