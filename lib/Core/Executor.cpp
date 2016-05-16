@@ -2572,58 +2572,6 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
       }
 }
 
-void Executor::runExecutor(ExecutionState &initialState)
-{
-printf("[%s:%d] start \n", __FUNCTION__, __LINE__);
-  // Delay init till now so that ticks don't accrue during optimization and such.
-  states.insert(&initialState);
-  if (CoreSearch.size() == 0) {
-    CoreSearch.push_back(Searcher::RandomPath);
-    CoreSearch.push_back(Searcher::NURS_CovNew);
-  }
-  std::vector<Searcher *> s;
-  for (unsigned i=0; i < CoreSearch.size(); i++) {
-      Searcher *searcher = NULL;
-      switch (CoreSearch[i]) {
-      case Searcher::DFS: searcher = new DFSSearcher(); break;
-      case Searcher::BFS: searcher = new BFSSearcher(); break;
-      case Searcher::RandomState: searcher = new RandomSearcher(); break;
-      case Searcher::RandomPath: searcher = new RandomPathSearcher(*this); break;
-      case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew); break;
-      case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered); break;
-      case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth); break;
-      case Searcher::NURS_ICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::InstCount); break;
-      case Searcher::NURS_CPICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CPInstCount); break;
-      case Searcher::NURS_QC: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost); break;
-      }
-      s.push_back(searcher);
-  }
-  Searcher *searcher = s[0];
-  if (CoreSearch.size() > 1)
-    searcher = new InterleavedSearcher(s);
-  searcher->update(0, states, std::set<ExecutionState*>());
-  while (!states.empty()) {
-    ExecutionState &state = searcher->selectState();
-    executeInstruction(state);
-    searcher->update(&state, addedStates, removedStates);
-    states.insert(addedStates.begin(), addedStates.end());
-    addedStates.clear();
-    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
-      ExecutionState *es = *it;
-      auto it2 = states.find(es);
-      assert(it2!=states.end());
-      states.erase(it2);
-      auto it3 = seedMap.find(es);
-      if (it3 != seedMap.end())
-        seedMap.erase(it3);
-      processTree->remove(es->ptreeNode);
-      delete es;
-    }
-    removedStates.clear();
-  }
-printf("[%s:%d] end\n", __FUNCTION__, __LINE__);
-}
-
 void Executor::runFunctionAsMain(Function *f, int argc, char **argv, char **envp)
 {
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
@@ -2687,7 +2635,52 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   for (unsigned i=0; i<kmodule->constants.size(); ++i)
       constantTable[i].value = evalConstant(kmodule->constants[i]);
 printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
-  runExecutor(*state);
+  // Delay init till now so that ticks don't accrue during optimization and such.
+  states.insert(state);
+  if (CoreSearch.size() == 0) {
+    CoreSearch.push_back(Searcher::RandomPath);
+    CoreSearch.push_back(Searcher::NURS_CovNew);
+  }
+  std::vector<Searcher *> s;
+  for (unsigned i=0; i < CoreSearch.size(); i++) {
+      Searcher *searcher = NULL;
+      switch (CoreSearch[i]) {
+      case Searcher::DFS: searcher = new DFSSearcher(); break;
+      case Searcher::BFS: searcher = new BFSSearcher(); break;
+      case Searcher::RandomState: searcher = new RandomSearcher(); break;
+      case Searcher::RandomPath: searcher = new RandomPathSearcher(*this); break;
+      case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew); break;
+      case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered); break;
+      case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth); break;
+      case Searcher::NURS_ICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::InstCount); break;
+      case Searcher::NURS_CPICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CPInstCount); break;
+      case Searcher::NURS_QC: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost); break;
+      }
+      s.push_back(searcher);
+  }
+  Searcher *searcher = s[0];
+  if (CoreSearch.size() > 1)
+    searcher = new InterleavedSearcher(s);
+  searcher->update(0, states, std::set<ExecutionState*>());
+  while (!states.empty()) {
+    ExecutionState &state = searcher->selectState();
+    executeInstruction(state);
+    searcher->update(&state, addedStates, removedStates);
+    states.insert(addedStates.begin(), addedStates.end());
+    addedStates.clear();
+    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+      ExecutionState *es = *it;
+      auto it2 = states.find(es);
+      assert(it2!=states.end());
+      states.erase(it2);
+      auto it3 = seedMap.find(es);
+      if (it3 != seedMap.end())
+        seedMap.erase(it3);
+      processTree->remove(es->ptreeNode);
+      delete es;
+    }
+    removedStates.clear();
+  }
 printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   delete processTree;
   processTree = 0;
