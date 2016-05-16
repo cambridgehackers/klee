@@ -1055,8 +1055,7 @@ Executor::~Executor() {
     delete processTree;
   if (specialFunctionHandler)
     delete specialFunctionHandler;
-  if (statsTracker)
-    delete statsTracker;
+  delete statsTracker;
   delete tsolver;
   delete kmodule;
   if (constantTable)
@@ -1484,8 +1483,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     KFunction *kf = functionMap[f];
     state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
     state.pc = kf->instructions;
-    if (statsTracker)
-      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
+    statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
     unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
@@ -1617,8 +1615,7 @@ void Executor::executeInstruction(ExecutionState &state)
   Instruction *i = ki->inst;
   llvm::errs() << "     [no debug info]:";
   llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
-  if (statsTracker)
-    statsTracker->stepInstruction(state);
+  statsTracker->stepInstruction(state);
   ++stats::instructions;
   state.prevPC = state.pc;
   ++state.pc;
@@ -1679,8 +1676,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
       // NOTE: There is a hidden dependency here, markBranchVisited requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned up with convenient instruction specific data.
-      if (statsTracker)
-        statsTracker->markBranchVisited(branches.first, branches.second);
+      statsTracker->markBranchVisited(branches.first, branches.second);
       if (branches.first)
         transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
       if (branches.second)
@@ -2190,6 +2186,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     break;
   }
   case Instruction::InsertValue: {
+    assert(ki->indices.empty() && "InsertValue constant offset expected");
     ref<Expr> agg = eval(ki, 0, state);
     ref<Expr> val = eval(ki, 1, state);
     ref<Expr> l = NULL, r = NULL;
@@ -2209,6 +2206,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     break;
   }
   case Instruction::ExtractValue: {
+    assert(ki->indices.empty() && "ExtractValue constant offset expected");
     ref<Expr> agg = eval(ki, 0, state);
     ref<Expr> result = ExtractExpr::create(agg, ki->offset*8, getWidthForLLVMType(i->getType()));
     bindLocal(ki, state, result);
@@ -2701,8 +2699,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
     state->pathOS = pathWriter->open();
   if (symPathWriter)
     state->symPathOS = symPathWriter->open();
-  if (statsTracker)
-    statsTracker->framePushed(*state, 0);
+  statsTracker->framePushed(*state, 0);
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
   getArgumentCell(*state, kf, f->arg_size(), arguments);
   if (argvMO) {
@@ -2738,10 +2735,8 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   memory = new MemoryManager(NULL);
   globalObjects.clear();
   globalAddresses.clear();
-  if (statsTracker) {
-      statsTracker->writeStatsLine();
-      statsTracker->writeIStats();
-  }
+  statsTracker->writeStatsLine();
+  statsTracker->writeIStats();
 }
 
 // what a hack
@@ -2914,13 +2909,10 @@ printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
           ki->dest = registerMap[it]; 
           if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(it))
             computeOffsets(ki, gep_type_begin(gepi), gep_type_end(gepi));
-          else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(it)) {
+          else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(it))
             computeOffsets(ki, iv_type_begin(ivi), iv_type_end(ivi));
-            assert(ki->indices.empty() && "InsertValue constant offset expected");
-          } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(it)) {
+          else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(it))
             computeOffsets(ki, ev_type_begin(evi), ev_type_end(evi));
-            assert(ki->indices.empty() && "ExtractValue constant offset expected");
-          }
           if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
             CallSite cs(it);
             unsigned numArgs = cs.arg_size();
