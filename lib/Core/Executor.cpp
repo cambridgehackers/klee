@@ -675,6 +675,7 @@ void Executor::getConstraintLog(const ExecutionState &state, std::string &res, I
 }
 
 bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std::pair<std::string, std::vector<unsigned char>>> &res){
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   osolver->setCoreSolverTimeout(0);
   ExecutionState tmp(state);
   // Go through each byte in every test case and attempt to restrict
@@ -720,8 +721,10 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std:
     ExprPPrinter::printQuery(llvm::errs(), state.constraints, ConstantExpr::alloc(0, Expr::Bool));
     return false;
   }
-  for (unsigned i = 0; i != state.symbolics.size(); ++i)
+  for (unsigned i = 0; i != state.symbolics.size(); ++i) {
+printf("[%s:%d] name %s val \n", __FUNCTION__, __LINE__, state.symbolics[i].first->name.c_str()); //, values[i]);
     res.push_back(std::make_pair(state.symbolics[i].first->name, values[i]));
+  }
   return true;
 }
 
