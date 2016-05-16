@@ -2522,10 +2522,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   srand(1);
   srandom(1);
   MemoryObject *argvMO = 0;
-  // In order to make uclibc happy and be closer to what the system is
-  // doing we lay out the environments at the end of the argv array
-  // (both are terminated by a null). There is also a final terminating
-  // null that uclibc seems to expect, possibly the ELF header?
   int envc;
   for (envc=0; envp[envc]; ++envc) ;
   Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
@@ -2542,32 +2538,29 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       }
     }
   }
-  ExecutionState *state = new ExecutionState(kf->instructions, f, kf->numRegisters);
+  ExecutionState *startingState = new ExecutionState(kf->instructions, f, kf->numRegisters);
   if (pathWriter)
-    state->pathOS = pathWriter->open();
+    startingState->pathOS = pathWriter->open();
   if (symPathWriter)
-    state->symPathOS = symPathWriter->open();
-  //framePushed(*state, 0);
-//void Executor::framePushed(ExecutionState &es, StackFrame *parentFrame) {
-  StackFrame &sf = state->stack.back(); 
+    startingState->symPathOS = symPathWriter->open();
+  StackFrame &sf = startingState->stack.back(); 
   CallPathNode *cp = callPathManager.getCallPath(0, 0, f);
   sf.callPathNode = cp;
   cp->count++;
   if (updateMinDistToUncovered)
     sf.minDistToUncoveredOnReturn = 0;
-//}
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
-  getArgumentCell(*state, kf, f->arg_size(), arguments);
+  getArgumentCell(*startingState, kf, f->arg_size(), arguments);
   if (argvMO) {
-    ObjectState *argvOS = bindObjectInState(*state, argvMO, false);
+    ObjectState *argvOS = bindObjectInState(*startingState, argvMO, false);
     for (int i=0; i<argc+1+envc+1+1; i++) {
       if (i==argc || i>=argc+1+envc)
         argvOS->write(i * NumPtrBytes, Expr::createPointer(0)); // Write NULL pointer
       else {
         char *s = i<argc ? argv[i] : envp[i-(argc+1)];
         int j, len = strlen(s);
-        MemoryObject *arg = memory->allocate(len+1, false, true, state->pc->inst);
-        ObjectState *os = bindObjectInState(*state, arg, false);
+        MemoryObject *arg = memory->allocate(len+1, false, true, startingState->pc->inst);
+        ObjectState *os = bindObjectInState(*startingState, arg, false);
         for (j=0; j<len+1; j++)
           os->write8(j, s[j]);
         // Write pointer to newly allocated and initialised argv/envp c-string
@@ -2575,15 +2568,15 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       }
     }
   }
-  initializeGlobals(*state);
-  processTree = new PTree(state);
-  state->ptreeNode = processTree->root;
+  initializeGlobals(*startingState);
+  processTree = new PTree(startingState);
+  startingState->ptreeNode = processTree->root;
   constantTable = new Cell[kmodule->constants.size()];
   for (unsigned i=0; i<kmodule->constants.size(); ++i)
       constantTable[i].value = evalConstant(kmodule->constants[i]);
 printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
   // Delay init till now so that ticks don't accrue during optimization and such.
-  states.insert(state);
+  states.insert(startingState);
   if (CoreSearch.size() == 0) {
     CoreSearch.push_back(Searcher::RandomPath);
     CoreSearch.push_back(Searcher::NURS_CovNew);
