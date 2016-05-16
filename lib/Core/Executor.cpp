@@ -282,167 +282,6 @@ static std::vector<Instruction*> getSuccs(Instruction *i) {
   return res;
 }
 
-void Executor::computeReachableUncovered() {
-  Module *m = kmodule->module;
-  static bool init = true;
-  StatisticManager &sm = *theStatisticManager; 
-  if (init) {
-    init = false; 
-    // Compute call targets. It would be nice to use alias information
-    // instead of assuming all indirect calls hit all escaping // funcs, eh?
-    for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
-      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt) {
-        for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
-          if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
-            CallSite cs(it);
-            if (isa<InlineAsm>(cs.getCalledValue()))
-              callTargets.insert(std::make_pair(it, std::vector<Function*>()));
-              // We can never call through here so assume no targets // (which should be correct anyhow).
-            else if (Function *target = getDirectCallTarget(cs))
-              callTargets[it].push_back(target);
-            else
-              callTargets[it] = std::vector<Function*>(kmodule->escapingFunctions.begin(), kmodule->escapingFunctions.end());
-          }
-        }
-      }
-    }
-    // Compute function callers as reflexion of callTargets.
-    for (auto it = callTargets.begin(), ie = callTargets.end(); it != ie; ++it)
-      for (auto fit = it->second.begin(), fie = it->second.end(); fit != fie; ++fit) 
-        functionCallers[*fit].push_back(it->first); 
-    // Initialize minDistToReturn to shortest paths through // funcs. 0 is unreachable.
-    std::vector<Instruction *> instructions;
-    for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
-      if (fnIt->isDeclaration()) {
-        if (fnIt->doesNotReturn())
-          functionShortestPath[fnIt] = 0;
-        else
-          functionShortestPath[fnIt] = 1; // whatever
-      } else
-        functionShortestPath[fnIt] = 0;
-      // Not sure if I should bother to preorder here. XXX I should.
-      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt)
-        for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
-          instructions.push_back(it);
-          unsigned id = 0;
-          sm.setIndexedValue(stats::minDistToReturn, id, isa<ReturnInst>(it));
-        }
-    } 
-    std::reverse(instructions.begin(), instructions.end()); 
-    // I'm so lazy it's not even worklisted.
-    bool changed;
-    do {
-      changed = false;
-      for (auto it = instructions.begin(), ie = instructions.end(); it != ie; ++it) {
-        Instruction *inst = *it;
-        unsigned bestThrough = 0; 
-        if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
-          std::vector<Function*> &targets = callTargets[inst];
-          for (auto fnIt = targets.begin(), ie = targets.end(); fnIt != ie; ++fnIt) {
-            if (uint64_t dist = functionShortestPath[*fnIt]) {
-              dist = 1+dist; // count instruction itself
-              if (bestThrough==0 || dist<bestThrough)
-                bestThrough = dist;
-            }
-          }
-        } else
-          bestThrough = 1;
-        if (bestThrough) {
-          unsigned id = 0;
-          uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToReturn, id);
-          std::vector<Instruction*> succs = getSuccs(*it);
-          for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2)
-            if (uint64_t dist = sm.getIndexedValue(stats::minDistToReturn, 0)) {
-              uint64_t val = bestThrough + dist;
-              if (best==0 || val<best)
-                best = val;
-            }
-          // there's a corner case here when a function only includes a single
-          // instruction (a ret). in that case, we MUST update
-          // functionShortestPath, or it will remain 0 (erroneously indicating
-          // that no return instructions are reachable)
-          Function *f = inst->getParent()->getParent();
-          if (best != cur || (inst == f->begin()->begin() && functionShortestPath[f] != best)) {
-            sm.setIndexedValue(stats::minDistToReturn, id, best);
-            changed = true; 
-            // Update shortest path if this is the entry point.
-            if (inst==f->begin()->begin())
-              functionShortestPath[f] = best;
-          }
-        }
-      }
-    } while (changed);
-  } 
-  // compute minDistToUncovered, 0 is unreachable
-  std::vector<Instruction *> instructions;
-  for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt)
-    // Not sure if I should bother to preorder here.
-    for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt)
-      for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it) {
-        unsigned id = 0;
-        instructions.push_back(&*it);
-        sm.setIndexedValue(stats::minDistToUncovered, id, sm.getIndexedValue(stats::uncoveredInstructions, id));
-      }
-  std::reverse(instructions.begin(), instructions.end()); 
-  // I'm so lazy it's not even worklisted.
-  bool changed;
-  do {
-    changed = false;
-    for (auto it = instructions.begin(), ie = instructions.end(); it != ie; ++it) {
-      Instruction *inst = *it;
-      uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToUncovered, 0);
-      unsigned bestThrough = 1;
-      if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
-        bestThrough = 0; 
-        std::vector<Function*> &targets = callTargets[inst];
-        for (auto fnIt = targets.begin(), ie = targets.end(); fnIt != ie; ++fnIt) {
-          if (uint64_t dist = functionShortestPath[*fnIt]) {
-            dist = 1+dist; // count instruction itself
-            if (bestThrough==0 || dist<bestThrough)
-              bestThrough = dist;
-          } 
-          if (!(*fnIt)->isDeclaration())
-            if (uint64_t calleeDist =sm.getIndexedValue(stats::minDistToUncovered,0)) {
-              calleeDist = 1+calleeDist; // count instruction itself
-              if (best==0 || calleeDist<best)
-                best = calleeDist;
-            }
-        }
-      }
-      if (bestThrough) {
-        std::vector<Instruction*> succs = getSuccs(inst);
-        for (auto it2 = succs.begin(), ie = succs.end(); it2 != ie; ++it2) {
-          if (uint64_t dist = sm.getIndexedValue(stats::minDistToUncovered, 0)) {
-            uint64_t val = bestThrough + dist;
-            if (best==0 || val<best)
-              best = val;
-          }
-        }
-      } 
-      if (best != cur) {
-        sm.setIndexedValue(stats::minDistToUncovered, 0, best);
-        changed = true;
-      }
-    }
-  } while (changed); 
-  for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
-    ExecutionState *es = *it;
-    uint64_t currentFrameMinDist = 0;
-    for (auto sfIt = es->stack.begin(), sf_ie = es->stack.end(); sfIt != sf_ie; ++sfIt) {
-      ExecutionState::stack_ty::iterator next = sfIt + 1;
-      KInstIterator kii; 
-      if (next==es->stack.end())
-        kii = es->pc;
-      else {
-        kii = next->caller;
-        ++kii;
-      } 
-      sfIt->minDistToUncoveredOnReturn = currentFrameMinDist; 
-      currentFrameMinDist = computeMinDistToUncovered(kii, currentFrameMinDist);
-    }
-  }
-}
-
 unsigned Executor::getPathStreamID(const ExecutionState &state) {
   assert(pathWriter);
   return state.pathOS.getID();
@@ -1061,13 +900,8 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     KFunction *kf = functionMap[f];
     state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
     state.pc = kf->instructions;
-    //framePushed(state, &state.stack[state.stack.size()-2]);
-//void Executor::framePushed(ExecutionState &es, StackFrame *parentFrame) {
     StackFrame *parentFrame = &state.stack[state.stack.size()-2];
     StackFrame &sf = state.stack.back(); 
-    if (updateMinDistToUncovered)
-      sf.minDistToUncoveredOnReturn = computeMinDistToUncovered(sf.caller, parentFrame->minDistToUncoveredOnReturn);
-//}
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
     unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
@@ -2264,8 +2098,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   if (symPathWriter)
     startingState->symPathOS = symPathWriter->open();
   StackFrame &sf = startingState->stack.back(); 
-  if (updateMinDistToUncovered)
-    sf.minDistToUncoveredOnReturn = 0;
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
   getArgumentCell(*startingState, kf, f->arg_size(), arguments);
   if (argvMO) {
@@ -2335,8 +2167,6 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   memory = new MemoryManager(NULL);
   globalObjects.clear();
   globalAddresses.clear();
-  if (updateMinDistToUncovered)
-    computeReachableUncovered();
   writeStatsLine();
   writeIStats();
 }
@@ -2471,7 +2301,6 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   // that source browsing works.
 printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   llvm::outs() << *module;
-  updateMinDistToUncovered = false;
   startWallTime = util::getWallTime();
   fullBranches = 0;
   partialBranches = 0;
@@ -2479,8 +2308,6 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/); 
   writeStatsHeader();
   writeStatsLine(); 
-  if (updateMinDistToUncovered)
-    computeReachableUncovered();
   /* Build shadow structures */ 
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
     if (!it->isDeclaration()) {
