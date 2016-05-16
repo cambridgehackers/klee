@@ -75,7 +75,6 @@ public:
       }
     }
   }; 
-  uint64_t computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA); 
 }
 
 class Searcher {
@@ -157,6 +156,22 @@ public:
       } while (n && !n->left && !n->right);
     }
 };
+}
+
+static uint64_t computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA) {
+  StatisticManager &sm = *theStatisticManager;
+  uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, 0/*ki->info->id*/);
+  if (minDistAtRA==0)  // unreachable on return, best is local
+    return minDistLocal;
+  else {
+    uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn, 0/*ki->info->id*/); 
+    if (distToReturn==0) // return unreachable, best is local
+      return minDistLocal;
+    else if (!minDistLocal) // no local reachable
+      return distToReturn + minDistAtRA;
+    else
+      return std::min(minDistLocal, distToReturn + minDistAtRA);
+  }
 }
 
 class DFSSearcher : public Searcher {
@@ -482,63 +497,6 @@ static bool instructionIsCoverable(Instruction *i) {
   return true;
 }
 
-void Executor::newStatsTracker(std::string _objectFilename, bool _updateMinDistToUncovered)
-{
-    objectFilename = _objectFilename;
-    startWallTime = util::getWallTime();
-    fullBranches = 0;
-    partialBranches = 0;
-    updateMinDistToUncovered = _updateMinDistToUncovered;
-    numBranches = 0;
-
-  if (!sys::path::is_absolute(objectFilename)) {
-    SmallString<128> current(objectFilename);
-    if(sys::fs::make_absolute(current)) {
-      Twine current_twine(current.str()); // requires a twine for this. so silly
-      if (!sys::fs::exists(current_twine))
-        objectFilename = current.c_str();
-    }
-  } 
-    theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/); 
-    writeStatsHeader();
-    writeStatsLine(); 
-    //addTimer(new WriteStatsTimer(this), StatsWriteInterval); 
-    if (updateMinDistToUncovered) {
-      computeReachableUncovered();
-      //addTimer(new UpdateReachableTimer(this), UncoveredUpdateInterval);
-    }
-    //addTimer(new WriteIStatsTimer(this), IStatsWriteInterval);
-}
-
-void Executor::stepInstruction(ExecutionState &es) {
-      static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0); 
-      sys::TimeValue sys(0,0);
-      if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0)
-        sys::Process::GetTimeUsage(lastNowTime,lastUserTime,sys);
-      else {
-        sys::TimeValue now(0,0),user(0,0);
-        sys::Process::GetTimeUsage(now,user,sys);
-        sys::TimeValue delta = user - lastUserTime;
-        sys::TimeValue deltaNow = now - lastNowTime;
-        stats::instructionTime += delta.usec();
-        stats::instructionRealTime += deltaNow.usec();
-        lastUserTime = user;
-        lastNowTime = now;
-      }
-    Instruction *inst = es.pc->inst;
-    theStatisticManager->setIndex(0/*ii.id*/);
-    if (es.instsSinceCovNew)
-      ++es.instsSinceCovNew;
-    if (instructionIsCoverable(inst)) {
-      if (!theStatisticManager->getIndexedValue(stats::coveredInstructions, 0/*ii.id*/)) {
-	es.coveredNew = true;
-        es.instsSinceCovNew = 1;
-	++stats::coveredInstructions;
-	stats::uncoveredInstructions += (uint64_t)-1;
-      }
-    }
-}
-
 /* Should be called _after_ the es->pushFrame() */
 void Executor::framePushed(ExecutionState &es, StackFrame *parentFrame) {
     StackFrame &sf = es.stack.back(); 
@@ -613,7 +571,7 @@ void Executor::writeIStats() {
   updateStateStatistics(1); 
   CallSiteSummaryTable callSiteStats;
   callPathManager.getSummaryStatistics(callSiteStats); 
-  llvm::outs() << "ob=" << objectFilename << "\n"; 
+  llvm::outs() << "ob=OutputObjectFile\n"; 
   for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
     if (!fnIt->isDeclaration()) {
       llvm::outs() << "fn=" << fnIt->getName().str() << "\n";
@@ -647,22 +605,6 @@ static std::vector<Instruction*> getSuccs(Instruction *i) {
   else
     res.push_back(++BasicBlock::iterator(i));
   return res;
-}
-
-uint64_t klee::computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA) {
-  StatisticManager &sm = *theStatisticManager;
-  uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, 0/*ki->info->id*/);
-  if (minDistAtRA==0)  // unreachable on return, best is local
-    return minDistLocal;
-  else {
-    uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn, 0/*ki->info->id*/); 
-    if (distToReturn==0) // return unreachable, best is local
-      return minDistLocal;
-    else if (!minDistLocal) // no local reachable
-      return distToReturn + minDistAtRA;
-    else
-      return std::min(minDistLocal, distToReturn + minDistAtRA);
-  }
 }
 
 void Executor::computeReachableUncovered() {
@@ -1574,13 +1516,36 @@ void Executor::executeInstruction(ExecutionState &state)
 {
   KInstruction *ki = state.pc;
   Instruction *i = ki->inst;
-  llvm::errs() << "     [no debug info]:";
+  llvm::errs() << "     [EXECUTE]:";
   llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
-  stepInstruction(state);
+  static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0); 
+  sys::TimeValue sys(0,0);
+  if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0)
+    sys::Process::GetTimeUsage(lastNowTime,lastUserTime,sys);
+  else {
+    sys::TimeValue now(0,0),user(0,0);
+    sys::Process::GetTimeUsage(now,user,sys);
+    sys::TimeValue delta = user - lastUserTime;
+    sys::TimeValue deltaNow = now - lastNowTime;
+    stats::instructionTime += delta.usec();
+    stats::instructionRealTime += deltaNow.usec();
+    lastUserTime = user;
+    lastNowTime = now;
+  }
+  theStatisticManager->setIndex(0/*ii.id*/);
+  if (state.instsSinceCovNew)
+    ++state.instsSinceCovNew;
+  if (instructionIsCoverable(state.pc->inst)) {
+    if (!theStatisticManager->getIndexedValue(stats::coveredInstructions, 0/*ii.id*/)) {
+      state.coveredNew = true;
+      state.instsSinceCovNew = 1;
+      ++stats::coveredInstructions;
+      stats::uncoveredInstructions += (uint64_t)-1;
+    }
+  }
   ++stats::instructions;
   state.prevPC = state.pc;
   ++state.pc;
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   int opcode = i->getOpcode();
   switch (opcode) {
     // Control flow
@@ -2781,11 +2746,6 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   pm.run(*module);
   if (opts.Optimize)
     Optimize(module);
-#if 0 //jca
-  SmallString<128> LibPath(opts.LibraryDir);
-  llvm::sys::path::append(LibPath, "kleeRuntimeIntrinsic.bc");
-  module = linkWithLibrary(module, LibPath.str());
-#endif
   // Add internal fns which are not used to check if instructions // have been already visited
   kmodule->addInternalFunction("klee_div_zero_check");
   kmodule->addInternalFunction("klee_overshift_check");
@@ -2826,20 +2786,27 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   // Write out the .ll assembly file. We truncate long lines to work
   // around a kcachegrind parsing bug (it puts them on new lines), so
   // that source browsing works.
-  {
 printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
-    llvm::raw_fd_ostream *os = interpreterHandler->openOutputFile("assembly.ll");
-    assert(os && !os->has_error() && "unable to open source output");
-    *os << *module;
-    delete os;
-  } 
-printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
-  newStatsTracker(interpreterHandler->getOutputFilename("assembly2.ll"),
+  llvm::outs() << *module;
+  updateMinDistToUncovered = 
      (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
    || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
    || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
    || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
-   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end()));
+   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end());
+  startWallTime = util::getWallTime();
+  fullBranches = 0;
+  partialBranches = 0;
+  numBranches = 0;
+  theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/); 
+  writeStatsHeader();
+  writeStatsLine(); 
+  //addTimer(new WriteStatsTimer(this), StatsWriteInterval); 
+  if (updateMinDistToUncovered) {
+    computeReachableUncovered();
+    //addTimer(new UpdateReachableTimer(this), UncoveredUpdateInterval);
+  }
+  //addTimer(new WriteIStatsTimer(this), IStatsWriteInterval);
   /* Build shadow structures */ 
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
     if (!it->isDeclaration()) {
