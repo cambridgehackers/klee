@@ -83,8 +83,7 @@ public:
   virtual ExecutionState &selectState() = 0;
   virtual void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) = 0;
   virtual bool empty() = 0;
-  enum CoreSearchType { DFS, BFS, RandomState, RandomPath, NURS_CovNew, NURS_MD2U,
-    NURS_Depth, NURS_ICnt, NURS_CPICnt, NURS_QC };
+  enum CoreSearchType { DFS, BFS };
 };
 
 namespace {
@@ -92,14 +91,6 @@ namespace {
   CoreSearch("search", cl::desc("Specify the search heuristic (default=random-path interleaved with nurs:covnew)"),
      cl::values(clEnumValN(Searcher::DFS, "dfs", "use Depth First Search (DFS)"),
 	clEnumValN(Searcher::BFS, "bfs", "use Breadth First Search (BFS)"),
-	clEnumValN(Searcher::RandomState, "random-state", "randomly select a state to explore"),
-	clEnumValN(Searcher::RandomPath, "random-path", "use Random Path Selection (see OSDI'08 paper)"),
-	clEnumValN(Searcher::NURS_CovNew, "nurs:covnew", "use Non Uniform Random Search (NURS) with Coverage-New"),
-	clEnumValN(Searcher::NURS_MD2U, "nurs:md2u", "use NURS with Min-Dist-to-Uncovered"),
-	clEnumValN(Searcher::NURS_Depth, "nurs:depth", "use NURS with 2^depth"),
-	clEnumValN(Searcher::NURS_ICnt, "nurs:icnt", "use NURS with Instr-Count"),
-	clEnumValN(Searcher::NURS_CPICnt, "nurs:cpicnt", "use NURS with CallPath-Instr-Count"),
-	clEnumValN(Searcher::NURS_QC, "nurs:qc", "use NURS with Query-Cost"),
 	clEnumValEnd));
   cl::opt<bool>
   DebugLogMerge("debug-log-merge");
@@ -178,76 +169,6 @@ public:
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
   bool empty() { return states.empty(); }
 };
-class RandomSearcher : public Searcher {
-  std::vector<ExecutionState*> states;
-public:
-  ExecutionState &selectState() { return *states[theRNG.getInt32()%states.size()]; }
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
-  bool empty() { return states.empty(); }
-};
-class WeightedRandomSearcher : public Searcher {
-public:
-  enum WeightType { Depth, QueryCost, InstCount, CPInstCount, MinDistToUncovered, CoveringNew };
-private:
-  DiscretePDF<ExecutionState*> *states;
-  WeightType type;
-  bool updateWeights;
-  double getWeight(ExecutionState*);
-public:
-  WeightedRandomSearcher(WeightType type);
-  ~WeightedRandomSearcher() { delete states; }
-  ExecutionState &selectState() { return *states->choose(theRNG.getDoubleL()); }
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
-  bool empty() { return states->empty(); }
-};
-class RandomPathSearcher : public Searcher {
-  Executor &executor;
-public:
-  RandomPathSearcher(Executor &_executor) : executor(_executor) { }
-  ~RandomPathSearcher() { }
-  ExecutionState &selectState();
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) { }
-  bool empty() { return executor.states.empty(); }
-};
-
-class BatchingSearcher : public Searcher {
-  Searcher *baseSearcher;
-  double timeBudget;
-  unsigned instructionBudget;
-  ExecutionState *lastState;
-  double lastStartTime;
-  unsigned lastStartInstructions;
-public:
-  BatchingSearcher(Searcher *_baseSearcher, double _timeBudget, unsigned _instructionBudget)
-    : baseSearcher(_baseSearcher), timeBudget(_timeBudget), instructionBudget(_instructionBudget), lastState(0){}
-  ~BatchingSearcher() { delete baseSearcher; }
-  ExecutionState &selectState();
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
-  bool empty() { return baseSearcher->empty(); }
-};
-
-class InterleavedSearcher : public Searcher {
-  typedef std::vector<Searcher*> searchers_ty;
-  searchers_ty searchers;
-  unsigned index;
-public:
-  explicit InterleavedSearcher(const std::vector<Searcher*> &_searchers)
-    : searchers(_searchers), index(1) { }
-  ~InterleavedSearcher() {
-    for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
-      delete *it;
-  }
-  ExecutionState &selectState() {
-    Searcher *s = searchers[--index];
-    if (index==0) index = searchers.size();
-    return s->selectState();
-  }
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-    for (auto it = searchers.begin(), ie = searchers.end(); it != ie; ++it)
-      (*it)->update(current, addedStates, removedStates);
-  }
-  bool empty() { return searchers[0]->empty(); }
-};
 
 void DFSSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
   states.insert(states.end(), addedStates.begin(), addedStates.end());
@@ -287,118 +208,6 @@ void BFSSearcher::update(ExecutionState *current, const std::set<ExecutionState*
       assert(ok && "invalid state removed");
     }
   }
-}
-
-void RandomSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  states.insert(states.end(), addedStates.begin(), addedStates.end());
-  for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
-    ExecutionState *es = *it;
-    bool ok = false;
-    for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
-      if (es==*it) {
-        states.erase(it);
-        ok = true;
-        break;
-      }
-    }
-    assert(ok && "invalid state removed");
-  }
-}
-
-WeightedRandomSearcher::WeightedRandomSearcher(WeightType _type) : states(new DiscretePDF<ExecutionState*>()), type(_type) {
-  switch(type) {
-  case Depth:
-    updateWeights = false;
-    break;
-  case InstCount: case CPInstCount: case QueryCost: case MinDistToUncovered: case CoveringNew:
-    updateWeights = true;
-    break;
-  default:
-    assert(0 && "invalid weight type");
-  }
-}
-
-double WeightedRandomSearcher::getWeight(ExecutionState *es) {
-  switch(type) {
-  default:
-  case Depth:
-    return es->weight;
-  case InstCount: {
-    uint64_t count = theStatisticManager->getIndexedValue(stats::instructions, 0/*es->pc->info->id*/);
-    double inv = 1. / std::max((uint64_t) 1, count);
-    return inv * inv;
-  }
-  case CPInstCount:
-    return 1. / std::max((uint64_t) 1, stats::instructions);
-  case QueryCost:
-    return (es->queryCost < .1) ? 1. : 1./es->queryCost;
-  case CoveringNew:
-  case MinDistToUncovered: {
-    uint64_t md2u = computeMinDistToUncovered(es->pc, es->stack.back().minDistToUncoveredOnReturn);
-    double invMD2U = 1. / (md2u ? md2u : 10000);
-    if (type==CoveringNew) {
-      double invCovNew = 0.;
-      if (es->instsSinceCovNew)
-        invCovNew = 1. / std::max(1, (int) es->instsSinceCovNew - 1000);
-      return (invCovNew * invCovNew + invMD2U * invMD2U);
-    }
-    return invMD2U * invMD2U;
-  }
-  }
-}
-
-void WeightedRandomSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  if (current && updateWeights && !removedStates.count(current))
-    states->update(current, getWeight(current));
-  for (auto it = addedStates.begin(), ie = addedStates.end(); it != ie; ++it) {
-    ExecutionState *es = *it;
-    states->insert(es, getWeight(es));
-  }
-  for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it)
-    states->remove(*it);
-}
-
-ExecutionState &RandomPathSearcher::selectState() {
-  unsigned flips=0, bits=0;
-  PTreeNode *n = executor.processTree->root;
-  while (!n->data) {
-    if (!n->left) {
-      n = n->right;
-    } else if (!n->right) {
-      n = n->left;
-    } else {
-      if (bits==0) {
-        flips = theRNG.getInt32();
-        bits = 32;
-      }
-      --bits;
-      n = (flips&(1<<bits)) ? n->left : n->right;
-    }
-  }
-  return *n->data;
-}
-
-ExecutionState &BatchingSearcher::selectState() {
-  if (!lastState || (util::getWallTime()-lastStartTime)>timeBudget ||
-      (stats::instructions-lastStartInstructions)>instructionBudget) {
-    if (lastState) {
-      double delta = util::getWallTime()-lastStartTime;
-      if (delta>timeBudget*1.1) {
-        llvm::errs() << "KLEE: increased time budget from " << timeBudget << " to " << delta << "\n";
-        timeBudget = delta;
-      }
-    }
-    lastState = &baseSearcher->selectState();
-    lastStartTime = util::getWallTime();
-    lastStartInstructions = stats::instructions;
-  }
-  return *lastState;
-}
-
-void BatchingSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  if (removedStates.count(lastState))
-    lastState = 0;
-  baseSearcher->update(current, addedStates, removedStates);
 }
 
 // 
@@ -2486,8 +2295,7 @@ printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(startingState);
   if (CoreSearch.size() == 0) {
-    CoreSearch.push_back(Searcher::RandomPath);
-    CoreSearch.push_back(Searcher::NURS_CovNew);
+    CoreSearch.push_back(Searcher::DFS);
   }
   std::vector<Searcher *> s;
   for (unsigned i=0; i < CoreSearch.size(); i++) {
@@ -2495,20 +2303,10 @@ printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
       switch (CoreSearch[i]) {
       case Searcher::DFS: searcher = new DFSSearcher(); break;
       case Searcher::BFS: searcher = new BFSSearcher(); break;
-      case Searcher::RandomState: searcher = new RandomSearcher(); break;
-      case Searcher::RandomPath: searcher = new RandomPathSearcher(*this); break;
-      case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew); break;
-      case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered); break;
-      case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth); break;
-      case Searcher::NURS_ICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::InstCount); break;
-      case Searcher::NURS_CPICnt: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CPInstCount); break;
-      case Searcher::NURS_QC: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost); break;
       }
       s.push_back(searcher);
   }
   Searcher *searcher = s[0];
-  if (CoreSearch.size() > 1)
-    searcher = new InterleavedSearcher(s);
   searcher->update(0, states, std::set<ExecutionState*>());
   while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
@@ -2673,12 +2471,7 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   // that source browsing works.
 printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   llvm::outs() << *module;
-  updateMinDistToUncovered = 
-     (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
-   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
-   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
-   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CPICnt) != CoreSearch.end()
-   || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end());
+  updateMinDistToUncovered = false;
   startWallTime = util::getWallTime();
   fullBranches = 0;
   partialBranches = 0;
