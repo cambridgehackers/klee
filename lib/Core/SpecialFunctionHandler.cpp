@@ -53,12 +53,10 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   addDNR("_exit", handleExit),
   { "exit", &SpecialFunctionHandler::handleExit, true, false, true },
   addDNR("klee_abort", handleAbort),
-  addDNR("klee_silent_exit", handleSilentExit),  
   addDNR("klee_report_error", handleReportError),
 
   add("calloc", handleCalloc, true),
   add("free", handleFree, false),
-  add("klee_assume", handleAssume, false),
   add("klee_check_memory_access", handleCheckMemoryAccess, false),
   add("klee_get_valuef", handleGetValue, true),
   add("klee_get_valued", handleGetValue, true),
@@ -236,11 +234,6 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state, KInstruction *tar
   executor.terminateStateOnExit(state);
 }
 
-void SpecialFunctionHandler::handleSilentExit(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size()==1 && "invalid number of arguments to exit");
-  executor.terminateState(state);
-}
-
 void SpecialFunctionHandler::handleAssert(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==3 && "invalid number of arguments to _assert");  
   executor.terminateStateOnError(state, "ASSERTION FAIL: " + readStringAtAddress(state, arguments[0]), "assert.err");
@@ -293,25 +286,6 @@ void SpecialFunctionHandler::handleMalloc(ExecutionState &state, KInstruction *t
   // XXX should type check args
   assert(arguments.size()==1 && "invalid number of arguments to malloc");
   executor.executeAlloc(state, arguments[0], false, target);
-}
-
-void SpecialFunctionHandler::handleAssume(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size()==1 && "invalid number of arguments to klee_assume"); 
-  ref<Expr> e = arguments[0]; 
-  if (e->getWidth() != Expr::Bool)
-    e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth())); 
-  bool res;
-  bool success __attribute__ ((unused)) = executor.tsolver->mustBeFalse(state, e, res);
-  assert(success && "FIXME: Unhandled solver failure");
-  if (res) {
-    if (SilentKleeAssume) {
-      executor.terminateState(state);
-    } else {
-      executor.terminateStateOnError(state, "invalid klee_assume call (provably false)", "user.err");
-    }
-  } else {
-    executor.addConstraint(state, e);
-  }
 }
 
 void SpecialFunctionHandler::handleIsSymbolic(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {

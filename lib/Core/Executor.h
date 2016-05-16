@@ -218,7 +218,7 @@ public: //friends
   void executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction *target); 
   /// Get textual information regarding a memory address.
   std::string getAddressInfo(ExecutionState &state, ref<Expr> address) const; 
-  void terminateState(ExecutionState &state);
+  void terminateStateCase(ExecutionState &state, const char *err, const char *suffix);
   void terminateStateOnError(ExecutionState &state, const llvm::Twine &message, const char *suffix, const llvm::Twine &longMessage=""); 
   void terminateStateOnExecError(ExecutionState &state, const llvm::Twine &message, const llvm::Twine &info="") {
     terminateStateOnError(state, message, "exec.err", info);

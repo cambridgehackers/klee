@@ -2075,7 +2075,9 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) c
   return info.str();
 }
 
-void Executor::terminateState(ExecutionState &state) {
+void Executor::terminateStateCase(ExecutionState &state, const char *err, const char *suffix)
+{
+  interpreterHandler->processTestCase(state, err, suffix);
   interpreterHandler->incPathsExplored();
 
   auto it = addedStates.find(&state);
@@ -2094,13 +2096,11 @@ void Executor::terminateState(ExecutionState &state) {
 }
 
 void Executor::terminateStateEarly(ExecutionState &state, const Twine &message) {
-  interpreterHandler->processTestCase(state, (message + "\n").str().c_str(), "early");
-  terminateState(state);
+  terminateStateCase(state, (message + "\n").str().c_str(), "early");
 }
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
-  interpreterHandler->processTestCase(state, 0, 0);
-  terminateState(state);
+  terminateStateCase(state, 0, 0);
 }
 
 void Executor::terminateStateOnError(ExecutionState &state, const llvm::Twine &messaget, const char *suffix, const llvm::Twine &info) {
@@ -2114,8 +2114,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::string info_str = info.str();
   if (info_str != "")
     msg << "Info: \n" << info_str;
-  interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
-  terminateState(state);
+  terminateStateCase(state, msg.str().c_str(), suffix);
 }
 
 // XXX shoot me
