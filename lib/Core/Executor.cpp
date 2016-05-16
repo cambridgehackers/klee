@@ -12,7 +12,6 @@
 #include "Memory.h"
 #include "MemoryManager.h"
 #include "SeedInfo.h"
-#include "CallPathManager.h"
 #include "SpecialFunctionHandler.h"
 #include "klee/Common.h"
 #include "klee/util/ExprPPrinter.h"
@@ -22,7 +21,6 @@
 #include "klee/Internal/ADT/KTest.h"
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Internal/Support/ErrorHandling.h"
-#include "klee/Internal/System/Time.h"
 #include "klee/Internal/System/MemoryUsage.h"
 #include "klee/Internal/Support/ModuleUtil.h"
 #include "llvm/IR/LLVMContext.h"
@@ -76,34 +74,6 @@ public:
         delete[] instructions;
       }
     }
-  }; 
-  class StatsTracker {
-    friend class WriteStatsTimer;
-    friend class WriteIStatsTimer; 
-    Executor &executor;
-    std::string objectFilename; 
-    double startWallTime; 
-    unsigned fullBranches, partialBranches; 
-    CallPathManager callPathManager;    
-    bool updateMinDistToUncovered; 
-    void updateStateStatistics(uint64_t addend);
-    void writeStatsHeader();
-  public:
-    void writeStatsLine();
-    void writeIStats(); 
-    unsigned numBranches;
-    StatsTracker(Executor &_executor, std::string _objectFilename, bool _updateMinDistToUncovered);
-    ~StatsTracker() {}
-    // called after a new StackFrame has been pushed (for callpath tracing)
-    void framePushed(ExecutionState &es, StackFrame *parentFrame); 
-    // called when some side of a branch has been visited. it is
-    // imperative that this be called when the statistics index is at // the index for the branch itself.
-    void markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse); 
-    // process stats for a single instruction step, es is the state // about to be stepped
-    void stepInstruction(ExecutionState &es); 
-    /// Return time in seconds since execution start.
-    double elapsed() { return util::getWallTime() - startWallTime; } 
-    void computeReachableUncovered();
   }; 
   uint64_t computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA); 
 }
@@ -474,23 +444,16 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
 #if 0
 namespace klee {
   class WriteIStatsTimer : public Executor::Timer {
-    StatsTracker *statsTracker; 
   public:
-    WriteIStatsTimer(StatsTracker *_statsTracker) : statsTracker(_statsTracker) {}
-    ~WriteIStatsTimer() {} 
     void run() { statsTracker->writeIStats(); }
   }; 
   class WriteStatsTimer : public Executor::Timer {
-    StatsTracker *statsTracker; 
   public:
-    WriteStatsTimer(StatsTracker *_statsTracker) : statsTracker(_statsTracker) {}
     ~WriteStatsTimer() {} 
     void run() { statsTracker->writeStatsLine(); }
   }; 
   class UpdateReachableTimer : public Executor::Timer {
-    StatsTracker *statsTracker; 
   public:
-    UpdateReachableTimer(StatsTracker *_statsTracker) : statsTracker(_statsTracker) {} 
     void run() { statsTracker->computeReachableUncovered(); }
   }; 
 }
@@ -519,14 +482,15 @@ static bool instructionIsCoverable(Instruction *i) {
   return true;
 }
 
-StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, bool _updateMinDistToUncovered)
-  : executor(_executor),
-    objectFilename(_objectFilename),
-    startWallTime(util::getWallTime()),
-    fullBranches(0),
-    partialBranches(0),
-    updateMinDistToUncovered(_updateMinDistToUncovered),
-    numBranches(0) {
+void Executor::newStatsTracker(std::string _objectFilename, bool _updateMinDistToUncovered)
+{
+    objectFilename = _objectFilename;
+    startWallTime = util::getWallTime();
+    fullBranches = 0;
+    partialBranches = 0;
+    updateMinDistToUncovered = _updateMinDistToUncovered;
+    numBranches = 0;
+
   if (!sys::path::is_absolute(objectFilename)) {
     SmallString<128> current(objectFilename);
     if(sys::fs::make_absolute(current)) {
@@ -538,15 +502,15 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename, boo
     theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/); 
     writeStatsHeader();
     writeStatsLine(); 
-    //executor.addTimer(new WriteStatsTimer(this), StatsWriteInterval); 
+    //addTimer(new WriteStatsTimer(this), StatsWriteInterval); 
     if (updateMinDistToUncovered) {
       computeReachableUncovered();
-      //executor.addTimer(new UpdateReachableTimer(this), UncoveredUpdateInterval);
+      //addTimer(new UpdateReachableTimer(this), UncoveredUpdateInterval);
     }
-    //executor.addTimer(new WriteIStatsTimer(this), IStatsWriteInterval);
+    //addTimer(new WriteIStatsTimer(this), IStatsWriteInterval);
 }
 
-void StatsTracker::stepInstruction(ExecutionState &es) {
+void Executor::stepInstruction(ExecutionState &es) {
       static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0); 
       sys::TimeValue sys(0,0);
       if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0)
@@ -576,7 +540,7 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 }
 
 /* Should be called _after_ the es->pushFrame() */
-void StatsTracker::framePushed(ExecutionState &es, StackFrame *parentFrame) {
+void Executor::framePushed(ExecutionState &es, StackFrame *parentFrame) {
     StackFrame &sf = es.stack.back(); 
     CallPathNode *cp = callPathManager.getCallPath(parentFrame ? parentFrame->callPathNode : 0,
        sf.caller ? sf.caller->inst : 0, sf.func);
@@ -587,7 +551,7 @@ void StatsTracker::framePushed(ExecutionState &es, StackFrame *parentFrame) {
           parentFrame ? parentFrame->minDistToUncoveredOnReturn : 0) : 0;
 }
 
-void StatsTracker::markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse) {
+void Executor::markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse) {
     unsigned id = theStatisticManager->getIndex();
     uint64_t hasTrue = theStatisticManager->getIndexedValue(stats::trueBranches, id);
     uint64_t hasFalse = theStatisticManager->getIndexedValue(stats::falseBranches, id);
@@ -608,7 +572,7 @@ void StatsTracker::markBranchVisited(ExecutionState *visitedTrue, ExecutionState
     }
 }
 
-void StatsTracker::writeStatsHeader() {
+void Executor::writeStatsHeader() {
   llvm::outs() << "('Instructions'," << "'FullBranches'," << "'PartialBranches',"
        << "'NumBranches'," << "'UserTime'," << "'NumStates',"
        << "'MallocUsage'," << "'NumQueries'," << "'NumQueryConstructs',"
@@ -621,9 +585,9 @@ void StatsTracker::writeStatsHeader() {
        << ")\n";
 }
 
-void StatsTracker::writeStatsLine() {
+void Executor::writeStatsLine() {
   llvm::outs() << "(" << stats::instructions << "," << fullBranches << "," << partialBranches
-       << "," << numBranches << "," << util::getUserTime() << "," << executor.states.size()
+       << "," << numBranches << "," << util::getUserTime() << "," << states.size()
        << "," << util::GetTotalMallocUsage() << "," << stats::queries << "," << stats::queryConstructs
        << "," << 0 << "," << elapsed() << "," << stats::coveredInstructions
        << "," << stats::uncoveredInstructions << "," << stats::queryTime / 1000000.
@@ -635,15 +599,15 @@ void StatsTracker::writeStatsLine() {
        << ")\n";
 }
 
-void StatsTracker::updateStateStatistics(uint64_t addend) {
-  for (auto it = executor.states.begin(), ie = executor.states.end(); it != ie; ++it) {
+void Executor::updateStateStatistics(uint64_t addend) {
+  for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
     theStatisticManager->incrementIndexedValue(stats::states, 0/*ii.id*/, addend);
     stats::states += addend;
   }
 }
 
-void StatsTracker::writeIStats() {
-  Module *m = executor.kmodule->module;
+void Executor::writeIStats() {
+  Module *m = kmodule->module;
   // We assume that we didn't move the file pointer
   llvm::outs() << "version: 1;" << "creator: klee;" << "pid: " << getpid() << ";cmd: " << m->getModuleIdentifier() << "; positions: instr line;" << "events: " << "\n"; 
   updateStateStatistics(1); 
@@ -701,9 +665,8 @@ uint64_t klee::computeMinDistToUncovered(const KInstruction *ki, uint64_t minDis
   }
 }
 
-void StatsTracker::computeReachableUncovered() {
-  KModule *km = executor.kmodule;
-  Module *m = km->module;
+void Executor::computeReachableUncovered() {
+  Module *m = kmodule->module;
   static bool init = true;
   StatisticManager &sm = *theStatisticManager; 
   if (init) {
@@ -721,7 +684,7 @@ void StatsTracker::computeReachableUncovered() {
             else if (Function *target = getDirectCallTarget(cs))
               callTargets[it].push_back(target);
             else
-              callTargets[it] = std::vector<Function*>(km->escapingFunctions.begin(), km->escapingFunctions.end());
+              callTargets[it] = std::vector<Function*>(kmodule->escapingFunctions.begin(), kmodule->escapingFunctions.end());
           }
         }
       }
@@ -845,7 +808,7 @@ void StatsTracker::computeReachableUncovered() {
       }
     }
   } while (changed); 
-  for (auto it = executor.states.begin(), ie = executor.states.end(); it != ie; ++it) {
+  for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
     ExecutionState *es = *it;
     uint64_t currentFrameMinDist = 0;
     for (auto sfIt = es->stack.begin(), sf_ie = es->stack.end(); sfIt != sf_ie; ++sfIt) {
@@ -1028,7 +991,6 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
     interpreterHandler(ih),
     processTree(0),
     externalDispatcher(new ExternalDispatcher()),
-    statsTracker(0),
     pathWriter(0),
     symPathWriter(0),
     specialFunctionHandler(0),
@@ -1055,7 +1017,6 @@ Executor::~Executor() {
     delete processTree;
   if (specialFunctionHandler)
     delete specialFunctionHandler;
-  delete statsTracker;
   delete tsolver;
   delete kmodule;
   if (constantTable)
@@ -1483,7 +1444,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     KFunction *kf = functionMap[f];
     state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
     state.pc = kf->instructions;
-    statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
+    framePushed(state, &state.stack[state.stack.size()-2]);
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
     unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
@@ -1615,7 +1576,7 @@ void Executor::executeInstruction(ExecutionState &state)
   Instruction *i = ki->inst;
   llvm::errs() << "     [no debug info]:";
   llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
-  statsTracker->stepInstruction(state);
+  stepInstruction(state);
   ++stats::instructions;
   state.prevPC = state.pc;
   ++state.pc;
@@ -1676,7 +1637,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
       // NOTE: There is a hidden dependency here, markBranchVisited requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned up with convenient instruction specific data.
-      statsTracker->markBranchVisited(branches.first, branches.second);
+      markBranchVisited(branches.first, branches.second);
       if (branches.first)
         transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
       if (branches.second)
@@ -2699,7 +2660,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
     state->pathOS = pathWriter->open();
   if (symPathWriter)
     state->symPathOS = symPathWriter->open();
-  statsTracker->framePushed(*state, 0);
+  framePushed(*state, 0);
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
   getArgumentCell(*state, kf, f->arg_size(), arguments);
   if (argvMO) {
@@ -2735,8 +2696,8 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   memory = new MemoryManager(NULL);
   globalObjects.clear();
   globalAddresses.clear();
-  statsTracker->writeStatsLine();
-  statsTracker->writeIStats();
+  writeStatsLine();
+  writeIStats();
 }
 
 // what a hack
@@ -2880,7 +2841,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
     delete os;
   } 
 printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
-  statsTracker = new StatsTracker(*this, interpreterHandler->getOutputFilename("assembly2.ll"),
+  newStatsTracker(interpreterHandler->getOutputFilename("assembly2.ll"),
      (std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_MD2U) != CoreSearch.end()
    || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_CovNew) != CoreSearch.end()
    || std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_ICnt) != CoreSearch.end()
@@ -2931,7 +2892,7 @@ printf("[%s:%d] create assembly2.ll\n", __FUNCTION__, __LINE__);
             ++stats::uncoveredInstructions;
           if (BranchInst *bi = dyn_cast<BranchInst>(ki->inst))
             if (!bi->isUnconditional())
-              statsTracker->numBranches++;
+              numBranches++;
           kf->instructions[insInd++] = ki;
         }
       kf->numRegisters = rnum; 

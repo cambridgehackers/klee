@@ -18,9 +18,11 @@
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
+#include "klee/Internal/System/Time.h"
 #include "klee/util/ArrayCache.h"
 #include "llvm/ADT/Twine.h"
 #include "klee/Solver.h"
+#include "CallPathManager.h"
 #include <vector>
 #include <string>
 #include <map>
@@ -54,7 +56,6 @@ namespace klee {
   class SeedInfo;
   class SpecialFunctionHandler;
   struct StackFrame;
-  class StatsTracker;
   class TreeStreamWriter;
   template<class T> class ref;
   class KModule;
@@ -105,7 +106,6 @@ public:
 private:
   ExternalDispatcher *externalDispatcher;
   Solver       *osolver;
-  StatsTracker *statsTracker;
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;
   Cell *constantTable;
@@ -168,6 +168,31 @@ private:
   template <typename TypeIt>
   void computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie); 
   void prepareModule(const Interpreter::ModuleOptions &opts);
+// StatsTracker
+    friend class WriteStatsTimer;
+    friend class WriteIStatsTimer; 
+    std::string objectFilename; 
+    double startWallTime; 
+    unsigned fullBranches, partialBranches; 
+    CallPathManager callPathManager;    
+    bool updateMinDistToUncovered; 
+    void updateStateStatistics(uint64_t addend);
+    void writeStatsHeader();
+  public:
+    void writeStatsLine();
+    void writeIStats(); 
+    unsigned numBranches;
+    void newStatsTracker(std::string _objectFilename, bool _updateMinDistToUncovered);
+    // called after a new StackFrame has been pushed (for callpath tracing)
+    void framePushed(ExecutionState &es, StackFrame *parentFrame); 
+    // called when some side of a branch has been visited. it is
+    // imperative that this be called when the statistics index is at // the index for the branch itself.
+    void markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse); 
+    // process stats for a single instruction step, es is the state // about to be stepped
+    void stepInstruction(ExecutionState &es); 
+    /// Return time in seconds since execution start.
+    double elapsed() { return util::getWallTime() - startWallTime; } 
+    void computeReachableUncovered();
 
 public: //friends
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array = 0); 
