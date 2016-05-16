@@ -83,16 +83,6 @@ public:
   virtual ExecutionState &selectState() = 0;
   virtual void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) = 0;
   virtual bool empty() = 0;
-  void addState(ExecutionState *es, ExecutionState *current = 0) {
-    std::set<ExecutionState*> tmp;
-    tmp.insert(es);
-    update(current, tmp, std::set<ExecutionState*>());
-  }
-  void removeState(ExecutionState *es, ExecutionState *current = 0) {
-    std::set<ExecutionState*> tmp;
-    tmp.insert(es);
-    update(current, std::set<ExecutionState*>(), tmp);
-  }
   enum CoreSearchType { DFS, BFS, RandomState, RandomPath, NURS_CovNew, NURS_MD2U,
     NURS_Depth, NURS_ICnt, NURS_CPICnt, NURS_QC };
 };
@@ -234,19 +224,6 @@ public:
   ExecutionState &selectState();
   void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
   bool empty() { return baseSearcher->empty(); }
-};
-
-class IterativeDeepeningTimeSearcher : public Searcher {
-  Searcher *baseSearcher;
-  double time, startTime;
-  std::set<ExecutionState*> pausedStates;
-public:
-  IterativeDeepeningTimeSearcher(Searcher *_baseSearcher)
-    : baseSearcher(_baseSearcher), time(1.) { }
-  ~IterativeDeepeningTimeSearcher() { delete baseSearcher; }
-  ExecutionState &selectState();
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
-  bool empty() { return baseSearcher->empty() && pausedStates.empty(); }
 };
 
 class InterleavedSearcher : public Searcher {
@@ -422,38 +399,6 @@ void BatchingSearcher::update(ExecutionState *current, const std::set<ExecutionS
   if (removedStates.count(lastState))
     lastState = 0;
   baseSearcher->update(current, addedStates, removedStates);
-}
-
-ExecutionState &IterativeDeepeningTimeSearcher::selectState() {
-  ExecutionState &res = baseSearcher->selectState();
-  startTime = util::getWallTime();
-  return res;
-}
-
-void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  double elapsed = util::getWallTime() - startTime;
-  std::set<ExecutionState *> alt = removedStates;
-  if (!removedStates.empty()) {
-    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
-      ExecutionState *es = *it;
-      auto it2 = pausedStates.find(es);
-      if (it2 != pausedStates.end()) {
-        pausedStates.erase(it);
-        alt.erase(alt.find(es));
-      }
-    }
-  }
-  baseSearcher->update(current, addedStates, alt);
-  if (current && !removedStates.count(current) && elapsed>time) {
-    pausedStates.insert(current);
-    baseSearcher->removeState(current);
-  }
-  if (baseSearcher->empty()) {
-    time *= 2;
-    llvm::errs() << "KLEE: increasing time budget to: " << time << "\n";
-    baseSearcher->update(0, pausedStates, std::set<ExecutionState*>());
-    pausedStates.clear();
-  }
 }
 
 // 
@@ -804,8 +749,7 @@ bool TimingSolver::solveEvaluate(const ExecutionState& state, ref<Expr> expr, So
     return true;
   }
   sys::TimeValue now = util::getWallTimeVal();
-  if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr);
+  expr = state.constraints.simplifyExpr(expr);
   bool success = tosolver->evaluate(Query(state.constraints, expr), result);
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
@@ -821,8 +765,7 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool 
     return true;
   }
   sys::TimeValue now = util::getWallTimeVal();
-  if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr);
+  expr = state.constraints.simplifyExpr(expr);
   bool success = tosolver->mustBeTrue(Query(state.constraints, expr), result);
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
@@ -838,8 +781,7 @@ bool TimingSolver::solveGetValue(const ExecutionState& state, ref<Expr> expr, re
     return true;
   }
   sys::TimeValue now = util::getWallTimeVal();
-  if (simplifyExprs)
-    expr = state.constraints.simplifyExpr(expr);
+  expr = state.constraints.simplifyExpr(expr);
   bool success = tosolver->getValue(Query(state.constraints, expr), result);
   sys::TimeValue delta = util::getWallTimeVal();
   delta -= now;
@@ -2164,16 +2106,15 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
 void Executor::terminateStateOnError(ExecutionState &state, const llvm::Twine &messaget, const char *suffix, const llvm::Twine &info) {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::string message = messaget.str();
-    klee_message("ERROR: (location information missing) %s", message.c_str());
-    std::string MsgString;
-    llvm::raw_string_ostream msg(MsgString);
-    msg << "Error: " << message << "\n";
-    msg << "Stack: \n";
-    state.dumpStack(msg);
-    std::string info_str = info.str();
-    if (info_str != "")
-      msg << "Info: \n" << info_str;
-    interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+  klee_message("ERROR: (location information missing) %s", message.c_str());
+  std::string MsgString;
+  llvm::raw_string_ostream msg(MsgString);
+  msg << "Error: " << message << "\n" << "Stack: \n";
+  state.dumpStack(msg);
+  std::string info_str = info.str();
+  if (info_str != "")
+    msg << "Info: \n" << info_str;
+  interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
   terminateState(state);
 }
 

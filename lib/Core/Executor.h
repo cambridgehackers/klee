@@ -63,11 +63,8 @@ namespace klee {
   class TimingSolver {
   public:
     Solver *tosolver;
-    bool simplifyExprs;
   public:
-    TimingSolver(Solver *_solver) : tosolver(_solver) {
-        simplifyExprs = true;
-        }
+    TimingSolver(Solver *_solver) : tosolver(_solver) { }
     ~TimingSolver() { delete tosolver; }
     bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
     bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
