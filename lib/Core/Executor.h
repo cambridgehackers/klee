@@ -22,7 +22,6 @@
 #include "klee/util/ArrayCache.h"
 #include "llvm/ADT/Twine.h"
 #include "klee/Solver.h"
-#include "CallPathManager.h"
 #include <vector>
 #include <string>
 #include <map>
@@ -168,12 +167,9 @@ private:
   template <typename TypeIt>
   void computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie); 
   void prepareModule(const Interpreter::ModuleOptions &opts);
-// StatsTracker
   double startWallTime; 
   unsigned fullBranches, partialBranches; 
-  CallPathManager callPathManager;    
   bool updateMinDistToUncovered; 
-  void updateStateStatistics(uint64_t addend);
   void writeStatsHeader();
   void writeStatsLine();
   void writeIStats(); 

@@ -33,7 +33,7 @@ namespace {
 /***/
 
 StackFrame::StackFrame(KInstIterator _caller, Function *_kf, unsigned _numRegisters)
-  : caller(_caller), func(_kf), numRegisters(_numRegisters), callPathNode(0), 
+  : caller(_caller), func(_kf), numRegisters(_numRegisters),
     minDistToUncoveredOnReturn(0), varargs(0) {
   locals = new Cell[numRegisters];
 }
@@ -42,7 +42,6 @@ StackFrame::StackFrame(const StackFrame &s)
   : caller(s.caller),
     func(s.func),
     numRegisters(s.numRegisters),
-    callPathNode(s.callPathNode),
     allocas(s.allocas),
     minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
     varargs(s.varargs) {

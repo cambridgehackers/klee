@@ -507,39 +507,10 @@ void Executor::writeStatsLine() {
        << ")\n";
 }
 
-void Executor::updateStateStatistics(uint64_t addend) {
-  for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
-    theStatisticManager->incrementIndexedValue(stats::states, 0/*ii.id*/, addend);
-    stats::states += addend;
-  }
-}
-
 void Executor::writeIStats() {
   Module *m = kmodule->module;
   // We assume that we didn't move the file pointer
   llvm::outs() << "version: 1;" << "creator: klee;" << "pid: " << getpid() << ";cmd: " << m->getModuleIdentifier() << "; positions: instr line;" << "events: " << "\n"; 
-  updateStateStatistics(1); 
-  CallSiteSummaryTable callSiteStats;
-  callPathManager.getSummaryStatistics(callSiteStats); 
-  llvm::outs() << "ob=OutputObjectFile\n"; 
-  for (auto fnIt = m->begin(), fn_ie = m->end(); fnIt != fn_ie; ++fnIt) {
-    if (!fnIt->isDeclaration()) {
-      llvm::outs() << "fn=" << fnIt->getName().str() << "\n";
-      for (auto bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt != bb_ie; ++bbIt)
-        for (auto it = bbIt->begin(), ie = bbIt->end(); it != ie; ++it)
-          if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
-            CallSiteSummaryTable::iterator callInst = callSiteStats.find(it);
-            if (callInst!=callSiteStats.end()) {
-              for (auto fit = callInst->second.begin(), fie = callInst->second.end(); fit != fie; ++fit) {
-                Function *f = fit->first;
-                CallSiteInfo &csi = fit->second;
-                llvm::outs() << "cfn=" << f->getName().str() << "\n" << "calls=" << csi.count << "\n";
-              }
-            }
-          }
-    }
-  }
-    updateStateStatistics((uint64_t)-1); 
 }
 
 typedef std::map<Instruction*, std::vector<Function*> > calltargets_ty;
@@ -1340,9 +1311,6 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
 //void Executor::framePushed(ExecutionState &es, StackFrame *parentFrame) {
     StackFrame *parentFrame = &state.stack[state.stack.size()-2];
     StackFrame &sf = state.stack.back(); 
-    CallPathNode *cp = callPathManager.getCallPath(parentFrame->callPathNode, sf.caller->inst, sf.func);
-    sf.callPathNode = cp;
-    cp->count++;
     if (updateMinDistToUncovered)
       sf.minDistToUncoveredOnReturn = computeMinDistToUncovered(sf.caller, parentFrame->minDistToUncoveredOnReturn);
 //}
@@ -2544,9 +2512,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   if (symPathWriter)
     startingState->symPathOS = symPathWriter->open();
   StackFrame &sf = startingState->stack.back(); 
-  CallPathNode *cp = callPathManager.getCallPath(0, 0, f);
-  sf.callPathNode = cp;
-  cp->count++;
   if (updateMinDistToUncovered)
     sf.minDistToUncoveredOnReturn = 0;
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
