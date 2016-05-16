@@ -456,23 +456,6 @@ void IterativeDeepeningTimeSearcher::update(ExecutionState *current, const std::
   }
 }
 
-#if 0
-namespace klee {
-  class WriteIStatsTimer : public Executor::Timer {
-  public:
-    void run() { statsTracker->writeIStats(); }
-  }; 
-  class WriteStatsTimer : public Executor::Timer {
-  public:
-    ~WriteStatsTimer() {} 
-    void run() { statsTracker->writeStatsLine(); }
-  }; 
-  class UpdateReachableTimer : public Executor::Timer {
-  public:
-    void run() { statsTracker->computeReachableUncovered(); }
-  }; 
-}
-#endif
 // 
 /// Check for special cases where we statically know an instruction is
 /// uncoverable. Currently the case is an unreachable instruction
@@ -497,39 +480,6 @@ static bool instructionIsCoverable(Instruction *i) {
   return true;
 }
 
-/* Should be called _after_ the es->pushFrame() */
-void Executor::framePushed(ExecutionState &es, StackFrame *parentFrame) {
-    StackFrame &sf = es.stack.back(); 
-    CallPathNode *cp = callPathManager.getCallPath(parentFrame ? parentFrame->callPathNode : 0,
-       sf.caller ? sf.caller->inst : 0, sf.func);
-    sf.callPathNode = cp;
-    cp->count++;
-    if (updateMinDistToUncovered)
-      sf.minDistToUncoveredOnReturn = sf.caller ?  computeMinDistToUncovered(sf.caller,
-          parentFrame ? parentFrame->minDistToUncoveredOnReturn : 0) : 0;
-}
-
-void Executor::markBranchVisited(ExecutionState *visitedTrue, ExecutionState *visitedFalse) {
-    unsigned id = theStatisticManager->getIndex();
-    uint64_t hasTrue = theStatisticManager->getIndexedValue(stats::trueBranches, id);
-    uint64_t hasFalse = theStatisticManager->getIndexedValue(stats::falseBranches, id);
-    if (visitedTrue && !hasTrue) {
-      visitedTrue->coveredNew = true;
-      visitedTrue->instsSinceCovNew = 1;
-      ++stats::trueBranches;
-      if (hasFalse) { ++fullBranches; --partialBranches; }
-      else ++partialBranches;
-      hasTrue = 1;
-    }
-    if (visitedFalse && !hasFalse) {
-      visitedFalse->coveredNew = true;
-      visitedFalse->instsSinceCovNew = 1;
-      ++stats::falseBranches;
-      if (hasTrue) { ++fullBranches; --partialBranches; }
-      else ++partialBranches;
-    }
-}
-
 void Executor::writeStatsHeader() {
   llvm::outs() << "('Instructions'," << "'FullBranches'," << "'PartialBranches',"
        << "'NumBranches'," << "'UserTime'," << "'NumStates',"
@@ -547,7 +497,7 @@ void Executor::writeStatsLine() {
   llvm::outs() << "(" << stats::instructions << "," << fullBranches << "," << partialBranches
        << "," << numBranches << "," << util::getUserTime() << "," << states.size()
        << "," << util::GetTotalMallocUsage() << "," << stats::queries << "," << stats::queryConstructs
-       << "," << 0 << "," << elapsed() << "," << stats::coveredInstructions
+       << "," << 0 << "," << (util::getWallTime() - startWallTime) << "," << stats::coveredInstructions
        << "," << stats::uncoveredInstructions << "," << stats::queryTime / 1000000.
        << "," << stats::solverTime / 1000000.  << "," << stats::cexCacheTime / 1000000.
        << "," << stats::forkTime / 1000000.  << "," << stats::resolveTime / 1000000.
@@ -1386,7 +1336,16 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     KFunction *kf = functionMap[f];
     state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
     state.pc = kf->instructions;
-    framePushed(state, &state.stack[state.stack.size()-2]);
+    //framePushed(state, &state.stack[state.stack.size()-2]);
+//void Executor::framePushed(ExecutionState &es, StackFrame *parentFrame) {
+    StackFrame *parentFrame = &state.stack[state.stack.size()-2];
+    StackFrame &sf = state.stack.back(); 
+    CallPathNode *cp = callPathManager.getCallPath(parentFrame->callPathNode, sf.caller->inst, sf.func);
+    sf.callPathNode = cp;
+    cp->count++;
+    if (updateMinDistToUncovered)
+      sf.minDistToUncoveredOnReturn = computeMinDistToUncovered(sf.caller, parentFrame->minDistToUncoveredOnReturn);
+//}
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
     unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
@@ -1599,10 +1558,25 @@ void Executor::executeInstruction(ExecutionState &state)
       assert(bi->getCondition() == bi->getOperand(0) && "Wrong operand index!");
       ref<Expr> cond = eval(ki, 0, state);
       Executor::StatePair branches = stateFork(state, cond, false);
-
-      // NOTE: There is a hidden dependency here, markBranchVisited requires that we still be in the context of the branch
-      // instruction (it reuses its statistic id). Should be cleaned up with convenient instruction specific data.
-      markBranchVisited(branches.first, branches.second);
+      ExecutionState *visitedTrue = branches.first, *visitedFalse = branches.second;
+      unsigned id = theStatisticManager->getIndex();
+      uint64_t hasTrue = theStatisticManager->getIndexedValue(stats::trueBranches, id);
+      uint64_t hasFalse = theStatisticManager->getIndexedValue(stats::falseBranches, id);
+      if (visitedTrue && !hasTrue) {
+        visitedTrue->coveredNew = true;
+        visitedTrue->instsSinceCovNew = 1;
+        ++stats::trueBranches;
+        if (hasFalse) { ++fullBranches; --partialBranches; }
+        else ++partialBranches;
+        hasTrue = 1;
+      }
+      if (visitedFalse && !hasFalse) {
+        visitedFalse->coveredNew = true;
+        visitedFalse->instsSinceCovNew = 1;
+        ++stats::falseBranches;
+        if (hasTrue) { ++fullBranches; --partialBranches; }
+        else ++partialBranches;
+      }
       if (branches.first)
         transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
       if (branches.second)
@@ -2568,12 +2542,20 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       }
     }
   }
-  ExecutionState *state = new ExecutionState(kf->instructions, kf->function, kf->numRegisters);
+  ExecutionState *state = new ExecutionState(kf->instructions, f, kf->numRegisters);
   if (pathWriter)
     state->pathOS = pathWriter->open();
   if (symPathWriter)
     state->symPathOS = symPathWriter->open();
-  framePushed(*state, 0);
+  //framePushed(*state, 0);
+//void Executor::framePushed(ExecutionState &es, StackFrame *parentFrame) {
+  StackFrame &sf = state->stack.back(); 
+  CallPathNode *cp = callPathManager.getCallPath(0, 0, f);
+  sf.callPathNode = cp;
+  cp->count++;
+  if (updateMinDistToUncovered)
+    sf.minDistToUncoveredOnReturn = 0;
+//}
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
   getArgumentCell(*state, kf, f->arg_size(), arguments);
   if (argvMO) {
@@ -2654,6 +2636,8 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   memory = new MemoryManager(NULL);
   globalObjects.clear();
   globalAddresses.clear();
+  if (updateMinDistToUncovered)
+    computeReachableUncovered();
   writeStatsLine();
   writeIStats();
 }
@@ -2801,12 +2785,8 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/); 
   writeStatsHeader();
   writeStatsLine(); 
-  //addTimer(new WriteStatsTimer(this), StatsWriteInterval); 
-  if (updateMinDistToUncovered) {
+  if (updateMinDistToUncovered)
     computeReachableUncovered();
-    //addTimer(new UpdateReachableTimer(this), UncoveredUpdateInterval);
-  }
-  //addTimer(new WriteIStatsTimer(this), IStatsWriteInterval);
   /* Build shadow structures */ 
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
     if (!it->isDeclaration()) {
