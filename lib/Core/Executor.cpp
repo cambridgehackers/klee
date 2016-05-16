@@ -139,22 +139,6 @@ public:
 };
 }
 
-static uint64_t computeMinDistToUncovered(const KInstruction *ki, uint64_t minDistAtRA) {
-  StatisticManager &sm = *theStatisticManager;
-  uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered, 0/*ki->info->id*/);
-  if (minDistAtRA==0)  // unreachable on return, best is local
-    return minDistLocal;
-  else {
-    uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn, 0/*ki->info->id*/); 
-    if (distToReturn==0) // return unreachable, best is local
-      return minDistLocal;
-    else if (!minDistLocal) // no local reachable
-      return distToReturn + minDistAtRA;
-    else
-      return std::min(minDistLocal, distToReturn + minDistAtRA);
-  }
-}
-
 class DFSSearcher : public Searcher {
   std::vector<ExecutionState*> states;
 public:
@@ -271,16 +255,6 @@ typedef std::map<Instruction*, std::vector<Function*> > calltargets_ty;
 static calltargets_ty callTargets;
 static std::map<Function*, std::vector<Instruction*> > functionCallers;
 static std::map<Function*, unsigned> functionShortestPath; 
-static std::vector<Instruction*> getSuccs(Instruction *i) {
-  BasicBlock *bb = i->getParent();
-  std::vector<Instruction*> res; 
-  if (i==bb->getTerminator())
-    for (succ_iterator it = succ_begin(bb), ie = succ_end(bb); it != ie; ++it)
-      res.push_back(it->begin());
-  else
-    res.push_back(++BasicBlock::iterator(i));
-  return res;
-}
 
 unsigned Executor::getPathStreamID(const ExecutionState &state) {
   assert(pathWriter);
@@ -900,8 +874,6 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     KFunction *kf = functionMap[f];
     state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
     state.pc = kf->instructions;
-    StackFrame *parentFrame = &state.stack[state.stack.size()-2];
-    StackFrame &sf = state.stack.back(); 
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
     unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
@@ -2097,7 +2069,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
     startingState->pathOS = pathWriter->open();
   if (symPathWriter)
     startingState->symPathOS = symPathWriter->open();
-  StackFrame &sf = startingState->stack.back(); 
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
   getArgumentCell(*startingState, kf, f->arg_size(), arguments);
   if (argvMO) {

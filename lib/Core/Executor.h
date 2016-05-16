@@ -166,7 +166,6 @@ private:
   void prepareModule(const Interpreter::ModuleOptions &opts);
   double startWallTime; 
   unsigned fullBranches, partialBranches; 
-  bool updateMinDistToUncovered; 
   void writeStatsHeader();
   void writeStatsLine();
   void writeIStats(); 
