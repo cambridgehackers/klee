@@ -141,7 +141,6 @@ private:
   unsigned fullBranches, partialBranches; 
   void writeStatsHeader();
   void writeStatsLine();
-  void writeIStats(); 
   unsigned numBranches;
   void computeReachableUncovered();
 

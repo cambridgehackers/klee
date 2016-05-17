@@ -234,12 +234,6 @@ void Executor::writeStatsLine() {
        << ")\n";
 }
 
-void Executor::writeIStats() {
-  Module *m = kmodule->module;
-  // We assume that we didn't move the file pointer
-  llvm::outs() << "version: 1;" << "creator: klee;" << "pid: " << getpid() << ";cmd: " << m->getModuleIdentifier() << "; positions: instr line;" << "events: " << "\n"; 
-}
-
 unsigned Executor::getPathStreamID(const ExecutionState &state) {
   assert(pathWriter);
   return state.pathOS.getID();
@@ -2105,7 +2099,7 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   globalObjects.clear();
   globalAddresses.clear();
   writeStatsLine();
-  writeIStats();
+  llvm::outs() << "version: 1;creator: klee;pid: " << getpid() << ";cmd: " << kmodule->module->getModuleIdentifier() << "; positions: instr line;events: \n"; 
 }
 
 // what a hack
