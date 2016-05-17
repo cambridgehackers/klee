@@ -140,7 +140,6 @@ private:
   unsigned numBranches;
   void computeReachableUncovered();
 public: //friends
-  bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
   bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
   bool mustBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
     return mustBeTrue(state, Expr::createIsZero(expr), result);
@@ -148,13 +147,6 @@ public: //friends
   bool mayBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
     bool res;
     if (!mustBeFalse(state, expr, res))
-      return false;
-    result = !res;
-    return true;
-  }
-  bool mayBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
-    bool res;
-    if (!mustBeTrue(state, expr, res))
       return false;
     result = !res;
     return true;

@@ -330,14 +330,6 @@ Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
   return osolver->getRange(Query(state.constraints, expr));
 }
 
-bool Executor::solveEvaluate(const ExecutionState& state, ref<Expr> expr, Solver::Validity &result) {
-  sys::TimeValue now = util::getWallTimeVal();
-  expr = state.constraints.simplifyExpr(expr);
-  bool success = osolver->evaluate(Query(state.constraints, expr), result);
-  stats::solverTime += (util::getWallTimeVal() - now).usec();
-  return success;
-}
-
 bool Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
@@ -537,7 +529,10 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
   Solver::Validity res;
   auto it = seedMap.find(&current);
   osolver->setCoreSolverTimeout(0);
-  if (!solveEvaluate(current, condition, res)) {
+  sys::TimeValue now = util::getWallTimeVal();
+  bool success = osolver->evaluate(Query(current.constraints, current.constraints.simplifyExpr(condition)), res);
+  stats::solverTime += (util::getWallTimeVal() - now).usec();
+  if (!success) {
     current.pc = current.prevPC;
     terminateStateEarly(current, "Query timed out (fork).");
     return StatePair(0, 0);
