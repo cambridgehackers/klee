@@ -48,10 +48,6 @@ namespace klee {
     std::vector<llvm::Constant*> constants;
     std::map<llvm::Constant*, KConstant*> constantMap;
     KConstant* getKConstant(llvm::Constant *c);
-    // Functions which are part of KLEE runtime
-    std::set<const llvm::Function*> internalFunctions; 
-    // Mark function with functionName as part of the KLEE runtime
-    void addInternalFunction(const char* functionName); 
     SwitchImplType m_SwitchType;
   public:
     KModule(llvm::Module *_module);

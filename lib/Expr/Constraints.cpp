@@ -6,19 +6,11 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
 #include "klee/Constraints.h"
-
 #include "klee/util/ExprPPrinter.h"
 #include "klee/util/ExprVisitor.h"
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
 #include "llvm/IR/Function.h"
-#else
-#include "llvm/Function.h"
-#endif
 #include "llvm/Support/CommandLine.h"
-#include "klee/Internal/Module/KModule.h"
-
 #include <map>
 
 using namespace klee;

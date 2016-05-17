@@ -57,7 +57,6 @@ namespace klee {
   struct StackFrame;
   class TreeStreamWriter;
   template<class T> class ref;
-  class KModule;
   struct KFunction;
 
 class Executor : public Interpreter {

@@ -55,16 +55,6 @@ KModule::~KModule() {
   delete module;
 }
 
-void KModule::addInternalFunction(const char* functionName){
-  Function* internalFunction = module->getFunction(functionName);
-  if (!internalFunction) {
-    KLEE_DEBUG(klee_warning( "Failed to add internal function %s. Not found.", functionName));
-    return ;
-  }
-  KLEE_DEBUG(klee_message("Added function %s.",functionName));
-  internalFunctions.insert(internalFunction);
-}
-
 KConstant* KModule::getKConstant(Constant *c) {
   auto it = constantMap.find(c);
   if (it != constantMap.end())

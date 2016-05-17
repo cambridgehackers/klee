@@ -2133,9 +2133,6 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   pm.run(*module);
   if (opts.Optimize)
     Optimize(module);
-  // Add internal fns which are not used to check if instructions // have been already visited
-  kmodule->addInternalFunction("klee_div_zero_check");
-  kmodule->addInternalFunction("klee_overshift_check");
   // After linking (since ctors/dtors can be modified) and optimization (global optimization can rewrite lists).
   GlobalVariable *ctors = module->getNamedGlobal("llvm.global_ctors");
   GlobalVariable *dtors = module->getNamedGlobal("llvm.global_dtors"); 
