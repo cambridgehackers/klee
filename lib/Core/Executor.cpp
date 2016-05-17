@@ -331,11 +331,6 @@ Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
 }
 
 bool Executor::solveEvaluate(const ExecutionState& state, ref<Expr> expr, Solver::Validity &result) {
-  // Fast path, to avoid timer and OS overhead.
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
-    result = CE->isTrue() ? Solver::True : Solver::False;
-    return true;
-  }
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = osolver->evaluate(Query(state.constraints, expr), result);
@@ -344,11 +339,6 @@ bool Executor::solveEvaluate(const ExecutionState& state, ref<Expr> expr, Solver
 }
 
 bool Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
-  // Fast path, to avoid timer and OS overhead.
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
-    result = CE->isTrue() ? true : false;
-    return true;
-  }
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = osolver->mustBeTrue(Query(state.constraints, expr), result);
@@ -357,11 +347,6 @@ bool Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool &res
 }
 
 bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
-  // Fast path, to avoid timer and OS overhead.
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
-    result = CE;
-    return true;
-  }
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = osolver->getValue(Query(state.constraints, expr), result);
