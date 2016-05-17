@@ -57,17 +57,7 @@ namespace klee {
   class TreeStreamWriter;
   template<class T> class ref;
   struct KFunction;
-
-  class KConstant {
-  public:
-    /// Actual LLVM constant this represents.
-    llvm::Constant* ct;
-    /// The constant ID.
-    unsigned id;
-    /// First instruction where this constant was encountered, or NULL /// if not applicable/unavailable.
-    KInstruction *ki;
-    KConstant(llvm::Constant*, unsigned, KInstruction*);
-  };
+  class KConstant;
 
 class Executor : public Interpreter {
 public:

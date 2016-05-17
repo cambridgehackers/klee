@@ -65,6 +65,17 @@ public:
       }
     }
   }; 
+  class KConstant {
+  public:
+    llvm::Constant* ct;
+    unsigned id;
+    KInstruction *ki;
+    KConstant(llvm::Constant* _ct, unsigned _id, KInstruction* _ki) {
+      ct = _ct;
+      id = _id;
+      ki = _ki;
+    }
+  };
 
 class Searcher {
 public:
@@ -201,13 +212,6 @@ unsigned Executor::getConstantID(Constant *c, KInstruction* ki) {
   constantMap.insert(std::make_pair(c, kc));
   constants.push_back(c);
   return id;
-}
-
-/***/ 
-KConstant::KConstant(llvm::Constant* _ct, unsigned _id, KInstruction* _ki) {
-  ct = _ct;
-  id = _id;
-  ki = _ki;
 }
 
 /// Check for special cases where we statically know an instruction is
@@ -2196,11 +2200,10 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   pm3.add(new PhiCleanerPass());
   pm3.run(*module);
 
-  // Write out the .ll assembly file. We truncate long lines to work
-  // around a kcachegrind parsing bug (it puts them on new lines), so
-  // that source browsing works.
+#if 0
 printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   llvm::outs() << *module;
+#endif
   startWallTime = util::getWallTime();
   fullBranches = 0;
   partialBranches = 0;
