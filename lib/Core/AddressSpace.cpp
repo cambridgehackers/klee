@@ -67,7 +67,7 @@ bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr,
 }
 
 bool AddressSpace::resolveOne(ExecutionState &state,
-                              TimingSolver *solver,
+                              Executor *solver,
                               ref<Expr> address,
                               ObjectPair &result,
                               bool &success) {
@@ -157,7 +157,7 @@ bool AddressSpace::resolveOne(ExecutionState &state,
 }
 
 bool AddressSpace::resolve(ExecutionState &state,
-                           TimingSolver *solver, 
+                           Executor *solver, 
                            ref<Expr> p, 
                            ResolutionList &rl, 
                            unsigned maxResolutions,

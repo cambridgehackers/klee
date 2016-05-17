@@ -202,7 +202,7 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state, ref<Expr> add
   if (!state.addressSpace.resolveOne(address, op))
     assert(0 && "XXX out of bounds / multiple resolution unhandled");
   bool res __attribute__ ((unused));
-  assert(executor.tsolver->mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr()), res) && res && "XXX interior pointer unhandled");
+  assert(executor.mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr()), res) && res && "XXX interior pointer unhandled");
   const MemoryObject *mo = op.first;
   const ObjectState *os = op.second;
 
@@ -340,10 +340,10 @@ void SpecialFunctionHandler::handlePrintRange(ExecutionState &state, KInstructio
   if (!isa<ConstantExpr>(arguments[1])) {
     // FIXME: Pull into a unique value method?
     ref<ConstantExpr> value;
-    bool success __attribute__ ((unused)) = executor.tsolver->solveGetValue(state, arguments[1], value);
+    bool success __attribute__ ((unused)) = executor.solveGetValue(state, arguments[1], value);
     assert(success && "FIXME: Unhandled solver failure");
     bool res;
-    success = executor.tsolver->mustBeTrue(state, EqExpr::create(arguments[1], value), res);
+    success = executor.mustBeTrue(state, EqExpr::create(arguments[1], value), res);
     assert(success && "FIXME: Unhandled solver failure");
     if (res) {
       llvm::errs() << " == " << value;
@@ -484,10 +484,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state, KInstruct
     // FIXME: Type coercion should be done consistently somewhere.
     bool res;
     bool success __attribute__ ((unused)) =
-      executor.tsolver->mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1],
-                                                                  Context::get().getPointerWidth()),
-                                                 mo->getSizeExpr()),
-                                  res);
+      executor.mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1], Context::get().getPointerWidth()), mo->getSizeExpr()), res);
     assert(success && "FIXME: Unhandled solver failure");
     
     if (res) {

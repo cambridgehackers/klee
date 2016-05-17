@@ -19,7 +19,7 @@ namespace klee {
   class ExecutionState;
   class MemoryObject;
   class ObjectState;
-  class TimingSolver;
+  class Executor;
 
   template<class T> class ref;
 
@@ -58,9 +58,7 @@ namespace klee {
 
     /// Resolve address to an ObjectPair in result.
     /// \return true iff an object was found.
-    bool resolveOne(const ref<ConstantExpr> &address, 
-                    ObjectPair &result);
-
+    bool resolveOne(const ref<ConstantExpr> &address, ObjectPair &result); 
     /// Resolve address to an ObjectPair in result.
     ///
     /// \param state The state this address space is part of.
@@ -70,25 +68,13 @@ namespace klee {
     /// \param[out] result An ObjectPair this address can resolve to 
     ///               (when returning true).
     /// \return true iff an object was found at \a address.
-    bool resolveOne(ExecutionState &state, 
-                    TimingSolver *solver,
-                    ref<Expr> address,
-                    ObjectPair &result,
-                    bool &success);
-
+    bool resolveOne(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success); 
     /// Resolve address to a list of ObjectPairs it can point to. If
     /// maxResolutions is non-zero then no more than that many pairs
-    /// will be returned. 
-    ///
+    /// will be returned.  ///
     /// \return true iff the resolution is incomplete (maxResolutions
     /// is non-zero and the search terminated early, or a query timed out).
-    bool resolve(ExecutionState &state,
-                 TimingSolver *solver,
-                 ref<Expr> address, 
-                 ResolutionList &rl, 
-                 unsigned maxResolutions=0,
-                 double timeout=0.);
-
+    bool resolve(ExecutionState &state, Executor *solver, ref<Expr> address, ResolutionList &rl, unsigned maxResolutions=0, double timeout=0.); 
     /***/
 
     /// Add a binding to the address space.

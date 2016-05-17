@@ -60,34 +60,7 @@ namespace klee {
   class KModule;
   struct KFunction;
 
-  class TimingSolver {
-  public:
-    Solver *tosolver;
-  public:
-    TimingSolver(Solver *_solver) : tosolver(_solver) { }
-    ~TimingSolver() { delete tosolver; }
-    bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
-    bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
-    bool mustBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
-      return mustBeTrue(state, Expr::createIsZero(expr), result);
-    }
-    bool mayBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
-      bool res;
-      if (!mustBeFalse(state, expr, res))
-        return false;
-      result = !res;
-      return true;
-    }
-    bool mayBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
-      bool res;
-      if (!mustBeTrue(state, expr, res))
-        return false;
-      result = !res;
-      return true;
-    }
-    bool solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
-  };
-
+  //class TimingSolver { //Solver *tosolver;
 class Executor : public Interpreter {
 public:
   typedef std::pair<ExecutionState*,ExecutionState*> StatePair;
@@ -96,7 +69,7 @@ public:
   KModule *kmodule;
   std::set<ExecutionState*> states;
   InterpreterHandler *interpreterHandler;
-  TimingSolver *tsolver;
+  //TimingSolver *tsolver;
   MemoryManager *memory;
   PTree *processTree;
 private:
@@ -173,6 +146,26 @@ private:
   void computeReachableUncovered();
 
 public: //friends
+    bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
+    bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
+    bool mustBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
+      return mustBeTrue(state, Expr::createIsZero(expr), result);
+    }
+    bool mayBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
+      bool res;
+      if (!mustBeFalse(state, expr, res))
+        return false;
+      result = !res;
+      return true;
+    }
+    bool mayBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
+      bool res;
+      if (!mustBeTrue(state, expr, res))
+        return false;
+      result = !res;
+      return true;
+    }
+    bool solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array = 0); 
   /// Resolve a pointer to the memory objects it could point to the
   /// start of, forking execution when necessary and generating errors
@@ -216,7 +209,7 @@ public: //friends
   /// function may fork state if the state has multiple seeds.
   void executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction *target); 
   /// Get textual information regarding a memory address.
-  std::string getAddressInfo(ExecutionState &state, ref<Expr> address) const; 
+  std::string getAddressInfo(ExecutionState &state, ref<Expr> address); 
   void terminateStateCase(ExecutionState &state, const char *err, const char *suffix);
   void terminateStateOnError(ExecutionState &state, const llvm::Twine &message, const char *suffix, const llvm::Twine &longMessage=""); 
   void terminateStateOnExecError(ExecutionState &state, const llvm::Twine &message, const llvm::Twine &info="") {
