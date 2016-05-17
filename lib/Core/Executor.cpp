@@ -207,19 +207,6 @@ static bool instructionIsCoverable(Instruction *i) {
   return true;
 }
 
-void Executor::writeStatsHeader() {
-  llvm::outs() << "('Instructions'," << "'FullBranches'," << "'PartialBranches',"
-       << "'NumBranches'," << "'UserTime'," << "'NumStates',"
-       << "'MallocUsage'," << "'NumQueries'," << "'NumQueryConstructs',"
-       << "'NumObjects'," << "'WallTime'," << "'CoveredInstructions',"
-       << "'UncoveredInstructions'," << "'QueryTime'," << "'SolverTime',"
-       << "'CexCacheTime'," << "'ForkTime'," << "'ResolveTime',"
-#ifdef DEBUG
-       << "'ArrayHashTime',"
-#endif
-       << ")\n";
-}
-
 void Executor::writeStatsLine() {
   llvm::outs() << "(" << stats::instructions << "," << fullBranches << "," << partialBranches
        << "," << numBranches << "," << util::getUserTime() << "," << states.size()
@@ -2236,7 +2223,16 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   partialBranches = 0;
   numBranches = 0;
   theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/); 
-  writeStatsHeader();
+  llvm::outs() << "('Instructions'," << "'FullBranches'," << "'PartialBranches',"
+       << "'NumBranches'," << "'UserTime'," << "'NumStates',"
+       << "'MallocUsage'," << "'NumQueries'," << "'NumQueryConstructs',"
+       << "'NumObjects'," << "'WallTime'," << "'CoveredInstructions',"
+       << "'UncoveredInstructions'," << "'QueryTime'," << "'SolverTime',"
+       << "'CexCacheTime'," << "'ForkTime'," << "'ResolveTime',"
+#ifdef DEBUG
+       << "'ArrayHashTime',"
+#endif
+       << ")\n";
   writeStatsLine(); 
   /* Build shadow structures */ 
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)

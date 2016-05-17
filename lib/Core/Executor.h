@@ -139,32 +139,30 @@ private:
   void prepareModule(const Interpreter::ModuleOptions &opts);
   double startWallTime; 
   unsigned fullBranches, partialBranches; 
-  void writeStatsHeader();
   void writeStatsLine();
   unsigned numBranches;
   void computeReachableUncovered();
-
 public: //friends
-    bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
-    bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
-    bool mustBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
-      return mustBeTrue(state, Expr::createIsZero(expr), result);
-    }
-    bool mayBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
-      bool res;
-      if (!mustBeFalse(state, expr, res))
-        return false;
-      result = !res;
-      return true;
-    }
-    bool mayBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
-      bool res;
-      if (!mustBeTrue(state, expr, res))
-        return false;
-      result = !res;
-      return true;
-    }
-    bool solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
+  bool solveEvaluate(const ExecutionState&, ref<Expr>, Solver::Validity &result);
+  bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
+  bool mustBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
+    return mustBeTrue(state, Expr::createIsZero(expr), result);
+  }
+  bool mayBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
+    bool res;
+    if (!mustBeFalse(state, expr, res))
+      return false;
+    result = !res;
+    return true;
+  }
+  bool mayBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
+    bool res;
+    if (!mustBeTrue(state, expr, res))
+      return false;
+    result = !res;
+    return true;
+  }
+  bool solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array = 0); 
   /// Resolve a pointer to the memory objects it could point to the
   /// start of, forking execution when necessary and generating errors
