@@ -1502,44 +1502,29 @@ void Executor::executeInstruction(ExecutionState &state)
       // Ordered comparisons return false if either operand is NaN.  Unordered
       // comparisons return true if either operand is NaN.
     case FCmpInst::FCMP_UEQ:
-      if (CmpRes == APFloat::cmpUnordered) {
-        Result = true;
-        break;
-      }
+      Result = CmpRes == APFloat::cmpUnordered;
     case FCmpInst::FCMP_OEQ:
-      Result = CmpRes == APFloat::cmpEqual;
+      Result |= CmpRes == APFloat::cmpEqual;
       break;
     case FCmpInst::FCMP_UGT:
-      if (CmpRes == APFloat::cmpUnordered) {
-        Result = true;
-        break;
-      }
+      Result = CmpRes == APFloat::cmpUnordered;
     case FCmpInst::FCMP_OGT:
-      Result = CmpRes == APFloat::cmpGreaterThan;
+      Result |= CmpRes == APFloat::cmpGreaterThan;
       break;
     case FCmpInst::FCMP_UGE:
-      if (CmpRes == APFloat::cmpUnordered) {
-        Result = true;
-        break;
-      }
+      Result = CmpRes == APFloat::cmpUnordered;
     case FCmpInst::FCMP_OGE:
-      Result = CmpRes == APFloat::cmpGreaterThan || CmpRes == APFloat::cmpEqual;
+      Result |= CmpRes == APFloat::cmpGreaterThan || CmpRes == APFloat::cmpEqual;
       break;
     case FCmpInst::FCMP_ULT:
-      if (CmpRes == APFloat::cmpUnordered) {
-        Result = true;
-        break;
-      }
+      Result = CmpRes == APFloat::cmpUnordered;
     case FCmpInst::FCMP_OLT:
-      Result = CmpRes == APFloat::cmpLessThan;
+      Result |= CmpRes == APFloat::cmpLessThan;
       break;
     case FCmpInst::FCMP_ULE:
-      if (CmpRes == APFloat::cmpUnordered) {
-        Result = true;
-        break;
-      }
+      Result = CmpRes == APFloat::cmpUnordered;
     case FCmpInst::FCMP_OLE:
-      Result = CmpRes == APFloat::cmpLessThan || CmpRes == APFloat::cmpEqual;
+      Result |= CmpRes == APFloat::cmpLessThan || CmpRes == APFloat::cmpEqual;
       break;
     case FCmpInst::FCMP_UNE:
       Result = CmpRes == APFloat::cmpUnordered || CmpRes != APFloat::cmpEqual;
@@ -1606,7 +1591,6 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
   else {
     ref<ConstantExpr> value;
     bool success = solveGetValue(state, address, value);
-//solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) 
     assert(success && "FIXME: Unhandled solver failure");
     example = value->getZExtValue();
     info << "\texample: " << example << "\n";
