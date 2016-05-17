@@ -60,16 +60,13 @@ namespace klee {
   class KModule;
   struct KFunction;
 
-  //class TimingSolver { //Solver *tosolver;
 class Executor : public Interpreter {
 public:
   typedef std::pair<ExecutionState*,ExecutionState*> StatePair;
 
-  // needed by 'friends'
   KModule *kmodule;
   std::set<ExecutionState*> states;
   InterpreterHandler *interpreterHandler;
-  //TimingSolver *tsolver;
   MemoryManager *memory;
   PTree *processTree;
 private:

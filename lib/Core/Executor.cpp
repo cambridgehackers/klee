@@ -298,8 +298,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   if (!objects.empty()) {
       sys::TimeValue now = util::getWallTimeVal();
       success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values);
-      sys::TimeValue delta = util::getWallTimeVal() - now;
-      stats::solverTime += delta.usec();
+      stats::solverTime += (util::getWallTimeVal() - now).usec();
   }
   osolver->setCoreSolverTimeout(0);
   if (!success) {
@@ -340,8 +339,7 @@ bool Executor::solveEvaluate(const ExecutionState& state, ref<Expr> expr, Solver
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = osolver->evaluate(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal() - now;
-  stats::solverTime += delta.usec();
+  stats::solverTime += (util::getWallTimeVal() - now).usec();
   return success;
 }
 
@@ -354,8 +352,7 @@ bool Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool &res
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = osolver->mustBeTrue(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal() - now;
-  stats::solverTime += delta.usec();
+  stats::solverTime += (util::getWallTimeVal() - now).usec();
   return success;
 }
 
@@ -368,8 +365,7 @@ bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<Co
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = osolver->getValue(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal() - now;
-  stats::solverTime += delta.usec();
+  stats::solverTime += (util::getWallTimeVal() - now).usec();
   return success;
 }
 
@@ -394,7 +390,6 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_SMT2_FILE_NAME),
       interpreterHandler->getOutputFilename(ALL_QUERIES_PC_FILE_NAME),
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_PC_FILE_NAME));
-  //tsolver = new TimingSolver(osolver);
   memory = new MemoryManager(&arrayCache);
 }
 
@@ -958,10 +953,8 @@ void Executor::executeInstruction(ExecutionState &state)
   else {
     sys::TimeValue now(0,0),user(0,0);
     sys::Process::GetTimeUsage(now,user,sys);
-    sys::TimeValue delta = user - lastUserTime;
-    sys::TimeValue deltaNow = now - lastNowTime;
-    stats::instructionTime += delta.usec();
-    stats::instructionRealTime += deltaNow.usec();
+    stats::instructionTime += (user - lastUserTime).usec();
+    stats::instructionRealTime += (now - lastNowTime).usec();
     lastUserTime = user;
     lastNowTime = now;
   }
@@ -2025,7 +2018,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   constantTable = new Cell[kmodule->constants.size()];
   for (unsigned i=0; i<kmodule->constants.size(); ++i)
       constantTable[i].value = evalConstant(kmodule->constants[i]);
-printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(startingState);
   if (CoreSearch.size() == 0) {
@@ -2041,6 +2033,7 @@ printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
       s.push_back(searcher);
   }
   searcher->update(0, states, std::set<ExecutionState*>());
+printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
   while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
     executeInstruction(state);
