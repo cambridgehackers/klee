@@ -40,10 +40,6 @@
 
 namespace llvm {
   extern void Optimize(Module*);
-  class BranchInst;
-  class Function;
-  class Instruction;
-  class raw_fd_ostream;
 }
 
 using namespace llvm;
@@ -52,11 +48,6 @@ using namespace klee;
 static RNG theRNG;
 
 namespace klee {
-  class ExecutionState;
-  class Executor;  
-  //class InterpreterHandler;
-  struct KInstruction;
-  struct StackFrame;
   struct KFunction {
 public:
     llvm::Function *function; 
@@ -385,12 +376,12 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
   : Interpreter(opts),
     interpreterHandler(ih),
     processTree(0),
+    module(0),
     externalDispatcher(new ExternalDispatcher()),
     pathWriter(0),
     symPathWriter(0),
     specialFunctionHandler(0),
-    constantTable(0),
-    module(0) {
+    constantTable(0) {
 printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
