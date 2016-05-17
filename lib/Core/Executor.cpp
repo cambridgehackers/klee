@@ -54,10 +54,9 @@ static RNG theRNG;
 namespace klee {
   class ExecutionState;
   class Executor;  
-  class InterpreterHandler;
+  //class InterpreterHandler;
   struct KInstruction;
   struct StackFrame;
-
   struct KFunction {
 public:
     llvm::Function *function; 
@@ -75,7 +74,6 @@ public:
       }
     }
   }; 
-}
 
 class Searcher {
 public:
@@ -86,17 +84,6 @@ public:
   enum CoreSearchType { DFS, BFS };
 };
 
-namespace {
-  cl::list<Searcher::CoreSearchType>
-  CoreSearch("search", cl::desc("Specify the search heuristic (default=random-path interleaved with nurs:covnew)"),
-     cl::values(clEnumValN(Searcher::DFS, "dfs", "use Depth First Search (DFS)"),
-	clEnumValN(Searcher::BFS, "bfs", "use Breadth First Search (BFS)"),
-	clEnumValEnd));
-  cl::opt<bool>
-  DebugLogMerge("debug-log-merge");
-}
-
-namespace klee {
 class PTreeNode {
     friend class PTree;
 public:
@@ -137,64 +124,66 @@ public:
       } while (n && !n->left && !n->right);
     }
 };
+} // namespace klee
+
+namespace {
+  cl::list<Searcher::CoreSearchType>
+  CoreSearch("search", cl::desc("Specify the search heuristic (default=random-path interleaved with nurs:covnew)"),
+     cl::values(clEnumValN(Searcher::DFS, "dfs", "use Depth First Search (DFS)"),
+	clEnumValN(Searcher::BFS, "bfs", "use Breadth First Search (BFS)"), clEnumValEnd));
 }
 
 class DFSSearcher : public Searcher {
   std::vector<ExecutionState*> states;
 public:
   ExecutionState &selectState() { return *states.back(); }
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+    states.insert(states.end(), addedStates.begin(), addedStates.end());
+    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+      ExecutionState *es = *it;
+      if (es == states.back())
+        states.pop_back();
+      else {
+        bool ok = false;
+        for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
+          if (es==*it) {
+            states.erase(it);
+            ok = true;
+            break;
+          }
+        }
+        assert(ok && "invalid state removed");
+      }
+    }
+  }
   bool empty() { return states.empty(); }
 };
 class BFSSearcher : public Searcher {
   std::deque<ExecutionState*> states;
 public:
   ExecutionState &selectState() { return *states.front(); }
-  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates);
+  void update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
+    states.insert(states.end(), addedStates.begin(), addedStates.end());
+    for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
+      ExecutionState *es = *it;
+      if (es == states.front())
+        states.pop_front();
+      else {
+        bool ok = false;
+        for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
+          if (es==*it) {
+            states.erase(it);
+            ok = true;
+            break;
+          }
+        }
+        assert(ok && "invalid state removed");
+      }
+    }
+  }
   bool empty() { return states.empty(); }
 };
 
-void DFSSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  states.insert(states.end(), addedStates.begin(), addedStates.end());
-  for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
-    ExecutionState *es = *it;
-    if (es == states.back()) {
-      states.pop_back();
-    } else {
-      bool ok = false;
-      for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
-        if (es==*it) {
-          states.erase(it);
-          ok = true;
-          break;
-        }
-      }
-      assert(ok && "invalid state removed");
-    }
-  }
-}
-
-void BFSSearcher::update(ExecutionState *current, const std::set<ExecutionState*> &addedStates, const std::set<ExecutionState*> &removedStates) {
-  states.insert(states.end(), addedStates.begin(), addedStates.end());
-  for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
-    ExecutionState *es = *it;
-    if (es == states.front()) {
-      states.pop_front();
-    } else {
-      bool ok = false;
-      for (auto it = states.begin(), ie = states.end(); it != ie; ++it) {
-        if (es==*it) {
-          states.erase(it);
-          ok = true;
-          break;
-        }
-      }
-      assert(ok && "invalid state removed");
-    }
-  }
-}
-
-// 
 /// Check for special cases where we statically know an instruction is
 /// uncoverable. Currently the case is an unreachable instruction
 /// following a noreturn call; the instruction is really only there to
