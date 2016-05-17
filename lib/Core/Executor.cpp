@@ -322,8 +322,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   if (!objects.empty()) {
       sys::TimeValue now = util::getWallTimeVal();
       success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values);
-      sys::TimeValue delta = util::getWallTimeVal();
-      delta -= now;
+      sys::TimeValue delta = util::getWallTimeVal() - now;
       stats::solverTime += delta.usec();
   }
   osolver->setCoreSolverTimeout(0);
@@ -365,10 +364,8 @@ bool TimingSolver::solveEvaluate(const ExecutionState& state, ref<Expr> expr, So
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = tosolver->evaluate(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal();
-  delta -= now;
+  sys::TimeValue delta = util::getWallTimeVal() - now;
   stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.;
   return success;
 }
 
@@ -381,10 +378,8 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool 
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = tosolver->mustBeTrue(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal();
-  delta -= now;
+  sys::TimeValue delta = util::getWallTimeVal() - now;
   stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.;
   return success;
 }
 
@@ -397,10 +392,8 @@ bool TimingSolver::solveGetValue(const ExecutionState& state, ref<Expr> expr, re
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = tosolver->getValue(Query(state.constraints, expr), result);
-  sys::TimeValue delta = util::getWallTimeVal();
-  delta -= now;
+  sys::TimeValue delta = util::getWallTimeVal() - now;
   stats::solverTime += delta.usec();
-  state.queryCost += delta.usec()/1000000.;
   return success;
 }
 

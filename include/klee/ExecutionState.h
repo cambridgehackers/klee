@@ -81,15 +81,10 @@ public:
   stack_ty stack; 
   /// @brief Remember from which Basic Block control flow arrived /// (i.e. to select the right phi values)
   unsigned incomingBBIndex; 
-  // Overall state of the state - Data specific
-
   /// @brief Address space used by this state (e.g. Global and Heap)
   AddressSpace addressSpace; 
   /// @brief Constraints collected so far
   ConstraintManager constraints; 
-  /// Statistics and information 
-  /// @brief Costs for all queries issued for this state, in seconds
-  mutable double queryCost; 
   /// @brief Weight assigned for importance of this state.  Can be
   /// used for searchers to decide what paths to explore
   double weight; 
@@ -111,7 +106,6 @@ public:
   /// @brief Pointer to the process tree of the current state
   PTreeNode *ptreeNode; 
   /// @brief Ordered list of symbolics: used to generate test cases.
-  //
   // FIXME: Move to a shared list structure (not critical).
   std::vector<std::pair<const MemoryObject *, const Array *> > symbolics; 
   /// @brief Set of used array names for this state.  Used to avoid collisions.

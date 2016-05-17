@@ -59,7 +59,6 @@ StackFrame::~StackFrame() {
 ExecutionState::ExecutionState(KInstruction **_instructions, Function *_func, unsigned _numRegisters):
     pc(_instructions),
     prevPC(pc), 
-    queryCost(0.), 
     weight(1),
     depth(0), 
     instsSinceCovNew(0),
@@ -69,7 +68,7 @@ ExecutionState::ExecutionState(KInstruction **_instructions, Function *_func, un
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
-    : constraints(assumptions), queryCost(0.), ptreeNode(0) {}
+    : constraints(assumptions), ptreeNode(0) {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)
@@ -92,7 +91,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     incomingBBIndex(state.incomingBBIndex), 
     addressSpace(state.addressSpace),
     constraints(state.constraints), 
-    queryCost(state.queryCost),
     weight(state.weight),
     depth(state.depth), 
     pathOS(state.pathOS),
