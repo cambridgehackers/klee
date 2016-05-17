@@ -240,11 +240,6 @@ void Executor::writeIStats() {
   llvm::outs() << "version: 1;" << "creator: klee;" << "pid: " << getpid() << ";cmd: " << m->getModuleIdentifier() << "; positions: instr line;" << "events: " << "\n"; 
 }
 
-typedef std::map<Instruction*, std::vector<Function*> > calltargets_ty;
-static calltargets_ty callTargets;
-static std::map<Function*, std::vector<Instruction*> > functionCallers;
-static std::map<Function*, unsigned> functionShortestPath; 
-
 unsigned Executor::getPathStreamID(const ExecutionState &state) {
   assert(pathWriter);
   return state.pathOS.getID();
@@ -499,26 +494,15 @@ void Executor::initializeGlobals(ExecutionState &state) {
     LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
     uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
     bool isDecl = i->isDeclaration();
-    if (isDecl) {
-      // FIXME: We have no general way of handling unknown external
-      // symbols. If we really cared about making external stuff work
-      // better we could support user definition, or use the EXE style
-      // hack where we check the object file information.
-      // XXX - DWD - hardcode some things until we decide how to fix.
-      if (i->getName() == "_ZTVN10__cxxabiv117__class_type_infoE"
-       || i->getName() == "_ZTVN10__cxxabiv120__si_class_type_infoE"
-       || i->getName() == "_ZTVN10__cxxabiv121__vmi_class_type_infoE")
-          size = 0x2C;
-      if (size == 0)
-        llvm::errs() << "Unable to find size for global variable: " << i->getName() << " (use will result in out of bounds access)\n";
-    }
     MemoryObject *mo = memory->allocate(size, false, true, i);
     ObjectState *os = bindObjectInState(state, mo, false);
     globalObjects.insert(std::make_pair(i, mo));
     globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
     if (isDecl) {
       // Program already running = object already initialized.  Read // concrete value and write it to our copy.
-      if (size) {
+      if (size == 0)
+        llvm::errs() << "Unable to find size for global variable: " << i->getName() << " (use will result in out of bounds access)\n";
+      else {
         unsigned char *addr = (unsigned char *)externalDispatcher->resolveSymbol(i->getName());
         if (!addr)
           klee_error("unable to load symbol(%s) while initializing globals.", i->getName().data());
