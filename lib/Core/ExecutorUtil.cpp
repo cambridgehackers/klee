@@ -76,7 +76,7 @@ namespace klee {
           ConstantExpr::alloc(0, Context::get().getPointerWidth());
 
         if (LLVM_TYPE_Q StructType *st = dyn_cast<StructType>(*ii)) {
-          const StructLayout *sl = kmodule->targetData->getStructLayout(st);
+          const StructLayout *sl = targetData->getStructLayout(st);
           const ConstantInt *ci = cast<ConstantInt>(ii.getOperand());
 
           addend = ConstantExpr::alloc(sl->getElementOffset((unsigned)
@@ -87,7 +87,7 @@ namespace klee {
           ref<ConstantExpr> index = 
             evalConstant(cast<Constant>(ii.getOperand()));
           unsigned elementSize = 
-            kmodule->targetData->getTypeStoreSize(set->getElementType());
+            targetData->getTypeStoreSize(set->getElementType());
 
           index = index->ZExt(Context::get().getPointerWidth());
           addend = index->Mul(ConstantExpr::alloc(elementSize, 

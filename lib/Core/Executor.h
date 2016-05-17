@@ -69,32 +69,17 @@ namespace klee {
     KConstant(llvm::Constant*, unsigned, KInstruction*);
   };
 
-  class KModule {
-  public:
-    enum SwitchImplType { eSwitchTypeSimple, eSwitchTypeLLVM, eSwitchTypeInternal };
-    llvm::Module *module;
-    llvm::DataLayout *targetData;
-    std::set<llvm::Function*> escapingFunctions;
-    std::vector<llvm::Constant*> constants;
-    std::map<llvm::Constant*, KConstant*> constantMap;
-    KConstant* getKConstant(llvm::Constant *c);
-    SwitchImplType m_SwitchType;
-  public:
-    KModule(llvm::Module *_module);
-    ~KModule();
-    /// Return an id for the given constant, creating a new one if necessary.
-    unsigned getConstantID(llvm::Constant *c, KInstruction* ki);
-  };
-
 class Executor : public Interpreter {
 public:
   typedef std::pair<ExecutionState*,ExecutionState*> StatePair;
+  typedef enum { eSwitchTypeSimple, eSwitchTypeLLVM, eSwitchTypeInternal } SwitchImplType;
 
-  KModule *kmodule;
   std::set<ExecutionState*> states;
   InterpreterHandler *interpreterHandler;
   MemoryManager *memory;
   PTree *processTree;
+  llvm::Module *module;
+  unsigned getConstantID(llvm::Constant *c, KInstruction* ki);
 private:
   ExternalDispatcher *externalDispatcher;
   Solver       *osolver;
@@ -102,6 +87,12 @@ private:
   SpecialFunctionHandler *specialFunctionHandler;
   Cell *constantTable;
   std::map<llvm::Function*, KFunction*> functionMap;
+  llvm::DataLayout *targetData;
+  std::set<llvm::Function*> escapingFunctions;
+  std::vector<llvm::Constant*> constants;
+  std::map<llvm::Constant*, KConstant*> constantMap;
+  KConstant* getKConstant(llvm::Constant *c);
+  SwitchImplType m_SwitchType;
 
   /// Used to track states that have been added during the current /// instructions step.
   /// \invariant \ref addedStates is a subset of \ref states.

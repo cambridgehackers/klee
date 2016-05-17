@@ -185,36 +185,23 @@ public:
 };
 
 namespace {
-  cl::opt<KModule::SwitchImplType>
+  cl::opt<Executor::SwitchImplType>
   SwitchType("switch-type", cl::desc("Select the implementation of switch"),
-             cl::values(clEnumValN(KModule::eSwitchTypeSimple, "simple", "lower to ordered branches"),
-                        clEnumValN(KModule::eSwitchTypeLLVM, "llvm", "lower using LLVM"),
-                        clEnumValN(KModule::eSwitchTypeInternal, "internal", "execute switch internally"),
+             cl::values(clEnumValN(Executor::eSwitchTypeSimple, "simple", "lower to ordered branches"),
+                        clEnumValN(Executor::eSwitchTypeLLVM, "llvm", "lower using LLVM"),
+                        clEnumValN(Executor::eSwitchTypeInternal, "internal", "execute switch internally"),
                         clEnumValEnd),
-             cl::init(KModule::eSwitchTypeInternal)); 
+             cl::init(Executor::eSwitchTypeInternal)); 
 }
 
-KModule::KModule(Module *_module) 
-  : module(_module),
-    targetData(new DataLayout(module)),
-    m_SwitchType(SwitchType) {
-}
-
-KModule::~KModule() {
-  for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
-    delete it->second; 
-  delete targetData;
-  delete module;
-}
-
-KConstant* KModule::getKConstant(Constant *c) {
+KConstant* Executor::getKConstant(Constant *c) {
   auto it = constantMap.find(c);
   if (it != constantMap.end())
     return it->second;
   return NULL;
 }
 
-unsigned KModule::getConstantID(Constant *c, KInstruction* ki) {
+unsigned Executor::getConstantID(Constant *c, KInstruction* ki) {
   KConstant *kc = getKConstant(c);
   if (kc)
     return kc->id;  
@@ -366,7 +353,7 @@ void Executor::getCoveredLines(const ExecutionState &state, std::map<const std::
 }
 
 Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {
-  return kmodule->targetData->getTypeSizeInBits(type);
+  return targetData->getTypeSizeInBits(type);
 }
 
 Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
@@ -396,14 +383,14 @@ bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<Co
 
 Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
   : Interpreter(opts),
-    kmodule(0),
     interpreterHandler(ih),
     processTree(0),
     externalDispatcher(new ExternalDispatcher()),
     pathWriter(0),
     symPathWriter(0),
     specialFunctionHandler(0),
-    constantTable(0) {
+    constantTable(0),
+    module(0) {
 printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
@@ -425,15 +412,16 @@ Executor::~Executor() {
     delete processTree;
   if (specialFunctionHandler)
     delete specialFunctionHandler;
-  delete kmodule;
   if (constantTable)
       delete[] constantTable;
+  for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
+    delete it->second; 
+  delete targetData;
 }
 
 /***/
 void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os, const Constant *c, unsigned offset) {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-  DataLayout *targetData = kmodule->targetData;
   if (const ConstantVector *cp = dyn_cast<ConstantVector>(c)) {
     unsigned elementSize = targetData->getTypeStoreSize(cp->getType()->getElementType());
     for (unsigned i=0, e=cp->getNumOperands(); i != e; ++i)
@@ -476,7 +464,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state, void *addr, un
 }
 
 void Executor::initializeGlobals(ExecutionState &state) {
-  Module *m = kmodule->module;
+  Module *m = module;
   // represent function globals using the address of the actual llvm function
   // object. given that we use malloc to allocate memory in states this also
   // ensures that we won't conflict. we don't need to allocate a memory object
@@ -493,7 +481,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
   // allocate memory objects for all globals
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
-    uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
+    uint64_t size = targetData->getTypeStoreSize(ty);
     bool isDecl = i->isDeclaration();
     MemoryObject *mo = memory->allocate(size, false, true, i);
     ObjectState *os = bindObjectInState(state, mo, false);
@@ -701,7 +689,7 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
       return cast<ConstantExpr>(res);
   } else if (const ConstantStruct *cs = dyn_cast<ConstantStruct>(c)) {
-      const StructLayout *sl = kmodule->targetData->getStructLayout(cs->getType());
+      const StructLayout *sl = targetData->getStructLayout(cs->getType());
       llvm::SmallVector<ref<Expr>, 4> kids;
       for (unsigned i = cs->getNumOperands(); i != 0; --i) {
         unsigned op = i-1;
@@ -1329,7 +1317,7 @@ void Executor::executeInstruction(ExecutionState &state)
     // Memory instructions...
   case Instruction::Alloca: {
     AllocaInst *ai = cast<AllocaInst>(i);
-    unsigned elementSize = kmodule->targetData->getTypeStoreSize(ai->getAllocatedType());
+    unsigned elementSize = targetData->getTypeStoreSize(ai->getAllocatedType());
     ref<Expr> size = Expr::createPointer(elementSize);
     if (ai->isArrayAllocation()) {
       ref<Expr> count = eval(ki, 0, state);
@@ -2043,9 +2031,9 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   initializeGlobals(*startingState);
   processTree = new PTree(startingState);
   startingState->ptreeNode = processTree->root;
-  constantTable = new Cell[kmodule->constants.size()];
-  for (unsigned i=0; i<kmodule->constants.size(); ++i)
-      constantTable[i].value = evalConstant(kmodule->constants[i]);
+  constantTable = new Cell[constants.size()];
+  for (unsigned i=0; i<constants.size(); ++i)
+      constantTable[i].value = evalConstant(constants[i]);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(startingState);
   if (CoreSearch.size() == 0) {
@@ -2090,7 +2078,7 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   globalObjects.clear();
   globalAddresses.clear();
   writeStatsLine();
-  llvm::outs() << "version: 1;creator: klee;pid: " << getpid() << ";cmd: " << kmodule->module->getModuleIdentifier() << "; positions: instr line;events: \n"; 
+  llvm::outs() << "version: 1;creator: klee;pid: " << getpid() << ";cmd: " << module->getModuleIdentifier() << "; positions: instr line;events: \n"; 
 }
 
 // what a hack
@@ -2126,13 +2114,13 @@ void Executor::computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie) {
   uint64_t index = 1;
   for (TypeIt ii = ib; ii != ie; ++ii) {
     if (LLVM_TYPE_Q StructType *st = dyn_cast<StructType>(*ii)) {
-      const StructLayout *sl = kmodule->targetData->getStructLayout(st);
+      const StructLayout *sl = targetData->getStructLayout(st);
       const ConstantInt *ci = cast<ConstantInt>(ii.getOperand());
       uint64_t addend = sl->getElementOffset((unsigned) ci->getZExtValue());
       constantOffset = constantOffset->Add(ConstantExpr::alloc(addend, Context::get().getPointerWidth()));
     } else {
       const SequentialType *set = cast<SequentialType>(*ii);
-      uint64_t elementSize = kmodule->targetData->getTypeStoreSize(set->getElementType());
+      uint64_t elementSize = targetData->getTypeStoreSize(set->getElementType());
       Value *operand = ii.getOperand();
       if (Constant *c = dyn_cast<Constant>(operand)) {
         ref<ConstantExpr> index = evalConstant(c)->SExt(Context::get().getPointerWidth());
@@ -2146,7 +2134,7 @@ void Executor::computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie) {
   ki->offset = constantOffset->getZExtValue();
 }
 
-static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap, KModule *km, KInstruction *ki) {
+static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap, KInstruction *ki, Executor *exec) {
   if (Instruction *inst = dyn_cast<Instruction>(v))
     return registerMap[inst];
   else if (Argument *a = dyn_cast<Argument>(v))
@@ -2156,16 +2144,18 @@ static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap
   else {
     assert(isa<Constant>(v));
     Constant *c = cast<Constant>(v);
-    return -(km->getConstantID(c, ki) + 2);
+    return -(exec->getConstantID(c, ki) + 2);
   }
 }
 
-const Module *Executor::setModule(llvm::Module *module, const ModuleOptions &opts)
+const Module *Executor::setModule(llvm::Module *_module, const ModuleOptions &opts)
 {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-  assert(!kmodule && module && "can only register one module"); // XXX gross
-  kmodule = new KModule(module);
-  Context::initialize(kmodule->targetData->isLittleEndian(), (Expr::Width) kmodule->targetData->getPointerSizeInBits());
+  assert(!module && _module && "can only register one module"); // XXX gross
+  module = _module;
+  targetData = new DataLayout(module);
+  m_SwitchType = SwitchType;
+  Context::initialize(targetData->isLittleEndian(), (Expr::Width) targetData->getPointerSizeInBits());
   specialFunctionHandler = new SpecialFunctionHandler(*this);
   specialFunctionHandler->prepare();
   // Inject checks prior to optimization... we also perform the // invariant transformations that we will end up doing later so that
@@ -2176,7 +2166,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   pm.add(new OvershiftCheckPass());
   // FIXME: This false here is to work around a bug in // IntrinsicLowering which caches values which may eventually be
   // deleted (via RAUW). This can be removed once LLVM fixes this // issue.
-  pm.add(new IntrinsicCleanerPass(*kmodule->targetData, false));
+  pm.add(new IntrinsicCleanerPass(*targetData, false));
 printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   pm.run(*module);
   if (opts.Optimize)
@@ -2205,13 +2195,13 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   // directly I think?
   legacy::PassManager pm3;
   pm3.add(createCFGSimplificationPass());
-  switch(kmodule->m_SwitchType) {
-  case KModule::eSwitchTypeInternal: break;
-  case KModule::eSwitchTypeSimple: pm3.add(new LowerSwitchPass()); break;
-  case KModule::eSwitchTypeLLVM:  pm3.add(createLowerSwitchPass()); break;
+  switch(m_SwitchType) {
+  case Executor::eSwitchTypeInternal: break;
+  case Executor::eSwitchTypeSimple: pm3.add(new LowerSwitchPass()); break;
+  case Executor::eSwitchTypeLLVM:  pm3.add(createLowerSwitchPass()); break;
   default: klee_error("invalid --switch-type");
   }
-  pm3.add(new IntrinsicCleanerPass(*kmodule->targetData));
+  pm3.add(new IntrinsicCleanerPass(*targetData));
   pm3.add(new PhiCleanerPass());
   pm3.run(*module);
 
@@ -2267,14 +2257,14 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
             CallSite cs(it);
             unsigned numArgs = cs.arg_size();
             ki->operands = new int[numArgs+1];
-            ki->operands[0] = getOperandNum(cs.getCalledValue(), registerMap, kmodule, ki);
+            ki->operands[0] = getOperandNum(cs.getCalledValue(), registerMap, ki, this);
             for (unsigned j=0; j<numArgs; j++)
-              ki->operands[j+1] = getOperandNum(cs.getArgument(j), registerMap, kmodule, ki);
+              ki->operands[j+1] = getOperandNum(cs.getArgument(j), registerMap, ki, this);
           } else {
             unsigned numOperands = it->getNumOperands();
             ki->operands = new int[numOperands];
             for (unsigned j=0; j<numOperands; j++)
-              ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, kmodule, ki);
+              ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, ki, this);
           } 
           theStatisticManager->setIndex(0);
           if (instructionIsCoverable(ki->inst))
@@ -2287,12 +2277,12 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       kf->numRegisters = rnum; 
       functionMap.insert(std::make_pair(it, kf));
       if (functionEscapes(it))
-        kmodule->escapingFunctions.insert(it);
+        escapingFunctions.insert(it);
     }
   specialFunctionHandler->bind();
-  if (!kmodule->escapingFunctions.empty()) {
+  if (!escapingFunctions.empty()) {
     llvm::errs() << "KLEE: escaping fns: [";
-    for (auto it = kmodule->escapingFunctions.begin(), ie = kmodule->escapingFunctions.end(); it != ie; ++it)
+    for (auto it = escapingFunctions.begin(), ie = escapingFunctions.end(); it != ie; ++it)
       llvm::errs() << (*it)->getName() << ", ";
     llvm::errs() << "]\n";
   }

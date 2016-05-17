@@ -142,7 +142,7 @@ void SpecialFunctionHandler::prepare() {
 
   for (unsigned i=0; i<N; ++i) {
     HandlerInfo &hi = handlerInfo[i];
-    Function *f = executor.kmodule->module->getFunction(hi.name);
+    Function *f = executor.module->getFunction(hi.name);
     
     // No need to create if the function doesn't exist, since it cannot
     // be called in that case.
@@ -165,7 +165,7 @@ void SpecialFunctionHandler::bind() {
 
   for (unsigned i=0; i<N; ++i) {
     HandlerInfo &hi = handlerInfo[i];
-    Function *f = executor.kmodule->module->getFunction(hi.name);
+    Function *f = executor.module->getFunction(hi.name);
     
     if (f && (!hi.doNotOverride || f->isDeclaration()))
       handlers[f] = std::make_pair(hi.handler, hi.hasReturnValue);
