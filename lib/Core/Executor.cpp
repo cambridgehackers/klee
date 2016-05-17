@@ -184,6 +184,54 @@ public:
   bool empty() { return states.empty(); }
 };
 
+namespace {
+  cl::opt<KModule::SwitchImplType>
+  SwitchType("switch-type", cl::desc("Select the implementation of switch"),
+             cl::values(clEnumValN(KModule::eSwitchTypeSimple, "simple", "lower to ordered branches"),
+                        clEnumValN(KModule::eSwitchTypeLLVM, "llvm", "lower using LLVM"),
+                        clEnumValN(KModule::eSwitchTypeInternal, "internal", "execute switch internally"),
+                        clEnumValEnd),
+             cl::init(KModule::eSwitchTypeInternal)); 
+}
+
+KModule::KModule(Module *_module) 
+  : module(_module),
+    targetData(new DataLayout(module)),
+    m_SwitchType(SwitchType) {
+}
+
+KModule::~KModule() {
+  for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
+    delete it->second; 
+  delete targetData;
+  delete module;
+}
+
+KConstant* KModule::getKConstant(Constant *c) {
+  auto it = constantMap.find(c);
+  if (it != constantMap.end())
+    return it->second;
+  return NULL;
+}
+
+unsigned KModule::getConstantID(Constant *c, KInstruction* ki) {
+  KConstant *kc = getKConstant(c);
+  if (kc)
+    return kc->id;  
+  unsigned id = constants.size();
+  kc = new KConstant(c, id, ki);
+  constantMap.insert(std::make_pair(c, kc));
+  constants.push_back(c);
+  return id;
+}
+
+/***/ 
+KConstant::KConstant(llvm::Constant* _ct, unsigned _id, KInstruction* _ki) {
+  ct = _ct;
+  id = _id;
+  ki = _ki;
+}
+
 /// Check for special cases where we statically know an instruction is
 /// uncoverable. Currently the case is an unreachable instruction
 /// following a noreturn call; the instruction is really only there to

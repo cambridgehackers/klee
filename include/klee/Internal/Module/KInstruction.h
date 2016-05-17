@@ -16,8 +16,6 @@ namespace llvm {
   class Instruction;
 }
 namespace klee {
-  class Executor;
-  class KModule; 
   /// KInstruction - Intermediate instruction representation used /// during execution.
   struct KInstruction {
     llvm::Instruction *inst;    
