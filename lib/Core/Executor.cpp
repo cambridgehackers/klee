@@ -303,7 +303,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     }
     if (pi!=pie) break;
   }
-  std::vector< std::vector<unsigned char> > values;
+  std::vector< std::vector<unsigned char>> values;
   std::vector<const Array*> objects;
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     objects.push_back(state.symbolics[i].second);
@@ -327,7 +327,7 @@ printf("[%s:%d] name %s val \n", __FUNCTION__, __LINE__, state.symbolics[i].firs
   return true;
 }
 
-void Executor::getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res) {
+void Executor::getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned>> &res) {
   res = state.coveredLines;
 }
 
@@ -339,7 +339,7 @@ Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHand
   return new Executor(opts, ih);
 }
 
-std::pair< ref<Expr>, ref<Expr> >
+std::pair<ref<Expr>, ref<Expr>>
 Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
   return osolver->getRange(Query(state.constraints, expr));
 }
@@ -519,7 +519,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
   }
 }
 
-void Executor::branch(ExecutionState &state, const std::vector< ref<Expr> > &conditions, std::vector<ExecutionState*> &result) {
+void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &conditions, std::vector<ExecutionState*> &result) {
   TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
   assert(N);
@@ -683,7 +683,7 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
   else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c))
       return ConstantExpr::create(0, getWidthForLLVMType(c->getType()));
   else if (const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c)) {
-      std::vector<ref<Expr> > kids;
+      std::vector<ref<Expr>> kids;
       for (unsigned i = 0, e = cds->getNumElements(); i != e; ++i) {
         ref<Expr> kid = evalConstant(cds->getElementAsConstant(i));
         kids.push_back(kid);
@@ -760,14 +760,14 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     assert(success && "FIXME: Unhandled solver failure");
     bindLocal(target, state, value);
   } else {
-    std::set< ref<Expr> > values;
+    std::set<ref<Expr>> values;
     for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
       bool success = solveGetValue(state, siit->assignment.evaluate(e), value);
       assert(success && "FIXME: Unhandled solver failure");
       values.insert(value);
     }
-    std::vector< ref<Expr> > conditions;
+    std::vector<ref<Expr>> conditions;
     for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit)
       conditions.push_back(EqExpr::create(e, *vit));
     std::vector<ExecutionState*> branches;
@@ -1083,7 +1083,7 @@ void Executor::executeInstruction(ExecutionState &state)
       unsigned index = si->findCaseValue(ci).getSuccessorIndex();
       transferToBasicBlock(si->getSuccessor(index), si->getParent(), state);
     } else {
-      std::map<BasicBlock *, ref<Expr> > targets;
+      std::map<BasicBlock *, ref<Expr>> targets;
       ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
       for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e; ++i) {
         ref<Expr> value = evalConstant(i.getCaseValue());
@@ -1105,7 +1105,7 @@ void Executor::executeInstruction(ExecutionState &state)
       (void)success;
       if (res)
         targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
-      std::vector<ref<Expr> > conditions;
+      std::vector<ref<Expr>> conditions;
       for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it)
         conditions.push_back(it->second);
       std::vector<ExecutionState *> branches;
@@ -1139,7 +1139,7 @@ void Executor::executeInstruction(ExecutionState &state)
       break;
     }
     // evaluate arguments
-    std::vector< ref<Expr> > arguments;
+    std::vector<ref<Expr>> arguments;
     arguments.reserve(numArgs);
     for (unsigned j=0; j<numArgs; ++j)
       arguments.push_back(eval(ki, j+1, state));
@@ -1623,7 +1623,7 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
     assert(success && "FIXME: Unhandled solver failure");
     example = value->getZExtValue();
     info << "\texample: " << example << "\n";
-    std::pair< ref<Expr>, ref<Expr>> res = solveGetRange(state, address);
+    std::pair<ref<Expr>, ref<Expr>> res = solveGetRange(state, address);
     info << "\trange: [" << res.first << ", " << res.second <<"]\n";
   }
 
@@ -2001,7 +2001,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv, char **envp
 {
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
-  std::vector<ref<Expr> > arguments;
+  std::vector<ref<Expr>> arguments;
   KFunction *kf = functionMap[f];
   assert(kf);
   // force deterministic initialization of memory objects
@@ -2061,15 +2061,14 @@ printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
     CoreSearch.push_back(Searcher::DFS);
   }
   std::vector<Searcher *> s;
+  Searcher *searcher = NULL;
   for (unsigned i=0; i < CoreSearch.size(); i++) {
-      Searcher *searcher = NULL;
       switch (CoreSearch[i]) {
       case Searcher::DFS: searcher = new DFSSearcher(); break;
       case Searcher::BFS: searcher = new BFSSearcher(); break;
       }
       s.push_back(searcher);
   }
-  Searcher *searcher = s[0];
   searcher->update(0, states, std::set<ExecutionState*>());
   while (!states.empty()) {
     ExecutionState &state = searcher->selectState();
