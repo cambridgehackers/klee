@@ -97,17 +97,12 @@ struct StackFrame {
 /// @brief ExecutionState representing a path under exploration
 class ExecutionState {
 public:
-  typedef std::vector<StackFrame> stack_ty;
-
+  typedef std::vector<StackFrame> stack_ty; 
 private:
   // unsupported, use copy constructor
-  ExecutionState &operator=(const ExecutionState &);
-
-  std::map<std::string, std::string> fnAliases;
-
+  ExecutionState &operator=(const ExecutionState &); 
+  std::map<std::string, std::string> fnAliases; 
 public:
-  // Execution - Control Flow specific
-
   /// @brief Pointer to instruction to be executed after the current /// instruction
   KInstIterator pc; 
   /// @brief Pointer to instruction which is currently executed
@@ -158,7 +153,6 @@ public:
   void popFrame(); 
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); } 
-  bool mergeState(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
 };
 
