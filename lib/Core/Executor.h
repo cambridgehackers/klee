@@ -192,7 +192,7 @@ public: //friends
   /// Add the given (boolean) condition as a constraint on state. This
   /// function is a wrapper around the state's addConstraint function
   /// which also manages propagation of implied values, /// validity checks, and seed patching.
-  void addConstraint(ExecutionState &state, ref<Expr> condition);
+  void executeAddConstraint(ExecutionState &state, ref<Expr> condition);
   void bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> value);
   /// Return a unique constant value for the given expression in the
   /// given state, if it has one (i.e. it provably only has a single

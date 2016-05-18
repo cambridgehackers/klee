@@ -550,7 +550,7 @@ void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &condi
   }
   for (unsigned i=0; i<N; ++i)
       if (result[i])
-          addConstraint(*result[i], conditions[i]);
+          executeAddConstraint(*result[i], conditions[i]);
 }
 
 Executor::StatePair
@@ -630,12 +630,12 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
       falseState->symPathOS << "0";
     }
   }
-  addConstraint(*trueState, condition);
-  addConstraint(*falseState, Expr::createIsZero(condition));
+  executeAddConstraint(*trueState, condition);
+  executeAddConstraint(*falseState, Expr::createIsZero(condition));
   return StatePair(trueState, falseState);
 }
 
-void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
+void Executor::executeAddConstraint(ExecutionState &state, ref<Expr> condition) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(condition)) {
     if (!CE->isTrue())
       llvm::report_fatal_error("attempt to add invalid constraint");
@@ -738,7 +738,7 @@ Executor::toConstant(ExecutionState &state, ref<Expr> e, const char *reason) {
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e << " to value " << value;
   klee_warning(reason, os.str().c_str());
-  addConstraint(state, EqExpr::create(e, value));
+  executeAddConstraint(state, EqExpr::create(e, value));
   return value;
 }
 
@@ -1321,7 +1321,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
         values.insert(values.begin(), obj->bytes, obj->bytes + std::min(obj->numBytes, mo->size));
       }
 }
-
+
 const ref<Expr> Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const
 {
   assert(index < ki->inst->getNumOperands());
