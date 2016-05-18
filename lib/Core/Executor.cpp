@@ -1237,21 +1237,17 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
         }
       } else {
         ref<Expr> result = os->read(offset, type);
-        if (interpreterOpts.MakeConcreteSymbolic) {
-            unsigned n = interpreterOpts.MakeConcreteSymbolic;
-            // right now, we don't replace symbolics (is there any reason to?)
-            if (!n || !isa<ConstantExpr>(result) || (n != 1 && random() % n))
-              {}
-            else {
-                // create a new fresh location, assert it is equal to concrete value in e // and return it.
-                static unsigned id;
-                const Array *array = arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id), Expr::getMinBytesForWidth(result->getWidth()));
-                ref<Expr>res = Expr::createTempRead(array, result->getWidth());
-                ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(result, res));
-                llvm::errs() << "Making symbolic: " << eq << "\n";
-                state.addConstraint(eq);
-                result = res;
-            }
+        // right now, we don't replace symbolics (is there any reason to?)
+        if (unsigned n = interpreterOpts.MakeConcreteSymbolic)
+        if (isa<ConstantExpr>(result) && (n == 1 || !(random() % n))) {
+            // create a new fresh location, assert it is equal to concrete value in e // and return it.
+            static unsigned id;
+            const Array *array = arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id), Expr::getMinBytesForWidth(result->getWidth()));
+            ref<Expr>res = Expr::createTempRead(array, result->getWidth());
+            ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(result, res));
+            llvm::errs() << "Making symbolic: " << eq << "\n";
+            state.addConstraint(eq);
+            result = res;
         }
         bindLocal(target, state, result);
       }
