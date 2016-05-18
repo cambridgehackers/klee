@@ -17,7 +17,6 @@
 #include "klee/util/ExprPPrinter.h"
 #include "klee/util/ExprSMTLIBPrinter.h"
 #include "klee/util/GetElementPtrTypeIterator.h"
-#include "klee/Internal/ADT/DiscretePDF.h"
 #include "klee/Internal/ADT/KTest.h"
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Internal/Support/ErrorHandling.h"
@@ -380,7 +379,6 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
       else
         falseSeeds.push_back(*siit);
     }
-
     bool swapInfo = false;
     if (trueSeeds.empty()) {
       if (&current == trueState) swapInfo = true;
