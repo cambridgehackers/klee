@@ -204,12 +204,10 @@ KConstant* Executor::getKConstant(Constant *c) {
 }
 
 unsigned Executor::getConstantID(Constant *c, KInstruction* ki) {
-  KConstant *kc = getKConstant(c);
-  if (kc)
+  if (KConstant *kc = getKConstant(c))
     return kc->id;  
   unsigned id = constants.size();
-  kc = new KConstant(c, id, ki);
-  constantMap.insert(std::make_pair(c, kc));
+  constantMap.insert(std::make_pair(c, new KConstant(c, id, ki)));
   constants.push_back(c);
   return id;
 }
