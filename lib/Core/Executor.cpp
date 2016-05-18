@@ -70,11 +70,7 @@ public:
     llvm::Constant* ct;
     unsigned id;
     KInstruction *ki;
-    KConstant(llvm::Constant* _ct, unsigned _id, KInstruction* _ki) {
-      ct = _ct;
-      id = _id;
-      ki = _ki;
-    }
+    KConstant(llvm::Constant* _ct, unsigned _id, KInstruction* _ki): ct(_ct), id(_id), ki(_ki) {}
   };
 
 class Searcher {
@@ -133,6 +129,13 @@ namespace {
   CoreSearch("search", cl::desc("Specify the search heuristic (default=random-path interleaved with nurs:covnew)"),
      cl::values(clEnumValN(Searcher::DFS, "dfs", "use Depth First Search (DFS)"),
 	clEnumValN(Searcher::BFS, "bfs", "use Breadth First Search (BFS)"), clEnumValEnd));
+  cl::opt<Executor::SwitchImplType>
+  SwitchType("switch-type", cl::desc("Select the implementation of switch"),
+     cl::values(clEnumValN(Executor::eSwitchTypeSimple, "simple", "lower to ordered branches"),
+                clEnumValN(Executor::eSwitchTypeLLVM, "llvm", "lower using LLVM"),
+                clEnumValN(Executor::eSwitchTypeInternal, "internal", "execute switch internally"),
+                clEnumValEnd),
+        cl::init(Executor::eSwitchTypeInternal)); 
 }
 
 class DFSSearcher : public Searcher {
@@ -185,16 +188,6 @@ public:
   }
   bool empty() { return states.empty(); }
 };
-
-namespace {
-  cl::opt<Executor::SwitchImplType>
-  SwitchType("switch-type", cl::desc("Select the implementation of switch"),
-             cl::values(clEnumValN(Executor::eSwitchTypeSimple, "simple", "lower to ordered branches"),
-                        clEnumValN(Executor::eSwitchTypeLLVM, "llvm", "lower using LLVM"),
-                        clEnumValN(Executor::eSwitchTypeInternal, "internal", "execute switch internally"),
-                        clEnumValEnd),
-             cl::init(Executor::eSwitchTypeInternal)); 
-}
 
 KConstant* Executor::getKConstant(Constant *c) {
   auto it = constantMap.find(c);
@@ -341,16 +334,86 @@ printf("[%s:%d] name %s val \n", __FUNCTION__, __LINE__, state.symbolics[i].firs
   return true;
 }
 
-void Executor::getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned>> &res) {
-  res = state.coveredLines;
-}
+Executor::StatePair
+Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
+  Solver::Validity res;
+  auto it = seedMap.find(&current);
+  osolver->setCoreSolverTimeout(0);
+  sys::TimeValue now = util::getWallTimeVal();
+  bool success = osolver->evaluate(Query(current.constraints, current.constraints.simplifyExpr(condition)), res);
+  stats::solverTime += (util::getWallTimeVal() - now).usec();
+  if (!success) {
+    current.pc = current.prevPC;
+    terminateStateEarly(current, "Query timed out (fork).");
+    return StatePair(0, 0);
+  }
 
-Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {
-  return targetData->getTypeSizeInBits(type);
-}
+  // XXX - even if the constraint is provable one way or the other we can probably benefit by adding this constraint and allowing it to
+  // reduce the other constraints. For example, if we do a binary search on a particular value, and then see a comparison against
+  // the value it has been fixed at, we should take this as a nice hint to just use the single constraint instead of all the binary
+  // search ones. If that makes sense.
+  if (res==Solver::True) {
+    if (!isInternal && pathWriter)
+        current.pathOS << "1";
+    return StatePair(&current, 0);
+  } else if (res==Solver::False) {
+    if (!isInternal && pathWriter)
+        current.pathOS << "0";
+    return StatePair(0, &current);
+  }
+  TimerStatIncrementer timer(stats::forkTime);
+  ExecutionState *falseState, *trueState = &current;
+  ++stats::forks;
+  falseState = trueState->branch();
+  addedStates.insert(falseState);
+  if (it != seedMap.end()) {
+    std::vector<SeedInfo> seeds = it->second;
+    it->second.clear();
+    std::vector<SeedInfo> &trueSeeds = seedMap[trueState];
+    std::vector<SeedInfo> &falseSeeds = seedMap[falseState];
+    for (auto siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
+      ref<ConstantExpr> res;
+      bool success = solveGetValue(current, siit->assignment.evaluate(condition), res);
+      assert(success && "FIXME: Unhandled solver failure");
+      if (res->isTrue())
+        trueSeeds.push_back(*siit);
+      else
+        falseSeeds.push_back(*siit);
+    }
 
-Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
-  return new Executor(opts, ih);
+    bool swapInfo = false;
+    if (trueSeeds.empty()) {
+      if (&current == trueState) swapInfo = true;
+      seedMap.erase(trueState);
+    }
+    if (falseSeeds.empty()) {
+      if (&current == falseState) swapInfo = true;
+      seedMap.erase(falseState);
+    }
+    if (swapInfo) {
+      std::swap(trueState->coveredNew, falseState->coveredNew);
+      std::swap(trueState->coveredLines, falseState->coveredLines);
+    }
+  }
+  current.ptreeNode->data = 0;
+  std::pair<PTreeNode*, PTreeNode*> res2 = processTree->split(current.ptreeNode, falseState, trueState);
+  falseState->ptreeNode = res2.first;
+  trueState->ptreeNode = res2.second;
+  if (!isInternal) {
+    if (pathWriter) {
+      falseState->pathOS = pathWriter->open(current.pathOS);
+      trueState->pathOS << "1";
+      falseState->pathOS << "0";
+    }
+    if (symPathWriter) {
+      falseState->symPathOS = symPathWriter->open(current.symPathOS);
+      trueState->symPathOS << "1";
+      falseState->symPathOS << "0";
+    }
+  }
+  executeAddConstraint(*trueState, condition);
+  executeAddConstraint(*falseState, Expr::createIsZero(condition));
+  return StatePair(trueState, falseState);
 }
 
 std::pair<ref<Expr>, ref<Expr>>
@@ -374,6 +437,10 @@ bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<Co
   return success;
 }
 
+Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
+  return new Executor(opts, ih);
+}
+
 Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
   : Interpreter(opts),
     interpreterHandler(ih),
@@ -551,88 +618,6 @@ void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &condi
   for (unsigned i=0; i<N; ++i)
       if (result[i])
           executeAddConstraint(*result[i], conditions[i]);
-}
-
-Executor::StatePair
-Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
-  Solver::Validity res;
-  auto it = seedMap.find(&current);
-  osolver->setCoreSolverTimeout(0);
-  sys::TimeValue now = util::getWallTimeVal();
-  bool success = osolver->evaluate(Query(current.constraints, current.constraints.simplifyExpr(condition)), res);
-  stats::solverTime += (util::getWallTimeVal() - now).usec();
-  if (!success) {
-    current.pc = current.prevPC;
-    terminateStateEarly(current, "Query timed out (fork).");
-    return StatePair(0, 0);
-  }
-
-  // XXX - even if the constraint is provable one way or the other we can probably benefit by adding this constraint and allowing it to
-  // reduce the other constraints. For example, if we do a binary search on a particular value, and then see a comparison against
-  // the value it has been fixed at, we should take this as a nice hint to just use the single constraint instead of all the binary
-  // search ones. If that makes sense.
-  if (res==Solver::True) {
-    if (!isInternal && pathWriter)
-        current.pathOS << "1";
-    return StatePair(&current, 0);
-  } else if (res==Solver::False) {
-    if (!isInternal && pathWriter)
-        current.pathOS << "0";
-    return StatePair(0, &current);
-  }
-  TimerStatIncrementer timer(stats::forkTime);
-  ExecutionState *falseState, *trueState = &current;
-  ++stats::forks;
-  falseState = trueState->branch();
-  addedStates.insert(falseState);
-  if (it != seedMap.end()) {
-    std::vector<SeedInfo> seeds = it->second;
-    it->second.clear();
-    std::vector<SeedInfo> &trueSeeds = seedMap[trueState];
-    std::vector<SeedInfo> &falseSeeds = seedMap[falseState];
-    for (auto siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
-      ref<ConstantExpr> res;
-      bool success = solveGetValue(current, siit->assignment.evaluate(condition), res);
-      assert(success && "FIXME: Unhandled solver failure");
-      if (res->isTrue())
-        trueSeeds.push_back(*siit);
-      else
-        falseSeeds.push_back(*siit);
-    }
-
-    bool swapInfo = false;
-    if (trueSeeds.empty()) {
-      if (&current == trueState) swapInfo = true;
-      seedMap.erase(trueState);
-    }
-    if (falseSeeds.empty()) {
-      if (&current == falseState) swapInfo = true;
-      seedMap.erase(falseState);
-    }
-    if (swapInfo) {
-      std::swap(trueState->coveredNew, falseState->coveredNew);
-      std::swap(trueState->coveredLines, falseState->coveredLines);
-    }
-  }
-  current.ptreeNode->data = 0;
-  std::pair<PTreeNode*, PTreeNode*> res2 = processTree->split(current.ptreeNode, falseState, trueState);
-  falseState->ptreeNode = res2.first;
-  trueState->ptreeNode = res2.second;
-  if (!isInternal) {
-    if (pathWriter) {
-      falseState->pathOS = pathWriter->open(current.pathOS);
-      trueState->pathOS << "1";
-      falseState->pathOS << "0";
-    }
-    if (symPathWriter) {
-      falseState->symPathOS = symPathWriter->open(current.symPathOS);
-      trueState->symPathOS << "1";
-      falseState->symPathOS << "0";
-    }
-  }
-  executeAddConstraint(*trueState, condition);
-  executeAddConstraint(*falseState, Expr::createIsZero(condition));
-  return StatePair(trueState, falseState);
 }
 
 void Executor::executeAddConstraint(ExecutionState &state, ref<Expr> condition) {

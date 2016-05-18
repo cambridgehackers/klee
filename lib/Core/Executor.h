@@ -20,6 +20,7 @@
 #include "klee/Internal/System/Time.h"
 #include "klee/util/ArrayCache.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/IR/DataLayout.h"
 #include "klee/Solver.h"
 #include <vector>
 #include <string>
@@ -98,12 +99,12 @@ private:
   /// the states reach a symbolic branch then either direction that
   /// satisfies one or more seeds will be added to this map. What
   /// happens with other states (that don't satisfy the seeds) depends /// on as-yet-to-be-determined flags.
-  std::map<ExecutionState*, std::vector<SeedInfo> > seedMap;
+  std::map<ExecutionState*, std::vector<SeedInfo>> seedMap;
   /// Map of globals to their representative memory object.
   std::map<const llvm::GlobalValue*, MemoryObject*> globalObjects;
   /// Map of globals to their bound address. This also includes
   /// globals that have no representative object (i.e. functions).
-  std::map<const llvm::GlobalValue*, ref<ConstantExpr> > globalAddresses;
+  std::map<const llvm::GlobalValue*, ref<ConstantExpr>> globalAddresses;
   /// The set of legal function addresses, used to validate function
   /// pointers. We use the actual Function* address as the function address.
   std::set<uint64_t> legalFunctions;
@@ -125,7 +126,7 @@ private:
   /// a constraint and return the results. The input state is included
   /// as one of the results. Note that the output vector may included
   /// NULL pointers for states which were unable to be created.
-  void branch(ExecutionState &state, const std::vector< ref<Expr> > &conditions, std::vector<ExecutionState*> &result);
+  void branch(ExecutionState &state, const std::vector<ref<Expr>> &conditions, std::vector<ExecutionState*> &result);
   const ref<Expr> eval(KInstruction *ki, unsigned index, ExecutionState &state) const;
   void getArgumentCell(ExecutionState &state, KFunction *kf, unsigned aSize, std::vector<ref<Expr>> &arguments) {
     for (unsigned i = 0; i < aSize; i++)
@@ -166,7 +167,7 @@ public: //friends
   /// address inside the middle of objects).  ///
   /// \param results[out] A list of ((MemoryObject,ObjectState),
   /// state) pairs for each object the given address can point to the /// beginning of.
-  typedef std::vector< std::pair<std::pair<const MemoryObject*, const ObjectState*>, ExecutionState*> > ExactResolutionList;
+  typedef std::vector< std::pair<std::pair<const MemoryObject*, const ObjectState*>, ExecutionState*>> ExactResolutionList;
   void resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name);
   /// Allocate and bind a new object in a particular state. NOTE: This /// function may fork.  ///
   /// \param isLocal Flag to indicate if the object should be
@@ -183,7 +184,7 @@ public: //friends
   /// convenience for realloc). Note that this function can cause the
   /// state to fork and that \ref state cannot be safely accessed /// afterwards.
   void executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target = 0);
-  void executeCall(ExecutionState &state, KInstruction *ki, llvm::Function *f, std::vector< ref<Expr> > &arguments);
+  void executeCall(ExecutionState &state, KInstruction *ki, llvm::Function *f, std::vector<ref<Expr>> &arguments);
   void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name);
   // Fork current and return states in which condition holds / does
   // not hold, respectively. One of the states is necessarily the // current state, and one of the states may be null.
@@ -222,10 +223,11 @@ public: //friends
   virtual unsigned getPathStreamID(const ExecutionState &state);
   virtual unsigned getSymbolicPathStreamID(const ExecutionState &state);
   virtual void getConstraintLog(const ExecutionState &state, std::string &res, Interpreter::LogType logFormat);
-  virtual bool getSymbolicSolution(const ExecutionState &state, std::vector< std::pair<std::string, std::vector<unsigned char> > > &res);
-  virtual void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned> > &res);
-  Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
-  std::pair< ref<Expr>, ref<Expr> > solveGetRange(const ExecutionState&, ref<Expr> query) const;
+  virtual bool getSymbolicSolution(const ExecutionState &state, std::vector< std::pair<std::string, std::vector<unsigned char>>> &res);
+  void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned>> &res) {res = state.coveredLines;}
+  Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const { return targetData->getTypeSizeInBits(type); }
+  std::pair<ref<Expr>, ref<Expr>> solveGetRange(const ExecutionState&, ref<Expr> query) const;
 };
 } // End klee namespace
 #endif
+
