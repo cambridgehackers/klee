@@ -941,7 +941,395 @@ void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> 
   state.stack.back().locals[target->dest].value = value;
 }
 
-const ref<Expr> Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const {
+std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
+  std::string Str;
+  llvm::raw_string_ostream info(Str);
+  info << "\taddress: " << address << "\n";
+  uint64_t example;
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address))
+    example = CE->getZExtValue();
+  else {
+    ref<ConstantExpr> value;
+    bool success = solveGetValue(state, address, value);
+    assert(success && "FIXME: Unhandled solver failure");
+    example = value->getZExtValue();
+    info << "\texample: " << example << "\n";
+    std::pair<ref<Expr>, ref<Expr>> res = solveGetRange(state, address);
+    info << "\trange: [" << res.first << ", " << res.second <<"]\n";
+  }
+
+  MemoryObject hack((unsigned) example);
+  auto lower = state.addressSpace.objects.upper_bound(&hack);
+  info << "\tnext: ";
+  if (lower==state.addressSpace.objects.end())
+    info << "none\n";
+  else {
+    const MemoryObject *mo = lower->first;
+    std::string alloc_info;
+    mo->getAllocInfo(alloc_info);
+    info << "object at " << mo->address << " of size " << mo->size << "\n" << "\t\t" << alloc_info << "\n";
+  }
+  if (lower!=state.addressSpace.objects.begin()) {
+    --lower;
+    info << "\tprev: ";
+    if (lower==state.addressSpace.objects.end())
+      info << "none\n";
+    else {
+      const MemoryObject *mo = lower->first;
+      std::string alloc_info;
+      mo->getAllocInfo(alloc_info);
+      info << "object at " << mo->address << " of size " << mo->size << "\n" << "\t\t" << alloc_info << "\n";
+    }
+  }
+  return info.str();
+}
+
+void Executor::terminateStateCase(ExecutionState &state, const char *err, const char *suffix)
+{
+  interpreterHandler->processTestCase(state, err, suffix);
+  interpreterHandler->incPathsExplored();
+
+  auto it = addedStates.find(&state);
+  if (it==addedStates.end()) {
+    state.pc = state.prevPC;
+    removedStates.insert(&state);
+  } else {
+    // never reached searcher, just delete immediately
+    auto it3 = seedMap.find(&state);
+    if (it3 != seedMap.end())
+      seedMap.erase(it3);
+    addedStates.erase(it);
+    processTree->remove(state.ptreeNode);
+    delete &state;
+  }
+}
+
+void Executor::terminateStateEarly(ExecutionState &state, const Twine &message) {
+  terminateStateCase(state, (message + "\n").str().c_str(), "early");
+}
+
+void Executor::terminateStateOnExit(ExecutionState &state) {
+  terminateStateCase(state, 0, 0);
+}
+
+void Executor::terminateStateOnError(ExecutionState &state, const llvm::Twine &messaget, const char *suffix, const llvm::Twine &info) {
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+  std::string message = messaget.str();
+  klee_message("ERROR: (location information missing) %s", message.c_str());
+  std::string MsgString;
+  llvm::raw_string_ostream msg(MsgString);
+  msg << "Error: " << message << "\n" << "Stack: \n";
+  state.dumpStack(msg);
+  std::string info_str = info.str();
+  if (info_str != "")
+    msg << "Info: \n" << info_str;
+  terminateStateCase(state, msg.str().c_str(), suffix);
+}
+
+// XXX shoot me
+static const char *okExternalsList[] = { "printf", "fprintf", "puts", "getpid" };
+static std::set<std::string> okExternals(okExternalsList, okExternalsList + (sizeof(okExternalsList)/sizeof(okExternalsList[0])));
+void Executor::callExternalFunction(ExecutionState &state, KInstruction *target, Function *function, std::vector<ref<Expr>> &arguments){
+  // check if specialFunctionHandler wants it
+  if (specialFunctionHandler->handle(state, function, target, arguments))
+    return;
+  // normal external function handling path
+  // allocate 128 bits for each argument (+return value) to support fp80's;
+  // we could iterate through all the arguments first and determine the exact
+  // size we need, but this is faster, and the memory usage isn't significant.
+  uint64_t *args = (uint64_t*) alloca(2*sizeof(*args) * (arguments.size() + 1));
+  memset(args, 0, 2 * sizeof(*args) * (arguments.size() + 1));
+  unsigned wordIndex = 2;
+  for (auto ai = arguments.begin(), ae = arguments.end(); ai!=ae; ++ai) {
+      ref<Expr> arg = toUnique(state, *ai);
+      if (ConstantExpr *ce = dyn_cast<ConstantExpr>(arg)) {
+        // XXX kick toMemory fns from here
+        ce->toMemory(&args[wordIndex]);
+        wordIndex += (ce->getWidth()+63)/64;
+      } else {
+        terminateStateOnExecError(state, "external call with symbolic argument: " + function->getName());
+        return;
+      }
+  }
+  state.addressSpace.copyOutConcretes();
+printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
+  std::string TmpStr;
+  llvm::raw_string_ostream messageOs(TmpStr);
+  messageOs << "calling external: " << function->getName().str() << "(";
+  for (unsigned i=0; i<arguments.size(); i++) {
+      messageOs << arguments[i];
+      if (i != arguments.size()-1)
+	messageOs << ", ";
+  }
+  messageOs << ")";
+  klee_warning("%s", messageOs.str().c_str());
+  // MCJIT needs unique module, so we create quick external dispatcher for call.
+  // reference: // http://blog.llvm.org/2013/07/using-mcjit-with-kaleidoscope-tutorial.html
+  ExternalDispatcher *e = new ExternalDispatcher();
+  bool success = e->executeCall(function, target->inst, args);
+  delete e;
+  if (!success)
+      terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
+  else if (!state.addressSpace.copyInConcretes())
+      terminateStateOnError(state, "external modified read-only object", "external.err");
+  else {
+      LLVM_TYPE_Q Type *resultType = target->inst->getType();
+      if (resultType != Type::getVoidTy(getGlobalContext())) {
+        ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
+        bindLocal(target, state, e);
+      }
+  }
+}
+
+ObjectState *Executor::bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array) {
+  ObjectState *os = array ? new ObjectState(mo, array) : new ObjectState(mo);
+  state.addressSpace.bindObject(mo, os);
+  // Its possible that multiple bindings of the same mo in the state
+  // will put multiple copies on this list, but it doesn't really
+  // matter because all we use this list for is to unbind the object // on function return.
+  if (isLocal)
+    state.stack.back().allocas.push_back(mo);
+  return os;
+}
+
+void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal, KInstruction *target, bool zeroMemory, const ObjectState *reallocFrom) {
+  size = toUnique(state, size);
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
+    MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, state.prevPC->inst);
+      ObjectState *os = bindObjectInState(state, mo, isLocal);
+      if (zeroMemory)
+        os->initializeToZero();
+      else
+        os->initializeToRandom();
+      bindLocal(target, state, mo->getBaseExpr());
+      if (reallocFrom) {
+        unsigned count = std::min(reallocFrom->size, os->size);
+        for (unsigned i=0; i<count; i++)
+          os->write(i, reallocFrom->read8(i));
+        state.addressSpace.unbindObject(reallocFrom->getObject());
+      }
+  } else {
+    // XXX For now we just pick a size. Ideally we would support
+    // symbolic sizes fully but even if we don't it would be better to
+    // "smartly" pick a value, for example we could fork and pick the
+    // min and max values and perhaps some intermediate (reasonable // value).
+    // It would also be nice to recognize the case when size has
+    // exactly two values and just fork (but we need to get rid of
+    // return argument first). This shows up in pcre when llvm
+    // collapses the size expression with a select.
+    ref<ConstantExpr> example;
+    bool success = solveGetValue(state, size, example);
+    assert(success && "FIXME: Unhandled solver failure");
+    // Try and start with a small example.
+    Expr::Width W = example->getWidth();
+    while (example->Ugt(ConstantExpr::alloc(128, W))->isTrue()) {
+      ref<ConstantExpr> tmp = example->LShr(ConstantExpr::alloc(1, W));
+      bool res;
+      bool success = mayBeTrue(state, EqExpr::create(tmp, size), res);
+      assert(success && "FIXME: Unhandled solver failure");
+      if (!res)
+        break;
+      example = tmp;
+    }
+    StatePair fixedSize = stateFork(state, EqExpr::create(example, size), true);
+    if (fixedSize.second) {
+      // Check for exactly two values
+      ref<ConstantExpr> tmp;
+      bool success = solveGetValue(*fixedSize.second, size, tmp);
+      assert(success && "FIXME: Unhandled solver failure");
+      bool res;
+      success = mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), res);
+      assert(success && "FIXME: Unhandled solver failure");
+      if (res)
+        executeAlloc(*fixedSize.second, tmp, isLocal, target, zeroMemory, reallocFrom);
+      else {
+        // See if a *really* big value is possible. If so assume
+        // malloc will fail for it, so lets fork and return 0.
+        StatePair hugeSize = stateFork(*fixedSize.second,UltExpr::create(ConstantExpr::alloc(1<<31,W),size), true);
+        if (hugeSize.first) {
+          klee_message("NOTE: found huge malloc, returning 0");
+          bindLocal(target, *hugeSize.first, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
+        }
+        if (hugeSize.second) {
+          std::string Str;
+          llvm::raw_string_ostream info(Str);
+          ExprPPrinter::printOne(info, "  size expr", size);
+          info << "  concretization : " << example << "\n  unbound example: " << tmp << "\n";
+          terminateStateOnError(*hugeSize.second, "concretized symbolic size", "model.err", info.str());
+        }
+      }
+    }
+    if (fixedSize.first) // can be zero when fork fails
+      executeAlloc(*fixedSize.first, example, isLocal, target, zeroMemory, reallocFrom);
+  }
+}
+
+void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
+  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
+  if (zeroPointer.first && target)
+      bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
+  if (zeroPointer.second) { // address != 0
+    ExactResolutionList rl;
+    resolveExact(*zeroPointer.second, address, rl, "free");
+    for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
+      const MemoryObject *mo = it->first.first;
+      if (mo->isLocal || mo->isGlobal)
+        terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
+      else {
+        it->second->addressSpace.unbindObject(mo);
+        if (target)
+          bindLocal(target, *it->second, Expr::createPointer(0));
+      }
+    }
+  }
+}
+
+void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name) {
+  // XXX we may want to be capping this?
+  ResolutionList rl;
+  state.addressSpace.resolve(state, this, p, rl);
+  ExecutionState *unbound = &state;
+  for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
+    ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
+    StatePair branches = stateFork(*unbound, inBounds, true);
+    if (branches.first)
+      results.push_back(std::make_pair(*it, branches.first));
+    unbound = branches.second;
+    if (!unbound) // Fork failure
+      break;
+  }
+  if (unbound)
+    terminateStateOnError(*unbound, "merror: invalid pointer: " + name, "ptr.err", getAddressInfo(*unbound, p));
+}
+
+void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */) {
+  Expr::Width type = (isWrite ? value->getWidth() : getWidthForLLVMType(target->inst->getType()));
+  unsigned bytes = Expr::getMinBytesForWidth(type);
+  // fast path: single in-bounds resolution
+  ObjectPair op;
+  bool success;
+  osolver->setCoreSolverTimeout(0);
+  if (!state.addressSpace.resolveOne(state, this, address, op, success)) {
+    address = toConstant(state, address, "resolveOne failure");
+    success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
+  }
+  osolver->setCoreSolverTimeout(0);
+  if (success) {
+    const MemoryObject *mo = op.first;
+    ref<Expr> offset = mo->getOffsetExpr(address);
+    bool inBounds;
+    osolver->setCoreSolverTimeout(0);
+    bool success = mustBeTrue(state, mo->getBoundsCheckOffset(offset, bytes), inBounds);
+    osolver->setCoreSolverTimeout(0);
+    if (!success) {
+      state.pc = state.prevPC;
+      terminateStateEarly(state, "Query timed out (bounds check).");
+      return;
+    }
+    if (inBounds) {
+      const ObjectState *os = op.second;
+      if (isWrite) {
+        if (os->readOnly)
+          terminateStateOnError(state, "memory error: object read only", "readonly.err");
+        else {
+          ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+          wos->write(offset, value);
+        }
+      } else {
+        ref<Expr> result = os->read(offset, type);
+        if (interpreterOpts.MakeConcreteSymbolic) {
+            unsigned n = interpreterOpts.MakeConcreteSymbolic;
+            // right now, we don't replace symbolics (is there any reason to?)
+            if (!n || !isa<ConstantExpr>(result) || (n != 1 && random() % n))
+              {}
+            else {
+                // create a new fresh location, assert it is equal to concrete value in e // and return it.
+                static unsigned id;
+                const Array *array = arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id), Expr::getMinBytesForWidth(result->getWidth()));
+                ref<Expr>res = Expr::createTempRead(array, result->getWidth());
+                ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(result, res));
+                llvm::errs() << "Making symbolic: " << eq << "\n";
+                state.addConstraint(eq);
+                result = res;
+            }
+        }
+        bindLocal(target, state, result);
+      }
+      return;
+    }
+  }
+  // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds)
+  ResolutionList rl;
+  osolver->setCoreSolverTimeout(0);
+  bool incomplete = state.addressSpace.resolve(state, this, address, rl, 0, 0);
+  osolver->setCoreSolverTimeout(0);
+  // XXX there is some query wasteage here. who cares?
+  ExecutionState *unbound = &state;
+  for (auto i = rl.begin(), ie = rl.end(); i != ie; ++i) {
+    const MemoryObject *mo = i->first;
+    const ObjectState *os = i->second;
+    ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
+    StatePair branches = stateFork(*unbound, inBounds, true);
+    ExecutionState *bound = branches.first;
+    // bound can be 0 on failure or overlapped
+    if (bound) {
+      if (isWrite) {
+        if (os->readOnly)
+          terminateStateOnError(*bound, "memory error: object read only", "readonly.err");
+        else {
+          ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
+          wos->write(mo->getOffsetExpr(address), value);
+        }
+      } else {
+        ref<Expr> result = os->read(mo->getOffsetExpr(address), type);
+        bindLocal(target, *bound, result);
+      }
+    }
+    unbound = branches.second;
+    if (!unbound)
+      break;
+  }
+  // XXX should we distinguish out of bounds and overlapped cases?
+  if (unbound) {
+    if (incomplete)
+      terminateStateEarly(*unbound, "Query timed out (resolve).");
+    else
+      terminateStateOnError(*unbound, "memory error: out of bound pointer", "ptr.err", getAddressInfo(*unbound, address));
+  }
+}
+
+void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name) {
+  // Create a new object state for the memory object (instead of a copy).
+    // Find a unique name for this array.  First try the original name, // or if that fails try adding a unique identifier.
+    unsigned id = 0;
+    std::string uniqueName = name;
+    while (!state.arrayNames.insert(uniqueName).second)
+        uniqueName = name + "_" + llvm::utostr(++id);
+    const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
+    bindObjectInState(state, mo, false, array);
+    state.addSymbolic(mo, array);
+    auto it = seedMap.find(&state);
+    if (it!=seedMap.end())        // In seed mode we need to add this as a binding
+      for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
+        SeedInfo &si = *siit;
+        KTestObject *obj = si.getNextInput(mo, false);
+        if (!obj) {
+            terminateStateOnError(state, "ran out of inputs during seeding", "user.err");
+            break;
+        }
+        if (obj->numBytes > mo->size) {
+	    std::stringstream msg;
+	    msg << "replace size mismatch: " << mo->name << "[" << mo->size << "]" << " vs " << obj->name << "[" << obj->numBytes << "]" << " in test\n";
+            terminateStateOnError(state, msg.str(), "user.err");
+            break;
+        }
+        std::vector<unsigned char> &values = si.assignment.bindings[array];
+        values.insert(values.begin(), obj->bytes, obj->bytes + std::min(obj->numBytes, mo->size));
+      }
+}
+
+const ref<Expr> Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const
+{
   assert(index < ki->inst->getNumOperands());
   int vnumber = ki->operands[index];
   assert(vnumber != -1 && "Invalid operand to eval(), not a value or constant!");
@@ -1585,393 +1973,6 @@ void Executor::executeInstruction(ExecutionState &state)
   }
 }
 
-std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
-  std::string Str;
-  llvm::raw_string_ostream info(Str);
-  info << "\taddress: " << address << "\n";
-  uint64_t example;
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address))
-    example = CE->getZExtValue();
-  else {
-    ref<ConstantExpr> value;
-    bool success = solveGetValue(state, address, value);
-    assert(success && "FIXME: Unhandled solver failure");
-    example = value->getZExtValue();
-    info << "\texample: " << example << "\n";
-    std::pair<ref<Expr>, ref<Expr>> res = solveGetRange(state, address);
-    info << "\trange: [" << res.first << ", " << res.second <<"]\n";
-  }
-
-  MemoryObject hack((unsigned) example);
-  auto lower = state.addressSpace.objects.upper_bound(&hack);
-  info << "\tnext: ";
-  if (lower==state.addressSpace.objects.end())
-    info << "none\n";
-  else {
-    const MemoryObject *mo = lower->first;
-    std::string alloc_info;
-    mo->getAllocInfo(alloc_info);
-    info << "object at " << mo->address << " of size " << mo->size << "\n" << "\t\t" << alloc_info << "\n";
-  }
-  if (lower!=state.addressSpace.objects.begin()) {
-    --lower;
-    info << "\tprev: ";
-    if (lower==state.addressSpace.objects.end())
-      info << "none\n";
-    else {
-      const MemoryObject *mo = lower->first;
-      std::string alloc_info;
-      mo->getAllocInfo(alloc_info);
-      info << "object at " << mo->address << " of size " << mo->size << "\n" << "\t\t" << alloc_info << "\n";
-    }
-  }
-  return info.str();
-}
-
-void Executor::terminateStateCase(ExecutionState &state, const char *err, const char *suffix)
-{
-  interpreterHandler->processTestCase(state, err, suffix);
-  interpreterHandler->incPathsExplored();
-
-  auto it = addedStates.find(&state);
-  if (it==addedStates.end()) {
-    state.pc = state.prevPC;
-    removedStates.insert(&state);
-  } else {
-    // never reached searcher, just delete immediately
-    auto it3 = seedMap.find(&state);
-    if (it3 != seedMap.end())
-      seedMap.erase(it3);
-    addedStates.erase(it);
-    processTree->remove(state.ptreeNode);
-    delete &state;
-  }
-}
-
-void Executor::terminateStateEarly(ExecutionState &state, const Twine &message) {
-  terminateStateCase(state, (message + "\n").str().c_str(), "early");
-}
-
-void Executor::terminateStateOnExit(ExecutionState &state) {
-  terminateStateCase(state, 0, 0);
-}
-
-void Executor::terminateStateOnError(ExecutionState &state, const llvm::Twine &messaget, const char *suffix, const llvm::Twine &info) {
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-  std::string message = messaget.str();
-  klee_message("ERROR: (location information missing) %s", message.c_str());
-  std::string MsgString;
-  llvm::raw_string_ostream msg(MsgString);
-  msg << "Error: " << message << "\n" << "Stack: \n";
-  state.dumpStack(msg);
-  std::string info_str = info.str();
-  if (info_str != "")
-    msg << "Info: \n" << info_str;
-  terminateStateCase(state, msg.str().c_str(), suffix);
-}
-
-// XXX shoot me
-static const char *okExternalsList[] = { "printf", "fprintf", "puts", "getpid" };
-static std::set<std::string> okExternals(okExternalsList, okExternalsList + (sizeof(okExternalsList)/sizeof(okExternalsList[0])));
-void Executor::callExternalFunction(ExecutionState &state, KInstruction *target, Function *function, std::vector<ref<Expr>> &arguments){
-  // check if specialFunctionHandler wants it
-  if (specialFunctionHandler->handle(state, function, target, arguments))
-    return;
-  // normal external function handling path
-  // allocate 128 bits for each argument (+return value) to support fp80's;
-  // we could iterate through all the arguments first and determine the exact
-  // size we need, but this is faster, and the memory usage isn't significant.
-  uint64_t *args = (uint64_t*) alloca(2*sizeof(*args) * (arguments.size() + 1));
-  memset(args, 0, 2 * sizeof(*args) * (arguments.size() + 1));
-  unsigned wordIndex = 2;
-  for (auto ai = arguments.begin(), ae = arguments.end(); ai!=ae; ++ai) {
-      ref<Expr> arg = toUnique(state, *ai);
-      if (ConstantExpr *ce = dyn_cast<ConstantExpr>(arg)) {
-        // XXX kick toMemory fns from here
-        ce->toMemory(&args[wordIndex]);
-        wordIndex += (ce->getWidth()+63)/64;
-      } else {
-        terminateStateOnExecError(state, "external call with symbolic argument: " + function->getName());
-        return;
-      }
-  }
-  state.addressSpace.copyOutConcretes();
-printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
-  std::string TmpStr;
-  llvm::raw_string_ostream messageOs(TmpStr);
-  messageOs << "calling external: " << function->getName().str() << "(";
-  for (unsigned i=0; i<arguments.size(); i++) {
-      messageOs << arguments[i];
-      if (i != arguments.size()-1)
-	messageOs << ", ";
-  }
-  messageOs << ")";
-  klee_warning("%s", messageOs.str().c_str());
-  // MCJIT needs unique module, so we create quick external dispatcher for call.
-  // reference: // http://blog.llvm.org/2013/07/using-mcjit-with-kaleidoscope-tutorial.html
-  ExternalDispatcher *e = new ExternalDispatcher();
-  bool success = e->executeCall(function, target->inst, args);
-  delete e;
-  if (!success)
-      terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
-  else if (!state.addressSpace.copyInConcretes())
-      terminateStateOnError(state, "external modified read-only object", "external.err");
-  else {
-      LLVM_TYPE_Q Type *resultType = target->inst->getType();
-      if (resultType != Type::getVoidTy(getGlobalContext())) {
-        ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
-        bindLocal(target, state, e);
-      }
-  }
-}
-
-ObjectState *Executor::bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array) {
-  ObjectState *os = array ? new ObjectState(mo, array) : new ObjectState(mo);
-  state.addressSpace.bindObject(mo, os);
-  // Its possible that multiple bindings of the same mo in the state
-  // will put multiple copies on this list, but it doesn't really
-  // matter because all we use this list for is to unbind the object // on function return.
-  if (isLocal)
-    state.stack.back().allocas.push_back(mo);
-  return os;
-}
-
-void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal, KInstruction *target, bool zeroMemory, const ObjectState *reallocFrom) {
-  size = toUnique(state, size);
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
-    MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, state.prevPC->inst);
-      ObjectState *os = bindObjectInState(state, mo, isLocal);
-      if (zeroMemory)
-        os->initializeToZero();
-      else
-        os->initializeToRandom();
-      bindLocal(target, state, mo->getBaseExpr());
-      if (reallocFrom) {
-        unsigned count = std::min(reallocFrom->size, os->size);
-        for (unsigned i=0; i<count; i++)
-          os->write(i, reallocFrom->read8(i));
-        state.addressSpace.unbindObject(reallocFrom->getObject());
-      }
-  } else {
-    // XXX For now we just pick a size. Ideally we would support
-    // symbolic sizes fully but even if we don't it would be better to
-    // "smartly" pick a value, for example we could fork and pick the
-    // min and max values and perhaps some intermediate (reasonable // value).
-    // It would also be nice to recognize the case when size has
-    // exactly two values and just fork (but we need to get rid of
-    // return argument first). This shows up in pcre when llvm
-    // collapses the size expression with a select.
-    ref<ConstantExpr> example;
-    bool success = solveGetValue(state, size, example);
-    assert(success && "FIXME: Unhandled solver failure");
-    // Try and start with a small example.
-    Expr::Width W = example->getWidth();
-    while (example->Ugt(ConstantExpr::alloc(128, W))->isTrue()) {
-      ref<ConstantExpr> tmp = example->LShr(ConstantExpr::alloc(1, W));
-      bool res;
-      bool success = mayBeTrue(state, EqExpr::create(tmp, size), res);
-      assert(success && "FIXME: Unhandled solver failure");
-      if (!res)
-        break;
-      example = tmp;
-    }
-    StatePair fixedSize = stateFork(state, EqExpr::create(example, size), true);
-    if (fixedSize.second) {
-      // Check for exactly two values
-      ref<ConstantExpr> tmp;
-      bool success = solveGetValue(*fixedSize.second, size, tmp);
-      assert(success && "FIXME: Unhandled solver failure");
-      bool res;
-      success = mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), res);
-      assert(success && "FIXME: Unhandled solver failure");
-      if (res)
-        executeAlloc(*fixedSize.second, tmp, isLocal, target, zeroMemory, reallocFrom);
-      else {
-        // See if a *really* big value is possible. If so assume
-        // malloc will fail for it, so lets fork and return 0.
-        StatePair hugeSize = stateFork(*fixedSize.second,UltExpr::create(ConstantExpr::alloc(1<<31,W),size), true);
-        if (hugeSize.first) {
-          klee_message("NOTE: found huge malloc, returning 0");
-          bindLocal(target, *hugeSize.first, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
-        }
-        if (hugeSize.second) {
-          std::string Str;
-          llvm::raw_string_ostream info(Str);
-          ExprPPrinter::printOne(info, "  size expr", size);
-          info << "  concretization : " << example << "\n  unbound example: " << tmp << "\n";
-          terminateStateOnError(*hugeSize.second, "concretized symbolic size", "model.err", info.str());
-        }
-      }
-    }
-    if (fixedSize.first) // can be zero when fork fails
-      executeAlloc(*fixedSize.first, example, isLocal, target, zeroMemory, reallocFrom);
-  }
-}
-
-void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
-  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
-  if (zeroPointer.first && target)
-      bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
-  if (zeroPointer.second) { // address != 0
-    ExactResolutionList rl;
-    resolveExact(*zeroPointer.second, address, rl, "free");
-    for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
-      const MemoryObject *mo = it->first.first;
-      if (mo->isLocal || mo->isGlobal)
-        terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
-      else {
-        it->second->addressSpace.unbindObject(mo);
-        if (target)
-          bindLocal(target, *it->second, Expr::createPointer(0));
-      }
-    }
-  }
-}
-
-void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name) {
-  // XXX we may want to be capping this?
-  ResolutionList rl;
-  state.addressSpace.resolve(state, this, p, rl);
-  ExecutionState *unbound = &state;
-  for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
-    ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
-    StatePair branches = stateFork(*unbound, inBounds, true);
-    if (branches.first)
-      results.push_back(std::make_pair(*it, branches.first));
-    unbound = branches.second;
-    if (!unbound) // Fork failure
-      break;
-  }
-  if (unbound)
-    terminateStateOnError(*unbound, "merror: invalid pointer: " + name, "ptr.err", getAddressInfo(*unbound, p));
-}
-
-void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */) {
-  Expr::Width type = (isWrite ? value->getWidth() : getWidthForLLVMType(target->inst->getType()));
-  unsigned bytes = Expr::getMinBytesForWidth(type);
-  // fast path: single in-bounds resolution
-  ObjectPair op;
-  bool success;
-  osolver->setCoreSolverTimeout(0);
-  if (!state.addressSpace.resolveOne(state, this, address, op, success)) {
-    address = toConstant(state, address, "resolveOne failure");
-    success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
-  }
-  osolver->setCoreSolverTimeout(0);
-  if (success) {
-    const MemoryObject *mo = op.first;
-    ref<Expr> offset = mo->getOffsetExpr(address);
-    bool inBounds;
-    osolver->setCoreSolverTimeout(0);
-    bool success = mustBeTrue(state, mo->getBoundsCheckOffset(offset, bytes), inBounds);
-    osolver->setCoreSolverTimeout(0);
-    if (!success) {
-      state.pc = state.prevPC;
-      terminateStateEarly(state, "Query timed out (bounds check).");
-      return;
-    }
-    if (inBounds) {
-      const ObjectState *os = op.second;
-      if (isWrite) {
-        if (os->readOnly)
-          terminateStateOnError(state, "memory error: object read only", "readonly.err");
-        else {
-          ObjectState *wos = state.addressSpace.getWriteable(mo, os);
-          wos->write(offset, value);
-        }
-      } else {
-        ref<Expr> result = os->read(offset, type);
-        if (interpreterOpts.MakeConcreteSymbolic) {
-            unsigned n = interpreterOpts.MakeConcreteSymbolic;
-            // right now, we don't replace symbolics (is there any reason to?)
-            if (!n || !isa<ConstantExpr>(result) || (n != 1 && random() % n))
-              {}
-            else {
-                // create a new fresh location, assert it is equal to concrete value in e // and return it.
-                static unsigned id;
-                const Array *array = arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id), Expr::getMinBytesForWidth(result->getWidth()));
-                ref<Expr>res = Expr::createTempRead(array, result->getWidth());
-                ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(result, res));
-                llvm::errs() << "Making symbolic: " << eq << "\n";
-                state.addConstraint(eq);
-                result = res;
-            }
-        }
-        bindLocal(target, state, result);
-      }
-      return;
-    }
-  }
-  // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds)
-  ResolutionList rl;
-  osolver->setCoreSolverTimeout(0);
-  bool incomplete = state.addressSpace.resolve(state, this, address, rl, 0, 0);
-  osolver->setCoreSolverTimeout(0);
-  // XXX there is some query wasteage here. who cares?
-  ExecutionState *unbound = &state;
-  for (auto i = rl.begin(), ie = rl.end(); i != ie; ++i) {
-    const MemoryObject *mo = i->first;
-    const ObjectState *os = i->second;
-    ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
-    StatePair branches = stateFork(*unbound, inBounds, true);
-    ExecutionState *bound = branches.first;
-    // bound can be 0 on failure or overlapped
-    if (bound) {
-      if (isWrite) {
-        if (os->readOnly)
-          terminateStateOnError(*bound, "memory error: object read only", "readonly.err");
-        else {
-          ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
-          wos->write(mo->getOffsetExpr(address), value);
-        }
-      } else {
-        ref<Expr> result = os->read(mo->getOffsetExpr(address), type);
-        bindLocal(target, *bound, result);
-      }
-    }
-    unbound = branches.second;
-    if (!unbound)
-      break;
-  }
-  // XXX should we distinguish out of bounds and overlapped cases?
-  if (unbound) {
-    if (incomplete)
-      terminateStateEarly(*unbound, "Query timed out (resolve).");
-    else
-      terminateStateOnError(*unbound, "memory error: out of bound pointer", "ptr.err", getAddressInfo(*unbound, address));
-  }
-}
-
-void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name) {
-  // Create a new object state for the memory object (instead of a copy).
-    // Find a unique name for this array.  First try the original name, // or if that fails try adding a unique identifier.
-    unsigned id = 0;
-    std::string uniqueName = name;
-    while (!state.arrayNames.insert(uniqueName).second)
-        uniqueName = name + "_" + llvm::utostr(++id);
-    const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
-    bindObjectInState(state, mo, false, array);
-    state.addSymbolic(mo, array);
-    auto it = seedMap.find(&state);
-    if (it!=seedMap.end())        // In seed mode we need to add this as a binding
-      for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
-        SeedInfo &si = *siit;
-        KTestObject *obj = si.getNextInput(mo, false);
-        if (!obj) {
-            terminateStateOnError(state, "ran out of inputs during seeding", "user.err");
-            break;
-        }
-        if (obj->numBytes > mo->size) {
-	    std::stringstream msg;
-	    msg << "replace size mismatch: " << mo->name << "[" << mo->size << "]" << " vs " << obj->name << "[" << obj->numBytes << "]" << " in test\n";
-            terminateStateOnError(state, msg.str(), "user.err");
-            break;
-        }
-        std::vector<unsigned char> &values = si.assignment.bindings[array];
-        values.insert(values.begin(), obj->bytes, obj->bytes + std::min(obj->numBytes, mo->size));
-      }
-}
-
 void Executor::runFunctionAsMain(Function *f, int argc, char **argv, char **envp)
 {
 printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
@@ -2009,9 +2010,8 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   if (argvMO) {
     ObjectState *argvOS = bindObjectInState(*startingState, argvMO, false);
     for (int i=0; i<argc+1+envc+1+1; i++) {
-      if (i==argc || i>=argc+1+envc)
-        argvOS->write(i * NumPtrBytes, Expr::createPointer(0)); // Write NULL pointer
-      else {
+      ref<ConstantExpr> val = Expr::createPointer(0);
+      if (i != argc && i < argc+1+envc) {
         char *s = i<argc ? argv[i] : envp[i-(argc+1)];
         int j, len = strlen(s);
         MemoryObject *arg = memory->allocate(len+1, false, true, startingState->pc->inst);
@@ -2019,8 +2019,9 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
         for (j=0; j<len+1; j++)
           os->write8(j, s[j]);
         // Write pointer to newly allocated and initialised argv/envp c-string
-        argvOS->write(i * NumPtrBytes, arg->getBaseExpr());
+        val = arg->getBaseExpr();
       }
+      argvOS->write(i * NumPtrBytes, val);
     }
   }
   initializeGlobals(*startingState);
