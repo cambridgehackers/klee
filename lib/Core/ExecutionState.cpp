@@ -51,8 +51,6 @@ StackFrame::~StackFrame() {
 ExecutionState::ExecutionState(KInstruction **_instructions, Function *_func, unsigned _numRegisters):
     pc(_instructions),
     prevPC(pc), 
-    weight(1),
-    depth(0), 
     instsSinceCovNew(0),
     coveredNew(false),
     ptreeNode(0) {
@@ -63,8 +61,7 @@ ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
     : constraints(assumptions), ptreeNode(0) {}
 
 ExecutionState::~ExecutionState() {
-  for (unsigned int i=0; i<symbolics.size(); i++)
-  {
+  for (unsigned int i=0; i<symbolics.size(); i++) {
     const MemoryObject *mo = symbolics[i].first;
     assert(mo->refCount > 0);
     mo->refCount--;
@@ -83,8 +80,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     incomingBBIndex(state.incomingBBIndex), 
     addressSpace(state.addressSpace),
     constraints(state.constraints), 
-    weight(state.weight),
-    depth(state.depth), 
     pathOS(state.pathOS),
     symPathOS(state.symPathOS), 
     instsSinceCovNew(state.instsSinceCovNew),
@@ -99,12 +94,9 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 }
 
 ExecutionState *ExecutionState::branch() {
-  depth++; 
   ExecutionState *falseState = new ExecutionState(*this);
   falseState->coveredNew = false;
   falseState->coveredLines.clear(); 
-  weight *= .5;
-  falseState->weight -= weight; 
   return falseState;
 }
 

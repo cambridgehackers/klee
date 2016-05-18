@@ -115,11 +115,6 @@ public:
   AddressSpace addressSpace; 
   /// @brief Constraints collected so far
   ConstraintManager constraints; 
-  /// @brief Weight assigned for importance of this state.  Can be
-  /// used for searchers to decide what paths to explore
-  double weight; 
-  /// @brief Exploration depth, i.e., number of times KLEE branched for this state
-  unsigned depth; 
   /// @brief History of complete path: represents branches taken to
   /// reach/create this state (both concrete and symbolic)
   TreeOStream pathOS; 
