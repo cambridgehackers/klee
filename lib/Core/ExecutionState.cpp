@@ -25,8 +25,7 @@ using namespace llvm;
 using namespace klee;
 
 StackFrame::StackFrame(KInstIterator _caller, Function *_kf, unsigned _numRegisters)
-  : caller(_caller), func(_kf), numRegisters(_numRegisters),
-    minDistToUncoveredOnReturn(0), varargs(0) {
+  : caller(_caller), func(_kf), numRegisters(_numRegisters), varargs(0) {
   locals = new Cell[numRegisters];
 }
 
@@ -35,7 +34,6 @@ StackFrame::StackFrame(const StackFrame &s)
     func(s.func),
     numRegisters(s.numRegisters),
     allocas(s.allocas),
-    minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
     varargs(s.varargs) {
   locals = new Cell[numRegisters];
   for (unsigned i = 0; i < numRegisters; i++)
