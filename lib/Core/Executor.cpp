@@ -212,25 +212,6 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-bool ExecutionState::copyInConcretes() {
-  for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); it != ie; ++it) {
-    const MemoryObject *mo = it->first;
-    if (!mo->isUserSpecified) {
-      const ObjectState *os = it->second;
-      uint8_t *address = (uint8_t*) (unsigned long) mo->address;
-      if (memcmp(address, os->concreteStore, mo->size)!=0) {
-        if (os->readOnly)
-          return false;
-        else {
-          ObjectState *wos = getWriteable(mo, os);
-          memcpy(wos->concreteStore, address, mo->size);
-        }
-      }
-    }
-  }
-  return true;
-}
-
 /// Check for special cases where we statically know an instruction is
 /// uncoverable. Currently the case is an unreachable instruction
 /// following a noreturn call; the instruction is really only there to
@@ -807,16 +788,31 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       ExternalDispatcher *e = new ExternalDispatcher();
       bool success = e->executeCall(function, ki->inst, args);
       delete e;
-      if (!success)
+      if (!success) {
           terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
-      else if (!state.copyInConcretes())
-          terminateStateOnError(state, "external modified read-only object", "external.err");
-      else {
-          LLVM_TYPE_Q Type *resultType = ki->inst->getType();
-          if (resultType != Type::getVoidTy(getGlobalContext())) {
-            ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
-            bindLocal(ki, state, e);
+          break;
+      }
+      for (MemoryMap::iterator it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
+        const MemoryObject *mo = it->first;
+        if (!mo->isUserSpecified) {
+          const ObjectState *os = it->second;
+          uint8_t *address = (uint8_t*) (unsigned long) mo->address;
+          if (memcmp(address, os->concreteStore, mo->size)!=0) {
+            if (os->readOnly) {
+              terminateStateOnError(state, "external modified read-only object", "external.err");
+              break;
+            }
+            else {
+              ObjectState *wos = state.getWriteable(mo, os);
+              memcpy(wos->concreteStore, address, mo->size);
+            }
           }
+        }
+      }
+      LLVM_TYPE_Q Type *resultType = ki->inst->getType();
+      if (resultType != Type::getVoidTy(getGlobalContext())) {
+        ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
+        bindLocal(ki, state, e);
       }
     }
 overlab:

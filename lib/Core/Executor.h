@@ -137,15 +137,14 @@ public:
   void unbindObject(const MemoryObject *mo) {
     objects = objects.remove(mo);
   }
-    /// \brief Obtain an ObjectState suitable for writing.
-    /// This returns a writeable object state, creating a new copy of
-    /// the given ObjectState if necessary. If the address space owns
-    /// the ObjectState then this routine effectively just strips the const qualifier it.
-    /// \param mo The MemoryObject to get a writeable ObjectState for.
-    /// \param os The current binding of the MemoryObject.
-    /// \return A writeable ObjectState (\a os or a copy).
-    ObjectState *getWriteable(const MemoryObject *mo, const ObjectState *os);
-    bool copyInConcretes();
+  /// \brief Obtain an ObjectState suitable for writing.
+  /// This returns a writeable object state, creating a new copy of
+  /// the given ObjectState if necessary. If the address space owns
+  /// the ObjectState then this routine effectively just strips the const qualifier it.
+  /// \param mo The MemoryObject to get a writeable ObjectState for.
+  /// \param os The current binding of the MemoryObject.
+  /// \return A writeable ObjectState (\a os or a copy).
+  ObjectState *getWriteable(const MemoryObject *mo, const ObjectState *os);
   ConstraintManager constraints;
   /// @brief History of complete path: represents branches taken to
   /// reach/create this state (both concrete and symbolic)
