@@ -14,7 +14,6 @@
 #ifndef KLEE_EXECUTOR_H
 #define KLEE_EXECUTOR_H
 #include "klee/Interpreter.h"
-#include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/System/Time.h"
 #include "klee/util/ArrayCache.h"
@@ -65,7 +64,7 @@ namespace klee {
 
   class Array;
   class CallPathNode;
-  struct Cell;
+  typedef ref<Expr> Cell;
   struct KInstruction;
   class PTreeNode;
 
@@ -211,7 +210,7 @@ private:
   const ref<Expr> eval(KInstruction *ki, unsigned index, ExecutionState &state);
   void getArgumentCell(ExecutionState &state, KFunction *kf, unsigned aSize, std::vector<ref<Expr>> &arguments) {
     for (unsigned i = 0; i < aSize; i++)
-        state.stack.back().locals[i].value = arguments[i];
+        state.stack.back().locals[i] = arguments[i];
   }
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce);
   /// Return a constant value for the given expression, forcing it to

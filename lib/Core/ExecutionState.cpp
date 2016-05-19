@@ -133,7 +133,7 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
       if (ai!=f->arg_begin()) out << ", "; 
       out << ai->getName().str();
       // XXX should go through function
-      ref<Expr> value = sf.locals[index++].value; 
+      ref<Expr> value = sf.locals[index++]; 
       if (isa<ConstantExpr>(value))
         out << "=" << value;
     }

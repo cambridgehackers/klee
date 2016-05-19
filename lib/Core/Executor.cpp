@@ -941,7 +941,7 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 }
 
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> value) {
-  state.stack.back().locals[target->dest].value = value;
+  state.stack.back().locals[target->dest] = value;
 }
 
 std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
@@ -1280,7 +1280,7 @@ const ref<Expr> Executor::eval(KInstruction *ki, unsigned index, ExecutionState 
   // Determine if this is a constant or not.
   if (vnumber < 0)
       return evalConstant(constants[-vnumber - 2]);
-  return state.stack.back().locals[vnumber].value;
+  return state.stack.back().locals[vnumber];
 }
 
 void Executor::executeInstruction(ExecutionState &state)
