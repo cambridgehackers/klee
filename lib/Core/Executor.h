@@ -145,15 +145,6 @@ public:
     /// \param os The current binding of the MemoryObject.
     /// \return A writeable ObjectState (\a os or a copy).
     ObjectState *getWriteable(const MemoryObject *mo, const ObjectState *os);
-    /// Copy the concrete values of all managed ObjectStates into the
-    /// actual system memory location they were allocated at.
-    void copyOutConcretes();
-    /// Copy the concrete values of all managed ObjectStates back from
-    /// the actual system memory location they were allocated
-    /// at. ObjectStates will only be written to (and thus,
-    /// potentially copied) if the memory values are different from the current concrete values.
-    /// \retval true The copy succeeded.
-    /// \retval false The copy failed because a read-only object was modified.
     bool copyInConcretes();
   ConstraintManager constraints;
   /// @brief History of complete path: represents branches taken to

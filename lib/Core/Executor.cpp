@@ -212,23 +212,6 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-// These two are pretty big hack so we can sort of pass memory back
-// and forth to externals. They work by abusing the concrete cache
-// store inside of the object states, which allows them to
-// transparently avoid screwing up symbolics (if the byte is symbolic
-// then its concrete cache byte isn't being used) but is just a hack.
-void ExecutionState::copyOutConcretes() {
-  for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); it != ie; ++it) {
-    const MemoryObject *mo = it->first;
-    if (!mo->isUserSpecified) {
-      ObjectState *os = it->second;
-      uint8_t *address = (uint8_t*) (unsigned long) mo->address;
-      if (!os->readOnly)
-        memcpy(address, os->concreteStore, mo->size);
-    }
-  }
-}
-
 bool ExecutionState::copyInConcretes() {
   for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); it != ie; ++it) {
     const MemoryObject *mo = it->first;
@@ -795,8 +778,20 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
             goto overlab;
           }
       }
-      state.copyOutConcretes();
-    printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
+      // hack so we can sort of pass memory back and forth to externals. They work by abusing the concrete cache
+      // store inside of the object states, which allows them to
+      // transparently avoid screwing up symbolics (if the byte is symbolic
+      // then its concrete cache byte isn't being used) but is just a hack.
+      for (MemoryMap::iterator it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
+        const MemoryObject *mo = it->first;
+        if (!mo->isUserSpecified) {
+          ObjectState *os = it->second;
+          uint8_t *address = (uint8_t*) (unsigned long) mo->address;
+          if (!os->readOnly)
+            memcpy(address, os->concreteStore, mo->size);
+        }
+      }
+      printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
       std::string TmpStr;
       llvm::raw_string_ostream messageOs(TmpStr);
       messageOs << "calling external: " << function->getName().str() << "(";

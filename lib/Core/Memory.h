@@ -149,6 +149,7 @@ public:
 class ObjectState {
 private:
   friend class ExecutionState;
+  friend class Executor;
   unsigned copyOnWriteOwner; // exclusively for ExecutionState
 
   friend class ObjectHolder;
