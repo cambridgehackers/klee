@@ -71,7 +71,7 @@ namespace klee {
   class ExecutionState;
   class Executor;
   typedef std::pair<const MemoryObject*, const ObjectState*> ObjectPair;
-  typedef std::vector<ObjectPair> ResolutionList;  
+  typedef std::vector<ObjectPair> ResolutionList;
   /// Function object ordering MemoryObject's by address.
   struct MemoryObjectLT {
     bool operator()(const MemoryObject *a, const MemoryObject *b) const;
@@ -101,20 +101,20 @@ struct StackFrame {
 /// @brief ExecutionState representing a path under exploration
 class ExecutionState {
 public:
-  typedef std::vector<StackFrame> stack_ty; 
+  typedef std::vector<StackFrame> stack_ty;
 private:
   // unsupported, use copy constructor
-  ExecutionState &operator=(const ExecutionState &); 
-  std::map<std::string, std::string> fnAliases; 
+  ExecutionState &operator=(const ExecutionState &);
+  std::map<std::string, std::string> fnAliases;
 public:
   /// @brief Pointer to instruction to be executed after the current /// instruction
-  KInstIterator pc; 
+  KInstIterator pc;
   /// @brief Pointer to instruction which is currently executed
-  KInstIterator prevPC; 
+  KInstIterator prevPC;
   /// @brief Stack representing the current instruction stream
-  stack_ty stack; 
+  stack_ty stack;
   /// @brief Remember from which Basic Block control flow arrived /// (i.e. to select the right phi values)
-  unsigned incomingBBIndex; 
+  unsigned incomingBBIndex;
   private:
     /// Epoch counter used to control ownership of objects.
     mutable unsigned cowKey;
@@ -123,12 +123,12 @@ public:
     /// The set of objects where o->copyOnWriteOwner == cowKey are the objects that we own.
     /// \invariant forall o in objects, o->copyOnWriteOwner <= cowKey
     MemoryMap objects;
-    bool resolveOne(const ref<ConstantExpr> &address, ObjectPair &result); 
+    bool resolveOne(const ref<ConstantExpr> &address, ObjectPair &result);
     /// Resolve address to a list of ObjectPairs it can point to. If
     /// maxResolutions is non-zero then no more than that many pairs will be returned.
     /// \return true iff the resolution is incomplete (maxResolutions
     /// is non-zero and the search terminated early, or a query timed out).
-    bool resolve(ExecutionState &state, Executor *solver, ref<Expr> address, ResolutionList &rl, unsigned maxResolutions=0, double timeout=0.); 
+    bool resolve(ExecutionState &state, Executor *solver, ref<Expr> address, ResolutionList &rl, unsigned maxResolutions=0, double timeout=0.);
     void bindObject(const MemoryObject *mo, ObjectState *os);
     void unbindObject(const MemoryObject *mo);
     const ObjectState *findObject(const MemoryObject *mo) const;
@@ -147,43 +147,43 @@ public:
     /// the actual system memory location they were allocated
     /// at. ObjectStates will only be written to (and thus,
     /// potentially copied) if the memory values are different from the current concrete values.
-    /// \retval true The copy succeeded. 
+    /// \retval true The copy succeeded.
     /// \retval false The copy failed because a read-only object was modified.
     bool copyInConcretes();
-  ConstraintManager constraints; 
+  ConstraintManager constraints;
   /// @brief History of complete path: represents branches taken to
   /// reach/create this state (both concrete and symbolic)
-  TreeOStream pathOS; 
+  TreeOStream pathOS;
   /// @brief History of symbolic path: represents symbolic branches
   /// taken to reach/create this state
-  TreeOStream symPathOS; 
+  TreeOStream symPathOS;
   /// @brief Counts how many instructions were executed since the last new
   /// instruction was covered.
-  unsigned instsSinceCovNew; 
+  unsigned instsSinceCovNew;
   /// @brief Whether a new instruction was covered in this state
   bool coveredNew;
   /// @brief Set containing which lines in which files are covered by this state
-  std::map<const std::string *, std::set<unsigned> > coveredLines; 
+  std::map<const std::string *, std::set<unsigned> > coveredLines;
   /// @brief Pointer to the process tree of the current state
-  PTreeNode *ptreeNode; 
+  PTreeNode *ptreeNode;
   /// @brief Ordered list of symbolics: used to generate test cases.
   // FIXME: Move to a shared list structure (not critical).
-  std::vector<std::pair<const MemoryObject *, const Array *> > symbolics; 
+  std::vector<std::pair<const MemoryObject *, const Array *> > symbolics;
   /// @brief Set of used array names for this state.  Used to avoid collisions.
-  std::set<std::string> arrayNames; 
+  std::set<std::string> arrayNames;
 private:
-  ExecutionState() : ptreeNode(0) {} 
+  ExecutionState() : ptreeNode(0) {}
 public:
   ExecutionState(KInstruction **_instructions, llvm::Function *_func, unsigned _numRegisters);
   // XXX total hack, just used to make a state so solver can // use on structure
-  ExecutionState(const std::vector<ref<Expr> > &assumptions); 
-  ExecutionState(const ExecutionState &state); 
-  ~ExecutionState(); 
-  ExecutionState *branch(); 
+  ExecutionState(const std::vector<ref<Expr> > &assumptions);
+  ExecutionState(const ExecutionState &state);
+  ~ExecutionState();
+  ExecutionState *branch();
   void pushFrame(KInstIterator caller, llvm::Function *_func, unsigned _numRegisters);
-  void popFrame(); 
+  void popFrame();
   void addSymbolic(const MemoryObject *mo, const Array *array);
-  void addConstraint(ref<Expr> e) { constraints.addConstraint(e); } 
+  void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }
   void dumpStack(llvm::raw_ostream &out) const;
 };
 

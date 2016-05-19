@@ -49,11 +49,11 @@ static RNG theRNG;
 namespace klee {
   struct KFunction {
 public:
-    llvm::Function *function; 
-    unsigned numRegisters; 
+    llvm::Function *function;
+    unsigned numRegisters;
     unsigned numInstructions;
-    KInstruction **instructions; 
-    std::map<llvm::BasicBlock*, unsigned> basicBlockEntry; 
+    KInstruction **instructions;
+    std::map<llvm::BasicBlock*, unsigned> basicBlockEntry;
   public:
     KFunction(llvm::Function *_function) : function(_function), numInstructions(0), instructions(NULL) {}
     ~KFunction() {
@@ -63,7 +63,7 @@ public:
         delete[] instructions;
       }
     }
-  }; 
+  };
   class KConstant {
   public:
     llvm::Constant* ct;
@@ -134,7 +134,7 @@ namespace {
                 clEnumValN(Executor::eSwitchTypeLLVM, "llvm", "lower using LLVM"),
                 clEnumValN(Executor::eSwitchTypeInternal, "internal", "execute switch internally"),
                 clEnumValEnd),
-        cl::init(Executor::eSwitchTypeInternal)); 
+        cl::init(Executor::eSwitchTypeInternal));
 }
 
 class DFSSearcher : public Searcher {
@@ -199,32 +199,32 @@ void ExecutionState::unbindObject(const MemoryObject *mo) {
 }
 
 const ObjectState *ExecutionState::findObject(const MemoryObject *mo) const {
-  const MemoryMap::value_type *res = objects.lookup(mo); 
+  const MemoryMap::value_type *res = objects.lookup(mo);
   return res ? res->second : 0;
 }
 
 ObjectState *ExecutionState::getWriteable(const MemoryObject *mo, const ObjectState *os) {
-  assert(!os->readOnly); 
+  assert(!os->readOnly);
   if (cowKey==os->copyOnWriteOwner)
     return const_cast<ObjectState*>(os);
   else {
     ObjectState *n = new ObjectState(*os);
     n->copyOnWriteOwner = cowKey;
     objects = objects.replace(std::make_pair(mo, n));
-    return n;    
+    return n;
   }
 }
 
 bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result) {
   uint64_t address = addr->getZExtValue();
-  MemoryObject hack(address); 
+  MemoryObject hack(address);
   if (const MemoryMap::value_type *res = objects.lookup_previous(&hack)) {
     const MemoryObject *mo = res->first;
     if ((mo->size==0 && address==mo->address) || (address - mo->address < mo->size)) {
       result = *res;
       return true;
     }
-  } 
+  }
   return false;
 }
 
@@ -236,30 +236,30 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
     return false;
   } else {
     TimerStatIncrementer timer(stats::resolveTime);
-    uint64_t timeout_us = (uint64_t) (timeout*1000000.); 
+    uint64_t timeout_us = (uint64_t) (timeout*1000000.);
     // XXX in general this isn't exactly what we want... for
     // a multiple resolution case (or for example, a \in {b,c,0})
     // we want to find the first object, find a cex assuming
-    // not the first, find a cex assuming not the second...  etc.  
+    // not the first, find a cex assuming not the second...  etc.
     // XXX how do we smartly amortize the cost of checking to
     // see if we need to keep searching up/down, in bad cases?
-    // maybe we don't care?  
+    // maybe we don't care?
     // XXX we really just need a smart place to start (although
     // if its a known solution then the code below is guaranteed
     // to hit the fast path with exactly 2 queries). we could also
-    // just get this by inspection of the expr.  
+    // just get this by inspection of the expr.
     ref<ConstantExpr> cex;
     if (!solver->solveGetValue(state, p, cex))
       return true;
     uint64_t example = cex->getZExtValue();
-    MemoryObject hack(example); 
+    MemoryObject hack(example);
     MemoryMap::iterator oi = objects.upper_bound(&hack);
     MemoryMap::iterator begin = objects.begin();
-    MemoryMap::iterator end = objects.end(); 
-    MemoryMap::iterator start = oi; 
+    MemoryMap::iterator end = objects.end();
+    MemoryMap::iterator start = oi;
     // XXX in the common case we can save one query if we ask
     // mustBeTrue before mayBeTrue for the first result. easy
-    // to add I just want to have a nice symbolic test case first.  
+    // to add I just want to have a nice symbolic test case first.
     // search backwards, start with one minus because this
     // is the object that p *should* be within, which means we
     // get write off the end with 4 queries (XXX can be better, no?)
@@ -267,14 +267,14 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
       --oi;
       const MemoryObject *mo = oi->first;
       if (timeout_us && timeout_us < timer.check())
-        return true; 
+        return true;
       // XXX I think there is some query wasteage here?
       ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
       bool mayBeTrue;
       if (!solver->mayBeTrue(state, inBounds, mayBeTrue))
         return true;
       if (mayBeTrue) {
-        rl.push_back(*oi); 
+        rl.push_back(*oi);
         // fast path check
         unsigned size = rl.size();
         if (size==1) {
@@ -286,7 +286,7 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
         } else if (size==maxResolutions) {
           return true;
         }
-      } 
+      }
       bool mustBeTrue;
       if (!solver->mustBeTrue(state, UgeExpr::create(p, mo->getBaseExpr()), mustBeTrue))
         return true;
@@ -297,19 +297,19 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
       if (timeout_us && timeout_us < timer.check())
-        return true; 
+        return true;
       bool mustBeTrue;
       if (!solver->mustBeTrue(state, UltExpr::create(p, mo->getBaseExpr()), mustBeTrue))
         return true;
       if (mustBeTrue)
-        break; 
+        break;
       // XXX I think there is some query wasteage here?
       ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
       bool mayBeTrue;
       if (!solver->mayBeTrue(state, inBounds, mayBeTrue))
         return true;
       if (mayBeTrue) {
-        rl.push_back(*oi); 
+        rl.push_back(*oi);
         // fast path check
         unsigned size = rl.size();
         if (size==1) {
@@ -323,7 +323,7 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
         }
       }
     }
-  } 
+  }
   return false;
 }
 
@@ -331,13 +331,13 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
 // and forth to externals. They work by abusing the concrete cache
 // store inside of the object states, which allows them to
 // transparently avoid screwing up symbolics (if the byte is symbolic
-// then its concrete cache byte isn't being used) but is just a hack.  
+// then its concrete cache byte isn't being used) but is just a hack.
 void ExecutionState::copyOutConcretes() {
   for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); it != ie; ++it) {
-    const MemoryObject *mo = it->first; 
+    const MemoryObject *mo = it->first;
     if (!mo->isUserSpecified) {
       ObjectState *os = it->second;
-      uint8_t *address = (uint8_t*) (unsigned long) mo->address; 
+      uint8_t *address = (uint8_t*) (unsigned long) mo->address;
       if (!os->readOnly)
         memcpy(address, os->concreteStore, mo->size);
     }
@@ -346,10 +346,10 @@ void ExecutionState::copyOutConcretes() {
 
 bool ExecutionState::copyInConcretes() {
   for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); it != ie; ++it) {
-    const MemoryObject *mo = it->first; 
+    const MemoryObject *mo = it->first;
     if (!mo->isUserSpecified) {
       const ObjectState *os = it->second;
-      uint8_t *address = (uint8_t*) (unsigned long) mo->address; 
+      uint8_t *address = (uint8_t*) (unsigned long) mo->address;
       if (memcmp(address, os->concreteStore, mo->size)!=0) {
         if (os->readOnly)
           return false;
@@ -359,7 +359,7 @@ bool ExecutionState::copyInConcretes() {
         }
       }
     }
-  } 
+  }
   return true;
 }
 
@@ -384,7 +384,7 @@ static bool instructionIsCoverable(Instruction *i) {
           return false;
       }
     }
-  } 
+  }
   return true;
 }
 
@@ -631,7 +631,7 @@ Executor::~Executor() {
   if (specialFunctionHandler)
     delete specialFunctionHandler;
   for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
-    delete it->second; 
+    delete it->second;
   delete targetData;
 }
 
@@ -1337,28 +1337,27 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   osolver->setCoreSolverTimeout(0);
   bool success = true;
   if (!dyn_cast<ConstantExpr>(address)) {
-  TimerStatIncrementer timer(stats::resolveTime); 
-  // try cheap search, will succeed for any inbounds pointer 
+  TimerStatIncrementer timer(stats::resolveTime);
+  // try cheap search, will succeed for any inbounds pointer
   ref<ConstantExpr> cex;
   if (solveGetValue(state, address, cex)) {
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
-    const MemoryMap::value_type *res = state.objects.lookup_previous(&hack); 
-    if (res) {
+    if (const MemoryMap::value_type *res = state.objects.lookup_previous(&hack)) {
       const MemoryObject *mo = res->first;
       if (example - mo->address < mo->size) {
         op = *res;
         goto nextlab;
       }
-    } 
-    // didn't work, now we have to search 
+    }
+    // didn't work, now we have to search
     MemoryMap::iterator oi = state.objects.upper_bound(&hack);
     MemoryMap::iterator begin = state.objects.begin();
-    MemoryMap::iterator end = state.objects.end(); 
+    MemoryMap::iterator end = state.objects.end();
     MemoryMap::iterator start = oi;
     while (oi!=begin) {
       --oi;
-      const MemoryObject *mo = oi->first; 
+      const MemoryObject *mo = oi->first;
       bool mayBeTruef;
       if (!mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTruef))
         goto falselab;
@@ -1372,17 +1371,17 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
         if (mustBeTruef)
           break;
       }
-    } 
+    }
     // search forwards
     for (oi=start; oi!=end; ++oi) {
-      const MemoryObject *mo = oi->first; 
+      const MemoryObject *mo = oi->first;
       bool mustBeTruef;
       if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), mustBeTruef))
         goto falselab;
       if (mustBeTruef) {
         break;
       } else {
-        bool mayBeTruef; 
+        bool mayBeTruef;
         if (!mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTruef))
           goto falselab;
         if (mayBeTruef) {
@@ -1390,7 +1389,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
           goto nextlab;
         }
       }
-    } 
+    }
     success = false;
     goto nextlab;
     }
@@ -1527,7 +1526,7 @@ void Executor::executeInstruction(ExecutionState &state)
   Instruction *i = ki->inst;
   llvm::errs() << "     [EXECUTE]:";
   llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
-  static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0); 
+  static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0);
   sys::TimeValue sys(0,0);
   if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0)
     sys::Process::GetTimeUsage(lastNowTime,lastUserTime,sys);
@@ -2253,33 +2252,33 @@ printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   globalObjects.clear();
   globalAddresses.clear();
   writeStatsLine();
-  llvm::outs() << "version: 1;creator: klee;pid: " << getpid() << ";cmd: " << module->getModuleIdentifier() << "; positions: instr line;events: \n"; 
+  llvm::outs() << "version: 1;creator: klee;pid: " << getpid() << ";cmd: " << module->getModuleIdentifier() << "; positions: instr line;events: \n";
 }
 
 // what a hack
 static Function *getStubFunctionForCtorList(Module *m, GlobalVariable *gv, std::string name) {
-  assert(!gv->isDeclaration() && !gv->hasInternalLinkage() && "do not support old LLVM style constructor/destructor lists"); 
-  std::vector<LLVM_TYPE_Q Type*> nullary; 
+  assert(!gv->isDeclaration() && !gv->hasInternalLinkage() && "do not support old LLVM style constructor/destructor lists");
+  std::vector<LLVM_TYPE_Q Type*> nullary;
   Function *fn = Function::Create( FunctionType::get(Type::getVoidTy(getGlobalContext()), nullary, false),
       GlobalVariable::InternalLinkage, name, m);
-  BasicBlock *bb = BasicBlock::Create(getGlobalContext(), "entry", fn); 
+  BasicBlock *bb = BasicBlock::Create(getGlobalContext(), "entry", fn);
   // From lli: // Should be an array of '{ int, void ()* }' structs.  The first value is // the init priority, which we ignore.
   if (ConstantArray *arr = dyn_cast<ConstantArray>(gv->getInitializer()))
     for (unsigned i=0; i<arr->getNumOperands(); i++) {
       ConstantStruct *cs = cast<ConstantStruct>(arr->getOperand(i));
       // There is a third *optional* element in global_ctor elements (``i8 // @data``).
       assert((cs->getNumOperands() == 2 || cs->getNumOperands() == 3) && "unexpected element in ctor initializer list");
-      Constant *fp = cs->getOperand(1);      
+      Constant *fp = cs->getOperand(1);
       if (!fp->isNullValue()) {
         if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(fp))
-          fp = ce->getOperand(0); 
+          fp = ce->getOperand(0);
         if (Function *f = dyn_cast<Function>(fp))
 	  CallInst::Create(f, "", bb);
         else
           assert(0 && "unable to get function pointer from ctor initializer list");
       }
     }
-  ReturnInst::Create(getGlobalContext(), bb); 
+  ReturnInst::Create(getGlobalContext(), bb);
   return fn;
 }
 
@@ -2356,11 +2355,11 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
     Optimize(module);
   // After linking (since ctors/dtors can be modified) and optimization (global optimization can rewrite lists).
   GlobalVariable *ctors = module->getNamedGlobal("llvm.global_ctors");
-  GlobalVariable *dtors = module->getNamedGlobal("llvm.global_dtors"); 
+  GlobalVariable *dtors = module->getNamedGlobal("llvm.global_dtors");
   if (ctors || dtors) {
     Function *mainFn = module->getFunction("main");
     if (!mainFn)
-      klee_error("Could not find main() function."); 
+      klee_error("Could not find main() function.");
     if (ctors)
       CallInst::Create(getStubFunctionForCtorList(module, ctors, "klee.ctor_stub"), "", mainFn->begin()->begin());
     if (dtors) {
@@ -2396,7 +2395,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   fullBranches = 0;
   partialBranches = 0;
   numBranches = 0;
-  theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/); 
+  theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/);
   llvm::outs() << "('Instructions'," << "'FullBranches'," << "'PartialBranches',"
        << "'NumBranches'," << "'UserTime'," << "'NumStates',"
        << "'MallocUsage'," << "'NumQueries'," << "'NumQueryConstructs',"
@@ -2407,8 +2406,8 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
        << "'ArrayHashTime',"
 #endif
        << ")\n";
-  writeStatsLine(); 
-  /* Build shadow structures */ 
+  writeStatsLine();
+  /* Build shadow structures */
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
     if (!it->isDeclaration()) {
       KFunction *kf = new KFunction(it);
@@ -2417,18 +2416,18 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
         BasicBlock *bb = bbit;
         kf->basicBlockEntry[bb] = kf->numInstructions;
         kf->numInstructions += bb->size();
-      } 
-      kf->instructions = new KInstruction*[kf->numInstructions]; 
-      std::map<Instruction*, unsigned> registerMap; 
+      }
+      kf->instructions = new KInstruction*[kf->numInstructions];
+      std::map<Instruction*, unsigned> registerMap;
       unsigned insInd = 0;
       unsigned rnum = thisFunc->arg_size(); // The first arg_size() registers are reserved for formals.
       for (auto bbit = thisFunc->begin(), bbie = thisFunc->end(); bbit != bbie; ++bbit)
         for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
           KInstruction *ki = new KInstruction();
           ki->offset = -1;
-          ki->inst = it;      
+          ki->inst = it;
           registerMap[it] = rnum++;
-          ki->dest = registerMap[it]; 
+          ki->dest = registerMap[it];
           if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(it))
             computeOffsets(ki, gep_type_begin(gepi), gep_type_end(gepi));
           else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(it))
@@ -2447,7 +2446,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
             ki->operands = new int[numOperands];
             for (unsigned j=0; j<numOperands; j++)
               ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, ki, this);
-          } 
+          }
           theStatisticManager->setIndex(0);
           if (instructionIsCoverable(ki->inst))
             ++stats::uncoveredInstructions;
@@ -2456,7 +2455,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
               numBranches++;
           kf->instructions[insInd++] = ki;
         }
-      kf->numRegisters = rnum; 
+      kf->numRegisters = rnum;
       functionMap.insert(std::make_pair(it, kf));
       if (functionEscapes(it))
         escapingFunctions.insert(it);
