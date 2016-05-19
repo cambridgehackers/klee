@@ -188,16 +188,6 @@ public:
   bool empty() { return states.empty(); }
 };
 
-unsigned Executor::getConstantID(Constant *c, KInstruction* ki) {
-  auto it = constantMap.find(c);
-  if (it != constantMap.end())
-    return it->second->id;
-  unsigned id = constants.size();
-  constantMap.insert(std::make_pair(c, new KConstant(c, id, ki)));
-  constants.push_back(c);
-  return id;
-}
-
 /// Check for special cases where we statically know an instruction is
 /// uncoverable. Currently the case is an unreachable instruction
 /// following a noreturn call; the instruction is really only there to
@@ -2111,7 +2101,15 @@ static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap
   else {
     assert(isa<Constant>(v));
     Constant *c = cast<Constant>(v);
-    return -(exec->getConstantID(c, ki) + 2);
+    unsigned id = exec->constants.size();
+    auto it = exec->constantMap.find(c);
+    if (it != exec->constantMap.end())
+      id = it->second->id;
+    else {
+      exec->constantMap.insert(std::make_pair(c, new KConstant(c, id, ki)));
+      exec->constants.push_back(c);
+    }
+    return -(id + 2);
   }
 }
 

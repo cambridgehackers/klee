@@ -155,7 +155,8 @@ public:
   MemoryManager *memory;
   PTree *processTree;
   llvm::Module *module;
-  unsigned getConstantID(llvm::Constant *c, KInstruction* ki);
+  std::vector<llvm::Constant*> constants;
+  std::map<llvm::Constant*, KConstant*> constantMap;
 private:
   ExternalDispatcher *externalDispatcher;
   Solver       *osolver;
@@ -165,8 +166,6 @@ private:
   std::map<llvm::Function*, KFunction*> functionMap;
   llvm::DataLayout *targetData;
   std::set<llvm::Function*> escapingFunctions;
-  std::vector<llvm::Constant*> constants;
-  std::map<llvm::Constant*, KConstant*> constantMap;
   SwitchImplType m_SwitchType;
 
   /// Used to track states that have been added during the current /// instructions step.
