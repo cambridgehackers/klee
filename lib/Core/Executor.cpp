@@ -431,8 +431,7 @@ Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
     externalDispatcher(new ExternalDispatcher()),
     pathWriter(0),
     symPathWriter(0),
-    specialFunctionHandler(0),
-    constantTable(0) {
+    specialFunctionHandler(0) {
 printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
@@ -454,8 +453,6 @@ Executor::~Executor() {
     delete processTree;
   if (specialFunctionHandler)
     delete specialFunctionHandler;
-  if (constantTable)
-      delete[] constantTable;
   for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
     delete it->second; 
   delete targetData;
@@ -1289,14 +1286,14 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
       }
 }
 
-const ref<Expr> Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state) const
+const ref<Expr> Executor::eval(KInstruction *ki, unsigned index, ExecutionState &state)
 {
   assert(index < ki->inst->getNumOperands());
   int vnumber = ki->operands[index];
   assert(vnumber != -1 && "Invalid operand to eval(), not a value or constant!");
   // Determine if this is a constant or not.
   if (vnumber < 0)
-      return constantTable[-vnumber - 2].value;
+      return evalConstant(constants[-vnumber - 2]);
   return state.stack.back().locals[vnumber].value;
 }
 
@@ -1988,9 +1985,6 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   initializeGlobals(*startingState);
   processTree = new PTree(startingState);
   startingState->ptreeNode = processTree->root;
-  constantTable = new Cell[constants.size()];
-  for (unsigned i=0; i<constants.size(); ++i)
-      constantTable[i].value = evalConstant(constants[i]);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(startingState);
   if (CoreSearch.size() == 0) {
