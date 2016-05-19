@@ -228,70 +228,6 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-bool Executor::resolveOneS(ExecutionState &state, ref<Expr> address, ObjectPair &result) {
-  if (!dyn_cast<ConstantExpr>(address)) {
-  TimerStatIncrementer timer(stats::resolveTime); 
-  // try cheap search, will succeed for any inbounds pointer 
-  ref<ConstantExpr> cex;
-  if (solveGetValue(state, address, cex)) {
-    uint64_t example = cex->getZExtValue();
-    MemoryObject hack(example);
-    const MemoryMap::value_type *res = state.objects.lookup_previous(&hack); 
-    if (res) {
-      const MemoryObject *mo = res->first;
-      if (example - mo->address < mo->size) {
-        result = *res;
-        return true;
-      }
-    } 
-    // didn't work, now we have to search 
-    MemoryMap::iterator oi = state.objects.upper_bound(&hack);
-    MemoryMap::iterator begin = state.objects.begin();
-    MemoryMap::iterator end = state.objects.end(); 
-    MemoryMap::iterator start = oi;
-    while (oi!=begin) {
-      --oi;
-      const MemoryObject *mo = oi->first; 
-      bool mayBeTruef;
-      if (!mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTruef))
-        goto falselab;
-      if (mayBeTruef) {
-        result = *oi;
-        return true;
-      } else {
-        bool mustBeTruef;
-        if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), mustBeTruef))
-          goto falselab;
-        if (mustBeTruef)
-          break;
-      }
-    } 
-    // search forwards
-    for (oi=start; oi!=end; ++oi) {
-      const MemoryObject *mo = oi->first; 
-      bool mustBeTruef;
-      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), mustBeTruef))
-        goto falselab;
-      if (mustBeTruef) {
-        break;
-      } else {
-        bool mayBeTruef; 
-        if (!mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTruef))
-          goto falselab;
-        if (mayBeTruef) {
-          result = *oi;
-          return true;
-        }
-      }
-    } 
-    return false;
-    }
-falselab:
-    address = toConstant(state, address, "resolveOneS failure");
-  }
-  return state.resolveOne(cast<ConstantExpr>(address), result);
-}
-
 bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> p, ResolutionList &rl, unsigned maxResolutions, double timeout) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(p)) {
     ObjectPair res;
@@ -1399,7 +1335,70 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   // fast path: single in-bounds resolution
   ObjectPair op;
   osolver->setCoreSolverTimeout(0);
-  bool success = resolveOneS(state, address, op);
+  bool success = true;
+  if (!dyn_cast<ConstantExpr>(address)) {
+  TimerStatIncrementer timer(stats::resolveTime); 
+  // try cheap search, will succeed for any inbounds pointer 
+  ref<ConstantExpr> cex;
+  if (solveGetValue(state, address, cex)) {
+    uint64_t example = cex->getZExtValue();
+    MemoryObject hack(example);
+    const MemoryMap::value_type *res = state.objects.lookup_previous(&hack); 
+    if (res) {
+      const MemoryObject *mo = res->first;
+      if (example - mo->address < mo->size) {
+        op = *res;
+        goto nextlab;
+      }
+    } 
+    // didn't work, now we have to search 
+    MemoryMap::iterator oi = state.objects.upper_bound(&hack);
+    MemoryMap::iterator begin = state.objects.begin();
+    MemoryMap::iterator end = state.objects.end(); 
+    MemoryMap::iterator start = oi;
+    while (oi!=begin) {
+      --oi;
+      const MemoryObject *mo = oi->first; 
+      bool mayBeTruef;
+      if (!mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTruef))
+        goto falselab;
+      if (mayBeTruef) {
+        op = *oi;
+        goto nextlab;
+      } else {
+        bool mustBeTruef;
+        if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), mustBeTruef))
+          goto falselab;
+        if (mustBeTruef)
+          break;
+      }
+    } 
+    // search forwards
+    for (oi=start; oi!=end; ++oi) {
+      const MemoryObject *mo = oi->first; 
+      bool mustBeTruef;
+      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), mustBeTruef))
+        goto falselab;
+      if (mustBeTruef) {
+        break;
+      } else {
+        bool mayBeTruef; 
+        if (!mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTruef))
+          goto falselab;
+        if (mayBeTruef) {
+          op = *oi;
+          goto nextlab;
+        }
+      }
+    } 
+    success = false;
+    goto nextlab;
+    }
+falselab:
+    address = toConstant(state, address, "resolveOneS failure");
+  }
+  success = state.resolveOne(cast<ConstantExpr>(address), op);
+nextlab:
   osolver->setCoreSolverTimeout(0);
   if (success) {
     const MemoryObject *mo = op.first;
