@@ -196,9 +196,7 @@ static bool instructionIsCoverable(Instruction *i) {
   if (i->getOpcode() == Instruction::Unreachable) {
     BasicBlock *bb = i->getParent();
     BasicBlock::iterator it(i);
-    if (it==bb->begin())
-      return true;
-    else {
+    if (it != bb->begin()) {
       Instruction *prev = --it;
       if (isa<CallInst>(prev) || isa<InvokeInst>(prev)) {
         CallSite cs(prev);
@@ -521,12 +519,11 @@ void Executor::initializeGlobals(ExecutionState &state) {
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
     uint64_t size = targetData->getTypeStoreSize(ty);
-    bool isDecl = i->isDeclaration();
     MemoryObject *mo = memory->allocate(size, false, true, i);
     ObjectState *os = bindObjectInState(state, mo, false);
     globalObjects.insert(std::make_pair(i, mo));
     globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
-    if (isDecl) {
+    if (i->isDeclaration()) {
       // Program already running = object already initialized.  Read // concrete value and write it to our copy.
       if (size == 0)
         llvm::errs() << "Unable to find size for global variable: " << i->getName() << " (use will result in out of bounds access)\n";
@@ -625,6 +622,7 @@ void Executor::executeAddConstraint(ExecutionState &state, ref<Expr> condition) 
 }
 
 ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
+  std::vector<ref<Expr>> kids;
   if (const llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c))
       return evalConstantExpr(ce);
   else if (const ConstantInt *ci = dyn_cast<ConstantInt>(c))
@@ -638,40 +636,29 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
   else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c))
       return ConstantExpr::create(0, getWidthForLLVMType(c->getType()));
   else if (const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c)) {
-      std::vector<ref<Expr>> kids;
-      for (unsigned i = 0, e = cds->getNumElements(); i != e; ++i) {
-        ref<Expr> kid = evalConstant(cds->getElementAsConstant(i));
-        kids.push_back(kid);
-      }
-      ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
-      return cast<ConstantExpr>(res);
+      for (unsigned i = 0, e = cds->getNumElements(); i != e; ++i)
+        kids.push_back(evalConstant(cds->getElementAsConstant(i)));
   } else if (const ConstantStruct *cs = dyn_cast<ConstantStruct>(c)) {
       const StructLayout *sl = targetData->getStructLayout(cs->getType());
-      llvm::SmallVector<ref<Expr>, 4> kids;
       for (unsigned i = cs->getNumOperands(); i != 0; --i) {
         unsigned op = i-1;
-        ref<Expr> kid = evalConstant(cs->getOperand(op));
         uint64_t thisOffset = sl->getElementOffsetInBits(op),
            nextOffset = (op == cs->getNumOperands() - 1) ? sl->getSizeInBits() : sl->getElementOffsetInBits(op+1);
+        ref<Expr> kid = evalConstant(cs->getOperand(op));
         if (nextOffset-thisOffset > kid->getWidth()) {
           uint64_t paddingWidth = nextOffset-thisOffset-kid->getWidth();
           kids.push_back(ConstantExpr::create(0, paddingWidth));
         }
         kids.push_back(kid);
       }
-      ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
-      return cast<ConstantExpr>(res);
   } else if (const ConstantArray *ca = dyn_cast<ConstantArray>(c)){
-      llvm::SmallVector<ref<Expr>, 4> kids;
-      for (unsigned i = ca->getNumOperands(); i != 0; --i) {
-        unsigned op = i-1;
-        ref<Expr> kid = evalConstant(ca->getOperand(op));
-        kids.push_back(kid);
-      }
-      ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
-      return cast<ConstantExpr>(res);
+      for (unsigned i = ca->getNumOperands(); i != 0; --i)
+        kids.push_back(evalConstant(ca->getOperand(i - 1)));
   }
-  llvm::report_fatal_error("invalid argument to evalConstant()");
+  else
+      llvm::report_fatal_error("invalid argument to evalConstant()");
+  ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
+  return cast<ConstantExpr>(res);
 }
 
 ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
