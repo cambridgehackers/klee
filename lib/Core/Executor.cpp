@@ -1217,7 +1217,6 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
     ObjectPair res;
     if (state.resolveOne(CE, res))
       rl.push_back(res);
-    return false;
   } else {
     TimerStatIncrementer timer(stats::resolveTime);
     // XXX in general this isn't exactly what we want... for
@@ -1257,15 +1256,12 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
       if (mayBeTruef) {
         rl.push_back(*oi);
         // fast path check
-        unsigned size = rl.size();
-        if (size==1) {
+        if (rl.size()==1) {
           bool mustBeTruef;
           if (!mustBeTrue(state, inBounds, mustBeTruef))
             return true;
           if (mustBeTruef)
             return false;
-        } else if (size==0) {
-          return true;
         }
       }
       bool mustBeTruef;
@@ -1290,15 +1286,12 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
       if (mayBeTruef) {
         rl.push_back(*oi);
         // fast path check
-        unsigned size = rl.size();
-        if (size==1) {
+        if (rl.size()==1) {
           bool mustBeTruef;
           if (!mustBeTrue(state, inBounds, mustBeTruef))
             return true;
           if (mustBeTruef)
             return false;
-        } else if (size==0) {
-          return true;
         }
       }
     }
