@@ -124,13 +124,6 @@ public:
     /// \invariant forall o in objects, o->copyOnWriteOwner <= cowKey
     MemoryMap objects;
     bool resolveOne(const ref<ConstantExpr> &address, ObjectPair &result); 
-    /// Resolve address to an ObjectPair in result.
-    /// \param state The state this address space is part of.
-    /// \param solver A solver used to determine possible locations of the \a address.
-    /// \param address The address to search for.
-    /// \param[out] result An ObjectPair this address can resolve to (when returning true).
-    /// \return true iff an object was found at \a address.
-    bool resolveOneS(Executor *solver, ref<Expr> address, ObjectPair &result);
     /// Resolve address to a list of ObjectPairs it can point to. If
     /// maxResolutions is non-zero then no more than that many pairs will be returned.
     /// \return true iff the resolution is incomplete (maxResolutions
@@ -272,6 +265,13 @@ private:
   void writeStatsLine();
   unsigned numBranches;
   void computeReachableUncovered();
+  /// Resolve address to an ObjectPair in result.
+  /// \param state The state this address space is part of.
+  /// \param solver A solver used to determine possible locations of the \a address.
+  /// \param address The address to search for.
+  /// \param[out] result An ObjectPair this address can resolve to (when returning true).
+  /// \return true iff an object was found at \a address.
+  bool resolveOneS(ExecutionState &state, ref<Expr> address, ObjectPair &result);
 public: //friends
   /// Return a constant value for the given expression, forcing it to
   /// be constant in the given state by adding a constraint if
