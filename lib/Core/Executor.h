@@ -174,7 +174,6 @@ public:
   ExecutionState(const std::vector<ref<Expr> > &assumptions);
   ExecutionState(const ExecutionState &state);
   ~ExecutionState();
-  ExecutionState *branch();
   void pushFrame(KInstIterator caller, llvm::Function *_func, unsigned _numRegisters);
   void popFrame();
   void addSymbolic(const MemoryObject *mo, const Array *array);

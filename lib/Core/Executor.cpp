@@ -359,7 +359,9 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
   TimerStatIncrementer timer(stats::forkTime);
   ExecutionState *falseState, *trueState = &current;
   ++stats::forks;
-  falseState = trueState->branch();
+  falseState = new ExecutionState(*trueState);
+  falseState->coveredNew = false;
+  falseState->coveredLines.clear(); 
   addedStates.insert(falseState);
   if (it != seedMap.end()) {
     std::vector<SeedInfo> seeds = it->second;
@@ -563,7 +565,9 @@ void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &condi
     result.push_back(&state);
     for (unsigned i=1; i<N; ++i) {
       ExecutionState *es = result[theRNG.getInt32() % i];
-      ExecutionState *ns = es->branch();
+      ExecutionState *ns = new ExecutionState(*es);
+      ns->coveredNew = false;
+      ns->coveredLines.clear(); 
       addedStates.insert(ns);
       result.push_back(ns);
       es->ptreeNode->data = 0;

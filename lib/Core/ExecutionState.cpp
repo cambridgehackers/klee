@@ -83,13 +83,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     symbolics[i].first->refCount++;
 }
 
-ExecutionState *ExecutionState::branch() {
-  ExecutionState *falseState = new ExecutionState(*this);
-  falseState->coveredNew = false;
-  falseState->coveredLines.clear(); 
-  return falseState;
-}
-
 void ExecutionState::pushFrame(KInstIterator caller, Function *_func, unsigned _numRegisters) {
   stack.push_back(StackFrame(caller,_func, _numRegisters));
 }
