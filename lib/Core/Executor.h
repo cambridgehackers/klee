@@ -118,17 +118,11 @@ public:
   private:
     /// Epoch counter used to control ownership of objects.
     mutable unsigned cowKey;
-    /// Unsupported, use copy constructor
-    //AddressSpace &operator=(const AddressSpace&); 
   public:
     /// The MemoryObject -> ObjectState map that constitutes the address space.
     /// The set of objects where o->copyOnWriteOwner == cowKey are the objects that we own.
     /// \invariant forall o in objects, o->copyOnWriteOwner <= cowKey
     MemoryMap objects;
-  public:
-    //AddressSpace() : cowKey(1) {}
-    //AddressSpace(const AddressSpace &b) : cowKey(++b.cowKey), objects(b.objects) { }
-    //~AddressSpace() {}
     bool resolveOne(const ref<ConstantExpr> &address, ObjectPair &result); 
     /// Resolve address to an ObjectPair in result.
     /// \param state The state this address space is part of.
@@ -136,7 +130,7 @@ public:
     /// \param address The address to search for.
     /// \param[out] result An ObjectPair this address can resolve to (when returning true).
     /// \return true iff an object was found at \a address.
-    bool resolveOneS(Executor *solver, ref<Expr> address, ObjectPair &result, bool &success); 
+    bool resolveOneS(Executor *solver, ref<Expr> address, ObjectPair &result);
     /// Resolve address to a list of ObjectPairs it can point to. If
     /// maxResolutions is non-zero then no more than that many pairs will be returned.
     /// \return true iff the resolution is incomplete (maxResolutions

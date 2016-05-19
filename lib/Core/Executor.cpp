@@ -228,11 +228,8 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair &result, bool &success) {
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
-    success = resolveOne(CE, result);
-    return true;
-  }
+bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair &result) {
+  if (!dyn_cast<ConstantExpr>(address)) {
   TimerStatIncrementer timer(stats::resolveTime); 
   // try cheap search, will succeed for any inbounds pointer 
   ref<ConstantExpr> cex;
@@ -244,7 +241,6 @@ bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair
       const MemoryObject *mo = res->first;
       if (example - mo->address < mo->size) {
         result = *res;
-        success = true;
         return true;
       }
     } 
@@ -261,7 +257,6 @@ bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair
         goto falselab;
       if (mayBeTrue) {
         result = *oi;
-        success = true;
         return true;
       } else {
         bool mustBeTrue;
@@ -285,18 +280,16 @@ bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair
           goto falselab;
         if (mayBeTrue) {
           result = *oi;
-          success = true;
           return true;
         }
       }
     } 
-    success = false;
-    return true;
+    return false;
     }
 falselab:
     address = solver->toConstant(*this, address, "resolveOneS failure");
-    success = resolveOne(cast<ConstantExpr>(address), result);
-    return false;
+  }
+  return resolveOne(cast<ConstantExpr>(address), result);
 }
 
 bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> p, ResolutionList &rl, unsigned maxResolutions, double timeout) {
@@ -1405,9 +1398,8 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   unsigned bytes = Expr::getMinBytesForWidth(type);
   // fast path: single in-bounds resolution
   ObjectPair op;
-  bool success;
   osolver->setCoreSolverTimeout(0);
-  state.resolveOneS(this, address, op, success);
+  bool success = state.resolveOneS(this, address, op);
   osolver->setCoreSolverTimeout(0);
   if (success) {
     const MemoryObject *mo = op.first;
