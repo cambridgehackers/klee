@@ -130,7 +130,6 @@ public:
     /// is non-zero and the search terminated early, or a query timed out).
     void bindObject(const MemoryObject *mo, ObjectState *os);
     void unbindObject(const MemoryObject *mo);
-    const ObjectState *findObject(const MemoryObject *mo) const;
     /// \brief Obtain an ObjectState suitable for writing.
     /// This returns a writeable object state, creating a new copy of
     /// the given ObjectState if necessary. If the address space owns

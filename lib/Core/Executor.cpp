@@ -198,11 +198,6 @@ void ExecutionState::unbindObject(const MemoryObject *mo) {
   objects = objects.remove(mo);
 }
 
-const ObjectState *ExecutionState::findObject(const MemoryObject *mo) const {
-  const MemoryMap::value_type *res = objects.lookup(mo);
-  return res ? res->second : 0;
-}
-
 ObjectState *ExecutionState::getWriteable(const MemoryObject *mo, const ObjectState *os) {
   assert(!os->readOnly);
   if (cowKey==os->copyOnWriteOwner)
@@ -622,9 +617,9 @@ void Executor::initializeGlobals(ExecutionState &state) {
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     if (i->hasInitializer()) {
       MemoryObject *mo = globalObjects.find(i)->second;
-      const ObjectState *os = state.findObject(mo);
-      assert(os);
-      ObjectState *wos = state.getWriteable(mo, os);
+      const MemoryMap::value_type *res = state.objects.lookup(mo);
+      assert(res && res->second);
+      ObjectState *wos = state.getWriteable(mo, res->second);
       initializeGlobalObject(state, wos, i->getInitializer(), 0);
     }
   }
