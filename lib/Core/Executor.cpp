@@ -188,16 +188,10 @@ public:
   bool empty() { return states.empty(); }
 };
 
-KConstant* Executor::getKConstant(Constant *c) {
+unsigned Executor::getConstantID(Constant *c, KInstruction* ki) {
   auto it = constantMap.find(c);
   if (it != constantMap.end())
-    return it->second;
-  return NULL;
-}
-
-unsigned Executor::getConstantID(Constant *c, KInstruction* ki) {
-  if (KConstant *kc = getKConstant(c))
-    return kc->id;  
+    return it->second->id;
   unsigned id = constants.size();
   constantMap.insert(std::make_pair(c, new KConstant(c, id, ki)));
   constants.push_back(c);

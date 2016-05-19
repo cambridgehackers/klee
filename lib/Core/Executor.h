@@ -167,7 +167,6 @@ private:
   std::set<llvm::Function*> escapingFunctions;
   std::vector<llvm::Constant*> constants;
   std::map<llvm::Constant*, KConstant*> constantMap;
-  KConstant* getKConstant(llvm::Constant *c);
   SwitchImplType m_SwitchType;
 
   /// Used to track states that have been added during the current /// instructions step.
