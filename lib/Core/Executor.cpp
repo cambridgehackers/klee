@@ -944,28 +944,6 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src, ExecutionS
   }
 }
 
-/// Compute the true target of a function call, resolving LLVM and KLEE aliases
-/// and bitcasts.
-Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
-  SmallPtrSet<const GlobalValue*, 3> Visited;
-  Constant *c = dyn_cast<Constant>(calledVal);
-  if (!c)
-    return 0;
-  while (true) {
-    if (GlobalValue *gv = dyn_cast<GlobalValue>(c)) {
-      if (Visited.insert(gv).second)
-          if (Function *f = dyn_cast<Function>(gv))
-              return f;
-    } else if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c)) {
-      if (ce->getOpcode()==Instruction::BitCast) {
-          c = ce->getOperand(0);
-          continue;
-      }
-    }
-    return 0;
-  }
-}
-
 static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
   switch(width) {
   case Expr::Int32: return &llvm::APFloat::IEEEsingle;
@@ -1635,7 +1613,22 @@ void Executor::executeInstruction(ExecutionState &state)
     CallSite cs(i);
     unsigned numArgs = cs.arg_size();
     Value *fp = cs.getCalledValue();
-    Function *f = getTargetFunction(fp, state);
+    Function *f = NULL;
+    SmallPtrSet<const GlobalValue*, 3> Visited;
+    if (Constant *c = dyn_cast<Constant>(fp))
+    while (true) {
+      if (GlobalValue *gv = dyn_cast<GlobalValue>(c)) {
+        if (Visited.insert(gv).second)
+            if ((f = dyn_cast<Function>(gv)))
+                break;
+      } else if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c)) {
+        if (ce->getOpcode()==Instruction::BitCast) {
+            c = ce->getOperand(0);
+            continue;
+        }
+      }
+      break;
+    }
     if (isa<InlineAsm>(fp)) {
       terminateStateOnExecError(state, "inline assembly is unsupported");
       break;

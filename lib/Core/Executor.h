@@ -228,8 +228,6 @@ private:
   std::set<uint64_t> legalFunctions;
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
-
-  llvm::Function* getTargetFunction(llvm::Value *calledVal, ExecutionState &state);
   void executeInstruction(ExecutionState &state);
   void runExecutor(ExecutionState &initialState);
   void initializeGlobalObject(ExecutionState &state, ObjectState *os, const llvm::Constant *c, unsigned offset);
