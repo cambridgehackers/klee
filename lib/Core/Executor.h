@@ -269,11 +269,6 @@ private:
         state.stack.back().locals[i] = arguments[i];
   }
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce);
-  /// Return a constant value for the given expression, forcing it to
-  /// be constant in the given state by adding a constraint if
-  /// necessary. Note that this function breaks completeness and
-  /// should generally be avoided.  /// /// \param purpose An identify string to printed in case of concretization.
-  ref<klee::ConstantExpr> toConstant(ExecutionState &state, ref<Expr> e, const char *purpose);
   void terminateStateEarly(ExecutionState &state, const llvm::Twine &message);
   template <typename TypeIt>
   void computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie);
@@ -284,6 +279,11 @@ private:
   unsigned numBranches;
   void computeReachableUncovered();
 public: //friends
+  /// Return a constant value for the given expression, forcing it to
+  /// be constant in the given state by adding a constraint if
+  /// necessary. Note that this function breaks completeness and
+  /// should generally be avoided.  /// /// \param purpose An identify string to printed in case of concretization.
+  ref<klee::ConstantExpr> toConstant(ExecutionState &state, ref<Expr> e, const char *purpose);
   bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
   bool mustBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
     return mustBeTrue(state, Expr::createIsZero(expr), result);

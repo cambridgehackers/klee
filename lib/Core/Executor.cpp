@@ -232,12 +232,11 @@ bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
     success = resolveOne(CE, result);
     return true;
-  } else {
-    TimerStatIncrementer timer(stats::resolveTime); 
-    // try cheap search, will succeed for any inbounds pointer 
-    ref<ConstantExpr> cex;
-    if (!solver->solveGetValue(*this, address, cex))
-      return false;
+  }
+  TimerStatIncrementer timer(stats::resolveTime); 
+  // try cheap search, will succeed for any inbounds pointer 
+  ref<ConstantExpr> cex;
+  if (solver->solveGetValue(*this, address, cex)) {
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
     const MemoryMap::value_type *res = objects.lookup_previous(&hack); 
@@ -259,7 +258,7 @@ bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair
       const MemoryObject *mo = oi->first; 
       bool mayBeTrue;
       if (!solver->mayBeTrue(*this, mo->getBoundsCheckPointer(address), mayBeTrue))
-        return false;
+        goto falselab;
       if (mayBeTrue) {
         result = *oi;
         success = true;
@@ -267,7 +266,7 @@ bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair
       } else {
         bool mustBeTrue;
         if (!solver->mustBeTrue(*this, UgeExpr::create(address, mo->getBaseExpr()), mustBeTrue))
-          return false;
+          goto falselab;
         if (mustBeTrue)
           break;
       }
@@ -277,13 +276,13 @@ bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair
       const MemoryObject *mo = oi->first; 
       bool mustBeTrue;
       if (!solver->mustBeTrue(*this, UltExpr::create(address, mo->getBaseExpr()), mustBeTrue))
-        return false;
+        goto falselab;
       if (mustBeTrue) {
         break;
       } else {
         bool mayBeTrue; 
         if (!solver->mayBeTrue(*this, mo->getBoundsCheckPointer(address), mayBeTrue))
-          return false;
+          goto falselab;
         if (mayBeTrue) {
           result = *oi;
           success = true;
@@ -293,7 +292,11 @@ bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair
     } 
     success = false;
     return true;
-  }
+    }
+falselab:
+    address = solver->toConstant(*this, address, "resolveOneS failure");
+    success = resolveOne(cast<ConstantExpr>(address), result);
+    return false;
 }
 
 bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> p, ResolutionList &rl, unsigned maxResolutions, double timeout) {
@@ -1404,10 +1407,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   ObjectPair op;
   bool success;
   osolver->setCoreSolverTimeout(0);
-  if (!state.resolveOneS(this, address, op, success)) {
-    address = toConstant(state, address, "resolveOneS failure");
-    success = state.resolveOne(cast<ConstantExpr>(address), op);
-  }
+  state.resolveOneS(this, address, op, success);
   osolver->setCoreSolverTimeout(0);
   if (success) {
     const MemoryObject *mo = op.first;
