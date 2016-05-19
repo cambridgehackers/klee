@@ -6,20 +6,10 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-#include "klee/Internal/Module/Cell.h"
-#include "klee/Internal/Module/KInstruction.h"
-#include "klee/Expr.h"
 #include "Memory.h"
 #include "Executor.h"
 #include "llvm/IR/Function.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/raw_ostream.h"
 #include <iomanip>
-#include <sstream>
-#include <cassert>
-#include <map>
-#include <set>
-#include <stdarg.h>
 
 using namespace llvm;
 using namespace klee;
@@ -43,8 +33,6 @@ StackFrame::StackFrame(const StackFrame &s)
 StackFrame::~StackFrame() { 
   delete[] locals; 
 }
-
-/***/
 
 ExecutionState::ExecutionState(KInstruction **_instructions, Function *_func, unsigned _numRegisters):
     pc(_instructions),
