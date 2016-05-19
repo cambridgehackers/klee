@@ -148,8 +148,8 @@ public:
 
 class ObjectState {
 private:
-  friend class AddressSpace;
-  unsigned copyOnWriteOwner; // exclusively for AddressSpace
+  friend class ExecutionState;
+  unsigned copyOnWriteOwner; // exclusively for ExecutionState
 
   friend class ObjectHolder;
   unsigned refCount;

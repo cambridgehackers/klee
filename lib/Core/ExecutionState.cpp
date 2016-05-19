@@ -40,11 +40,14 @@ ExecutionState::ExecutionState(KInstruction **_instructions, Function *_func, un
     instsSinceCovNew(0),
     coveredNew(false),
     ptreeNode(0) {
+    cowKey = 1;
   pushFrame(0, _func, _numRegisters);
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
-    : constraints(assumptions), ptreeNode(0) {}
+    : constraints(assumptions), ptreeNode(0) {
+    cowKey = 1;
+}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++) {
@@ -64,7 +67,8 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     prevPC(state.prevPC),
     stack(state.stack),
     incomingBBIndex(state.incomingBBIndex), 
-    addressSpace(state.addressSpace),
+    cowKey(state.cowKey),
+    objects(state.objects),
     constraints(state.constraints), 
     pathOS(state.pathOS),
     symPathOS(state.symPathOS), 
@@ -93,7 +97,7 @@ void ExecutionState::pushFrame(KInstIterator caller, Function *_func, unsigned _
 void ExecutionState::popFrame() {
   StackFrame &sf = stack.back();
   for (auto it = sf.allocas.begin(), ie = sf.allocas.end(); it != ie; ++it)
-    addressSpace.unbindObject(*it);
+    unbindObject(*it);
   stack.pop_back();
 }
 

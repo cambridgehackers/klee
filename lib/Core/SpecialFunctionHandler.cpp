@@ -198,7 +198,7 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state, ref<Expr> add
   ObjectPair op;
   addressExpr = executor.toUnique(state, addressExpr);
   ref<ConstantExpr> address = cast<ConstantExpr>(addressExpr);
-  if (!state.addressSpace.resolveOne(address, op))
+  if (!state.resolveOne(address, op))
     assert(0 && "XXX out of bounds / multiple resolution unhandled");
   bool res __attribute__ ((unused));
   assert(executor.mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr()), res) && res && "XXX interior pointer unhandled");
@@ -421,7 +421,7 @@ void SpecialFunctionHandler::handleCheckMemoryAccess(ExecutionState &state, KIns
     executor.terminateStateOnError(state, "check_memory_access requires constant args", "user.err");
   } else {
     ObjectPair op; 
-    if (!state.addressSpace.resolveOne(cast<ConstantExpr>(address), op)) {
+    if (!state.resolveOne(cast<ConstantExpr>(address), op)) {
       executor.terminateStateOnError(state, "check_memory_access: memory error", "ptr.err", executor.getAddressInfo(state, address));
     } else {
       ref<Expr> chk = op.first->getBoundsCheckPointer(address, cast<ConstantExpr>(size)->getZExtValue());

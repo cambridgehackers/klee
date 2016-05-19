@@ -187,28 +187,23 @@ public:
   }
   bool empty() { return states.empty(); }
 };
-//#include "CoreStats.h"
-//#include "Memory.h"
-//#include "Executor.h"
-//#include "klee/Expr.h"
-//#include "klee/TimerStatIncrementer.h"
 
-void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
+void ExecutionState::bindObject(const MemoryObject *mo, ObjectState *os) {
   assert(os->copyOnWriteOwner==0 && "object already has owner");
   os->copyOnWriteOwner = cowKey;
   objects = objects.replace(std::make_pair(mo, os));
 }
 
-void AddressSpace::unbindObject(const MemoryObject *mo) {
+void ExecutionState::unbindObject(const MemoryObject *mo) {
   objects = objects.remove(mo);
 }
 
-const ObjectState *AddressSpace::findObject(const MemoryObject *mo) const {
+const ObjectState *ExecutionState::findObject(const MemoryObject *mo) const {
   const MemoryMap::value_type *res = objects.lookup(mo); 
   return res ? res->second : 0;
 }
 
-ObjectState *AddressSpace::getWriteable(const MemoryObject *mo, const ObjectState *os) {
+ObjectState *ExecutionState::getWriteable(const MemoryObject *mo, const ObjectState *os) {
   assert(!os->readOnly); 
   if (cowKey==os->copyOnWriteOwner) {
     return const_cast<ObjectState*>(os);
@@ -220,7 +215,7 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo, const ObjectStat
   }
 }
 
-bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result) {
+bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result) {
   uint64_t address = addr->getZExtValue();
   MemoryObject hack(address); 
   if (const MemoryMap::value_type *res = objects.lookup_previous(&hack)) {
@@ -234,7 +229,7 @@ bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result)
   return false;
 }
 
-bool AddressSpace::resolveOne(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success) {
+bool ExecutionState::resolveOne(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
     success = resolveOne(CE, result);
     return true;
@@ -302,7 +297,7 @@ bool AddressSpace::resolveOne(ExecutionState &state, Executor *solver, ref<Expr>
   }
 }
 
-bool AddressSpace::resolve(ExecutionState &state, Executor *solver, ref<Expr> p, ResolutionList &rl, unsigned maxResolutions, double timeout) {
+bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> p, ResolutionList &rl, unsigned maxResolutions, double timeout) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(p)) {
     ObjectPair res;
     if (resolveOne(CE, res))
@@ -406,7 +401,7 @@ bool AddressSpace::resolve(ExecutionState &state, Executor *solver, ref<Expr> p,
 // store inside of the object states, which allows them to
 // transparently avoid screwing up symbolics (if the byte is symbolic
 // then its concrete cache byte isn't being used) but is just a hack.  
-void AddressSpace::copyOutConcretes() {
+void ExecutionState::copyOutConcretes() {
   for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); it != ie; ++it) {
     const MemoryObject *mo = it->first; 
     if (!mo->isUserSpecified) {
@@ -418,7 +413,7 @@ void AddressSpace::copyOutConcretes() {
   }
 }
 
-bool AddressSpace::copyInConcretes() {
+bool ExecutionState::copyInConcretes() {
   for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); it != ie; ++it) {
     const MemoryObject *mo = it->first; 
     if (!mo->isUserSpecified) {
@@ -796,9 +791,9 @@ void Executor::initializeGlobals(ExecutionState &state) {
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     if (i->hasInitializer()) {
       MemoryObject *mo = globalObjects.find(i)->second;
-      const ObjectState *os = state.addressSpace.findObject(mo);
+      const ObjectState *os = state.findObject(mo);
       assert(os);
-      ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+      ObjectState *wos = state.getWriteable(mo, os);
       initializeGlobalObject(state, wos, i->getInitializer(), 0);
     }
   }
@@ -1009,7 +1004,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
             goto overlab;
           }
       }
-      state.addressSpace.copyOutConcretes();
+      state.copyOutConcretes();
     printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
       std::string TmpStr;
       llvm::raw_string_ostream messageOs(TmpStr);
@@ -1028,7 +1023,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       delete e;
       if (!success)
           terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
-      else if (!state.addressSpace.copyInConcretes())
+      else if (!state.copyInConcretes())
           terminateStateOnError(state, "external modified read-only object", "external.err");
       else {
           LLVM_TYPE_Q Type *resultType = ki->inst->getType();
@@ -1216,9 +1211,9 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
   }
 
   MemoryObject hack((unsigned) example);
-  auto lower = state.addressSpace.objects.upper_bound(&hack);
+  auto lower = state.objects.upper_bound(&hack);
   info << "\tnext: ";
-  if (lower==state.addressSpace.objects.end())
+  if (lower==state.objects.end())
     info << "none\n";
   else {
     const MemoryObject *mo = lower->first;
@@ -1226,10 +1221,10 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
     mo->getAllocInfo(alloc_info);
     info << "object at " << mo->address << " of size " << mo->size << "\n" << "\t\t" << alloc_info << "\n";
   }
-  if (lower!=state.addressSpace.objects.begin()) {
+  if (lower!=state.objects.begin()) {
     --lower;
     info << "\tprev: ";
-    if (lower==state.addressSpace.objects.end())
+    if (lower==state.objects.end())
       info << "none\n";
     else {
       const MemoryObject *mo = lower->first;
@@ -1285,7 +1280,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
 ObjectState *Executor::bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array) {
   ObjectState *os = array ? new ObjectState(mo, array) : new ObjectState(mo);
-  state.addressSpace.bindObject(mo, os);
+  state.bindObject(mo, os);
   // Its possible that multiple bindings of the same mo in the state
   // will put multiple copies on this list, but it doesn't really
   // matter because all we use this list for is to unbind the object // on function return.
@@ -1308,7 +1303,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
         unsigned count = std::min(reallocFrom->size, os->size);
         for (unsigned i=0; i<count; i++)
           os->write(i, reallocFrom->read8(i));
-        state.addressSpace.unbindObject(reallocFrom->getObject());
+        state.unbindObject(reallocFrom->getObject());
       }
   } else {
     // XXX For now we just pick a size. Ideally we would support
@@ -1378,7 +1373,7 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
       if (mo->isLocal || mo->isGlobal)
         terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
       else {
-        it->second->addressSpace.unbindObject(mo);
+        it->second->unbindObject(mo);
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
       }
@@ -1389,7 +1384,7 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
 void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name) {
   // XXX we may want to be capping this?
   ResolutionList rl;
-  state.addressSpace.resolve(state, this, p, rl);
+  state.resolve(state, this, p, rl);
   ExecutionState *unbound = &state;
   for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
     ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
@@ -1411,9 +1406,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   ObjectPair op;
   bool success;
   osolver->setCoreSolverTimeout(0);
-  if (!state.addressSpace.resolveOne(state, this, address, op, success)) {
+  if (!state.resolveOne(state, this, address, op, success)) {
     address = toConstant(state, address, "resolveOne failure");
-    success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
+    success = state.resolveOne(cast<ConstantExpr>(address), op);
   }
   osolver->setCoreSolverTimeout(0);
   if (success) {
@@ -1434,7 +1429,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
         if (os->readOnly)
           terminateStateOnError(state, "memory error: object read only", "readonly.err");
         else {
-          ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+          ObjectState *wos = state.getWriteable(mo, os);
           wos->write(offset, value);
         }
       } else {
@@ -1459,7 +1454,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds)
   ResolutionList rl;
   osolver->setCoreSolverTimeout(0);
-  bool incomplete = state.addressSpace.resolve(state, this, address, rl, 0, 0);
+  bool incomplete = state.resolve(state, this, address, rl, 0, 0);
   osolver->setCoreSolverTimeout(0);
   // XXX there is some query wasteage here. who cares?
   ExecutionState *unbound = &state;
@@ -1475,7 +1470,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
         if (os->readOnly)
           terminateStateOnError(*bound, "memory error: object read only", "readonly.err");
         else {
-          ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
+          ObjectState *wos = bound->getWriteable(mo, os);
           wos->write(mo->getOffsetExpr(address), value);
         }
       } else {
