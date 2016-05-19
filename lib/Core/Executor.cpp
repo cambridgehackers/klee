@@ -229,7 +229,7 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-bool ExecutionState::resolveOne(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success) {
+bool ExecutionState::resolveOneS(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
     success = resolveOne(CE, result);
     return true;
@@ -420,16 +420,15 @@ bool ExecutionState::copyInConcretes() {
       const ObjectState *os = it->second;
       uint8_t *address = (uint8_t*) (unsigned long) mo->address; 
       if (memcmp(address, os->concreteStore, mo->size)!=0) {
-        if (os->readOnly) {
+        if (os->readOnly)
           return false;
-        } else {
+        else {
           ObjectState *wos = getWriteable(mo, os);
           memcpy(wos->concreteStore, address, mo->size);
         }
       }
     }
-  }
-
+  } 
   return true;
 }
 
@@ -1406,8 +1405,8 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   ObjectPair op;
   bool success;
   osolver->setCoreSolverTimeout(0);
-  if (!state.resolveOne(state, this, address, op, success)) {
-    address = toConstant(state, address, "resolveOne failure");
+  if (!state.resolveOneS(state, this, address, op, success)) {
+    address = toConstant(state, address, "resolveOneS failure");
     success = state.resolveOne(cast<ConstantExpr>(address), op);
   }
   osolver->setCoreSolverTimeout(0);

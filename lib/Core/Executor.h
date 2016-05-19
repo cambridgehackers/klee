@@ -115,8 +115,6 @@ public:
   stack_ty stack; 
   /// @brief Remember from which Basic Block control flow arrived /// (i.e. to select the right phi values)
   unsigned incomingBBIndex; 
-  /// @brief Address space used by this state (e.g. Global and Heap)
-  //struct {
   private:
     /// Epoch counter used to control ownership of objects.
     mutable unsigned cowKey;
@@ -138,7 +136,7 @@ public:
     /// \param address The address to search for.
     /// \param[out] result An ObjectPair this address can resolve to (when returning true).
     /// \return true iff an object was found at \a address.
-    bool resolveOne(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success); 
+    bool resolveOneS(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success); 
     /// Resolve address to a list of ObjectPairs it can point to. If
     /// maxResolutions is non-zero then no more than that many pairs will be returned.
     /// \return true iff the resolution is incomplete (maxResolutions
@@ -165,8 +163,6 @@ public:
     /// \retval true The copy succeeded. 
     /// \retval false The copy failed because a read-only object was modified.
     bool copyInConcretes();
-  //} addressSpace; 
-  /// @brief Constraints collected so far
   ConstraintManager constraints; 
   /// @brief History of complete path: represents branches taken to
   /// reach/create this state (both concrete and symbolic)
