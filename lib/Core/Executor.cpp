@@ -565,16 +565,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-MemoryObject * Executor::addExternalObject(ExecutionState &state, void *addr, unsigned size, bool isReadOnly) {
-  MemoryObject *mo = memory->allocateFixed((uint64_t) (unsigned long) addr, size, 0);
-  ObjectState *os = bindObjectInState(state, mo, false);
-  for(unsigned i = 0; i < size; i++)
-    os->write8(i, ((uint8_t*)addr)[i]);
-  if(isReadOnly)
-    os->setReadOnly(true);
-  return mo;
-}
-
 void Executor::initializeGlobals(ExecutionState &state) {
   Module *m = module;
   // represent function globals using the address of the actual llvm function
@@ -1187,6 +1177,26 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
   }
 }
 
+void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
+  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
+  if (zeroPointer.first && target)
+      bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
+  if (zeroPointer.second) { // address != 0
+    ExactResolutionList rl;
+    resolveExact(*zeroPointer.second, address, rl, "free");
+    for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
+      const MemoryObject *mo = it->first.first;
+      if (mo->isLocal || mo->isGlobal)
+        terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
+      else {
+        it->second->unbindObject(mo);
+        if (target)
+          bindLocal(target, *it->second, Expr::createPointer(0));
+      }
+    }
+  }
+}
+
 bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl)
 {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
@@ -1307,14 +1317,14 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       bool mayBeTruef;
       if (!mayBeTrue(state, inBounds, mayBeTruef))
-        goto falselab;
+        goto truelab;
       if (mayBeTruef) {
         op = *oi;
         goto nextlab;
       } else {
         bool mustBeTruef;
         if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), mustBeTruef))
-          goto falselab;
+          goto truelab;
         if (mustBeTruef)
           break;
       }
@@ -1324,24 +1334,22 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       const MemoryObject *mo = oi->first;
       bool mustBeTruef;
       if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), mustBeTruef))
-        goto falselab;
-      if (mustBeTruef) {
+        goto truelab;
+      if (mustBeTruef)
         break;
-      } else {
-        ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-        bool mayBeTruef;
-        if (!mayBeTrue(state, inBounds, mayBeTruef))
-          goto falselab;
-        if (mayBeTruef) {
-          op = *oi;
-          goto nextlab;
-        }
+      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
+      bool mayBeTruef;
+      if (!mayBeTrue(state, inBounds, mayBeTruef))
+        goto truelab;
+      if (mayBeTruef) {
+        op = *oi;
+        goto nextlab;
       }
     }
     success = false;
     goto nextlab;
     }
-falselab:
+truelab:
     address = toConstant(state, address, "resolveOneS failure");
   }
   success = state.resolveOne(cast<ConstantExpr>(address), op);
@@ -1423,26 +1431,6 @@ nextlab:
       terminateStateEarly(*unbound, "Query timed out (resolve).");
     else
       terminateStateOnError(*unbound, "memory error: out of bound pointer", "ptr.err", getAddressInfo(*unbound, address));
-  }
-}
-
-void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
-  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
-  if (zeroPointer.first && target)
-      bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
-  if (zeroPointer.second) { // address != 0
-    ExactResolutionList rl;
-    resolveExact(*zeroPointer.second, address, rl, "free");
-    for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
-      const MemoryObject *mo = it->first.first;
-      if (mo->isLocal || mo->isGlobal)
-        terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
-      else {
-        it->second->unbindObject(mo);
-        if (target)
-          bindLocal(target, *it->second, Expr::createPointer(0));
-      }
-    }
   }
 }
 
