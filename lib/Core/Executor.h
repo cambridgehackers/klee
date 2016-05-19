@@ -264,7 +264,7 @@ private:
   void writeStatsLine();
   unsigned numBranches;
   void computeReachableUncovered();
-  bool resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl, unsigned maxResolutions=0, double timeout=0.);
+  bool resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl);
 public: //friends
   /// Return a constant value for the given expression, forcing it to
   /// be constant in the given state by adding a constraint if

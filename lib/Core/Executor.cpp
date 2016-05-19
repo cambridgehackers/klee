@@ -228,105 +228,6 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl, unsigned maxResolutions, double timeout) {
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(p)) {
-    ObjectPair res;
-    if (state.resolveOne(CE, res))
-      rl.push_back(res);
-    return false;
-  } else {
-    TimerStatIncrementer timer(stats::resolveTime);
-    uint64_t timeout_us = (uint64_t) (timeout*1000000.);
-    // XXX in general this isn't exactly what we want... for
-    // a multiple resolution case (or for example, a \in {b,c,0})
-    // we want to find the first object, find a cex assuming
-    // not the first, find a cex assuming not the second...  etc.
-    // XXX how do we smartly amortize the cost of checking to
-    // see if we need to keep searching up/down, in bad cases?
-    // maybe we don't care?
-    // XXX we really just need a smart place to start (although
-    // if its a known solution then the code below is guaranteed
-    // to hit the fast path with exactly 2 queries). we could also
-    // just get this by inspection of the expr.
-    ref<ConstantExpr> cex;
-    if (!solveGetValue(state, p, cex))
-      return true;
-    uint64_t example = cex->getZExtValue();
-    MemoryObject hack(example);
-    MemoryMap::iterator oi = state.objects.upper_bound(&hack);
-    MemoryMap::iterator begin = state.objects.begin();
-    MemoryMap::iterator end = state.objects.end();
-    MemoryMap::iterator start = oi;
-    // XXX in the common case we can save one query if we ask
-    // mustBeTrue before mayBeTrue for the first result. easy
-    // to add I just want to have a nice symbolic test case first.
-    // search backwards, start with one minus because this
-    // is the object that p *should* be within, which means we
-    // get write off the end with 4 queries (XXX can be better, no?)
-    while (oi!=begin) {
-      --oi;
-      const MemoryObject *mo = oi->first;
-      if (timeout_us && timeout_us < timer.check())
-        return true;
-      // XXX I think there is some query wasteage here?
-      ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
-      bool mayBeTruef;
-      if (!mayBeTrue(state, inBounds, mayBeTruef))
-        return true;
-      if (mayBeTruef) {
-        rl.push_back(*oi);
-        // fast path check
-        unsigned size = rl.size();
-        if (size==1) {
-          bool mustBeTruef;
-          if (!mustBeTrue(state, inBounds, mustBeTruef))
-            return true;
-          if (mustBeTruef)
-            return false;
-        } else if (size==maxResolutions) {
-          return true;
-        }
-      }
-      bool mustBeTruef;
-      if (!mustBeTrue(state, UgeExpr::create(p, mo->getBaseExpr()), mustBeTruef))
-        return true;
-      if (mustBeTruef)
-        break;
-    }
-    // search forwards
-    for (oi=start; oi!=end; ++oi) {
-      const MemoryObject *mo = oi->first;
-      if (timeout_us && timeout_us < timer.check())
-        return true;
-      bool mustBeTruef;
-      if (!mustBeTrue(state, UltExpr::create(p, mo->getBaseExpr()), mustBeTruef))
-        return true;
-      if (mustBeTruef)
-        break;
-      // XXX I think there is some query wasteage here?
-      ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
-      bool mayBeTruef;
-      if (!mayBeTrue(state, inBounds, mayBeTruef))
-        return true;
-      if (mayBeTruef) {
-        rl.push_back(*oi);
-        // fast path check
-        unsigned size = rl.size();
-        if (size==1) {
-          bool mustBeTruef;
-          if (!mustBeTrue(state, inBounds, mustBeTruef))
-            return true;
-          if (mustBeTruef)
-            return false;
-        } else if (size==maxResolutions) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
-
 // These two are pretty big hack so we can sort of pass memory back
 // and forth to externals. They work by abusing the concrete cache
 // store inside of the object states, which allows them to
@@ -1311,6 +1212,100 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
   }
 }
 
+bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(p)) {
+    ObjectPair res;
+    if (state.resolveOne(CE, res))
+      rl.push_back(res);
+    return false;
+  } else {
+    TimerStatIncrementer timer(stats::resolveTime);
+    // XXX in general this isn't exactly what we want... for
+    // a multiple resolution case (or for example, a \in {b,c,0})
+    // we want to find the first object, find a cex assuming
+    // not the first, find a cex assuming not the second...  etc.
+    // XXX how do we smartly amortize the cost of checking to
+    // see if we need to keep searching up/down, in bad cases?
+    // maybe we don't care?
+    // XXX we really just need a smart place to start (although
+    // if its a known solution then the code below is guaranteed
+    // to hit the fast path with exactly 2 queries). we could also
+    // just get this by inspection of the expr.
+    ref<ConstantExpr> cex;
+    if (!solveGetValue(state, p, cex))
+      return true;
+    uint64_t example = cex->getZExtValue();
+    MemoryObject hack(example);
+    MemoryMap::iterator oi = state.objects.upper_bound(&hack);
+    MemoryMap::iterator begin = state.objects.begin();
+    MemoryMap::iterator end = state.objects.end();
+    MemoryMap::iterator start = oi;
+    // XXX in the common case we can save one query if we ask
+    // mustBeTrue before mayBeTrue for the first result. easy
+    // to add I just want to have a nice symbolic test case first.
+    // search backwards, start with one minus because this
+    // is the object that p *should* be within, which means we
+    // get write off the end with 4 queries (XXX can be better, no?)
+    while (oi!=begin) {
+      --oi;
+      const MemoryObject *mo = oi->first;
+      // XXX I think there is some query wasteage here?
+      ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
+      bool mayBeTruef;
+      if (!mayBeTrue(state, inBounds, mayBeTruef))
+        return true;
+      if (mayBeTruef) {
+        rl.push_back(*oi);
+        // fast path check
+        unsigned size = rl.size();
+        if (size==1) {
+          bool mustBeTruef;
+          if (!mustBeTrue(state, inBounds, mustBeTruef))
+            return true;
+          if (mustBeTruef)
+            return false;
+        } else if (size==0) {
+          return true;
+        }
+      }
+      bool mustBeTruef;
+      if (!mustBeTrue(state, UgeExpr::create(p, mo->getBaseExpr()), mustBeTruef))
+        return true;
+      if (mustBeTruef)
+        break;
+    }
+    // search forwards
+    for (oi=start; oi!=end; ++oi) {
+      const MemoryObject *mo = oi->first;
+      bool mustBeTruef;
+      if (!mustBeTrue(state, UltExpr::create(p, mo->getBaseExpr()), mustBeTruef))
+        return true;
+      if (mustBeTruef)
+        break;
+      // XXX I think there is some query wasteage here?
+      ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
+      bool mayBeTruef;
+      if (!mayBeTrue(state, inBounds, mayBeTruef))
+        return true;
+      if (mayBeTruef) {
+        rl.push_back(*oi);
+        // fast path check
+        unsigned size = rl.size();
+        if (size==1) {
+          bool mustBeTruef;
+          if (!mustBeTrue(state, inBounds, mustBeTruef))
+            return true;
+          if (mustBeTruef)
+            return false;
+        } else if (size==0) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name) {
   // XXX we may want to be capping this?
   ResolutionList rl;
@@ -1442,7 +1437,7 @@ nextlab:
   // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds)
   ResolutionList rl;
   osolver->setCoreSolverTimeout(0);
-  bool incomplete = resolve(state, address, rl, 0, 0);
+  bool incomplete = resolve(state, address, rl);
   osolver->setCoreSolverTimeout(0);
   // XXX there is some query wasteage here. who cares?
   ExecutionState *unbound = &state;
