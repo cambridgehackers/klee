@@ -1187,28 +1187,9 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
   }
 }
 
-void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
-  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
-  if (zeroPointer.first && target)
-      bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
-  if (zeroPointer.second) { // address != 0
-    ExactResolutionList rl;
-    resolveExact(*zeroPointer.second, address, rl, "free");
-    for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
-      const MemoryObject *mo = it->first.first;
-      if (mo->isLocal || mo->isGlobal)
-        terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
-      else {
-        it->second->unbindObject(mo);
-        if (target)
-          bindLocal(target, *it->second, Expr::createPointer(0));
-      }
-    }
-  }
-}
-
-bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(p)) {
+bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl)
+{
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
     ObjectPair res;
     if (state.resolveOne(CE, res))
       rl.push_back(res);
@@ -1226,7 +1207,7 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
     // to hit the fast path with exactly 2 queries). we could also
     // just get this by inspection of the expr.
     ref<ConstantExpr> cex;
-    if (!solveGetValue(state, p, cex))
+    if (!solveGetValue(state, address, cex))
       return true;
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
@@ -1238,13 +1219,13 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
     // mustBeTrue before mayBeTrue for the first result. easy
     // to add I just want to have a nice symbolic test case first.
     // search backwards, start with one minus because this
-    // is the object that p *should* be within, which means we
+    // is the object that address *should* be within, which means we
     // get write off the end with 4 queries (XXX can be better, no?)
     while (oi!=begin) {
       --oi;
       const MemoryObject *mo = oi->first;
       // XXX I think there is some query wasteage here?
-      ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
+      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       bool mayBeTruef;
       if (!mayBeTrue(state, inBounds, mayBeTruef))
         return true;
@@ -1260,7 +1241,7 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
         }
       }
       bool mustBeTruef;
-      if (!mustBeTrue(state, UgeExpr::create(p, mo->getBaseExpr()), mustBeTruef))
+      if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), mustBeTruef))
         return true;
       if (mustBeTruef)
         break;
@@ -1269,12 +1250,12 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
       bool mustBeTruef;
-      if (!mustBeTrue(state, UltExpr::create(p, mo->getBaseExpr()), mustBeTruef))
+      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), mustBeTruef))
         return true;
       if (mustBeTruef)
         break;
       // XXX I think there is some query wasteage here?
-      ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
+      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       bool mayBeTruef;
       if (!mayBeTrue(state, inBounds, mayBeTruef))
         return true;
@@ -1292,23 +1273,6 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl) {
     }
   }
   return false;
-}
-
-void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name) {
-  // XXX we may want to be capping this?
-  ResolutionList rl;
-  resolve(state, p, rl);
-  ExecutionState *unbound = &state;
-  for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
-    StatePair branches = stateFork(*unbound, EqExpr::create(p, it->first->getBaseExpr()), true);
-    if (branches.first)
-      results.push_back(std::make_pair(*it, branches.first));
-    unbound = branches.second;
-    if (!unbound) // Fork failure
-      break;
-  }
-  if (unbound)
-    terminateStateOnError(*unbound, "merror: invalid pointer: " + name, "ptr.err", getAddressInfo(*unbound, p));
 }
 
 void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */) {
@@ -1340,8 +1304,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     while (oi!=begin) {
       --oi;
       const MemoryObject *mo = oi->first;
+      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       bool mayBeTruef;
-      if (!mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTruef))
+      if (!mayBeTrue(state, inBounds, mayBeTruef))
         goto falselab;
       if (mayBeTruef) {
         op = *oi;
@@ -1363,8 +1328,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       if (mustBeTruef) {
         break;
       } else {
+        ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
         bool mayBeTruef;
-        if (!mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTruef))
+        if (!mayBeTrue(state, inBounds, mayBeTruef))
           goto falselab;
         if (mayBeTruef) {
           op = *oi;
@@ -1458,6 +1424,43 @@ nextlab:
     else
       terminateStateOnError(*unbound, "memory error: out of bound pointer", "ptr.err", getAddressInfo(*unbound, address));
   }
+}
+
+void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
+  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
+  if (zeroPointer.first && target)
+      bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
+  if (zeroPointer.second) { // address != 0
+    ExactResolutionList rl;
+    resolveExact(*zeroPointer.second, address, rl, "free");
+    for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
+      const MemoryObject *mo = it->first.first;
+      if (mo->isLocal || mo->isGlobal)
+        terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
+      else {
+        it->second->unbindObject(mo);
+        if (target)
+          bindLocal(target, *it->second, Expr::createPointer(0));
+      }
+    }
+  }
+}
+
+void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name) {
+  // XXX we may want to be capping this?
+  ResolutionList rl;
+  resolve(state, p, rl);
+  ExecutionState *unbound = &state;
+  for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
+    StatePair branches = stateFork(*unbound, EqExpr::create(p, it->first->getBaseExpr()), true);
+    if (branches.first)
+      results.push_back(std::make_pair(*it, branches.first));
+    unbound = branches.second;
+    if (!unbound) // Fork failure
+      break;
+  }
+  if (unbound)
+    terminateStateOnError(*unbound, "merror: invalid pointer: " + name, "ptr.err", getAddressInfo(*unbound, p));
 }
 
 void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name) {
