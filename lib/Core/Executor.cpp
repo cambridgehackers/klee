@@ -228,10 +228,10 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> p, ResolutionList &rl, unsigned maxResolutions, double timeout) {
+bool Executor::resolve(ExecutionState &state, ref<Expr> p, ResolutionList &rl, unsigned maxResolutions, double timeout) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(p)) {
     ObjectPair res;
-    if (resolveOne(CE, res))
+    if (state.resolveOne(CE, res))
       rl.push_back(res);
     return false;
   } else {
@@ -249,13 +249,13 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
     // to hit the fast path with exactly 2 queries). we could also
     // just get this by inspection of the expr.
     ref<ConstantExpr> cex;
-    if (!solver->solveGetValue(state, p, cex))
+    if (!solveGetValue(state, p, cex))
       return true;
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
-    MemoryMap::iterator oi = objects.upper_bound(&hack);
-    MemoryMap::iterator begin = objects.begin();
-    MemoryMap::iterator end = objects.end();
+    MemoryMap::iterator oi = state.objects.upper_bound(&hack);
+    MemoryMap::iterator begin = state.objects.begin();
+    MemoryMap::iterator end = state.objects.end();
     MemoryMap::iterator start = oi;
     // XXX in the common case we can save one query if we ask
     // mustBeTrue before mayBeTrue for the first result. easy
@@ -270,27 +270,27 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
         return true;
       // XXX I think there is some query wasteage here?
       ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
-      bool mayBeTrue;
-      if (!solver->mayBeTrue(state, inBounds, mayBeTrue))
+      bool mayBeTruef;
+      if (!mayBeTrue(state, inBounds, mayBeTruef))
         return true;
-      if (mayBeTrue) {
+      if (mayBeTruef) {
         rl.push_back(*oi);
         // fast path check
         unsigned size = rl.size();
         if (size==1) {
-          bool mustBeTrue;
-          if (!solver->mustBeTrue(state, inBounds, mustBeTrue))
+          bool mustBeTruef;
+          if (!mustBeTrue(state, inBounds, mustBeTruef))
             return true;
-          if (mustBeTrue)
+          if (mustBeTruef)
             return false;
         } else if (size==maxResolutions) {
           return true;
         }
       }
-      bool mustBeTrue;
-      if (!solver->mustBeTrue(state, UgeExpr::create(p, mo->getBaseExpr()), mustBeTrue))
+      bool mustBeTruef;
+      if (!mustBeTrue(state, UgeExpr::create(p, mo->getBaseExpr()), mustBeTruef))
         return true;
-      if (mustBeTrue)
+      if (mustBeTruef)
         break;
     }
     // search forwards
@@ -298,25 +298,25 @@ bool ExecutionState::resolve(ExecutionState &state, Executor *solver, ref<Expr> 
       const MemoryObject *mo = oi->first;
       if (timeout_us && timeout_us < timer.check())
         return true;
-      bool mustBeTrue;
-      if (!solver->mustBeTrue(state, UltExpr::create(p, mo->getBaseExpr()), mustBeTrue))
+      bool mustBeTruef;
+      if (!mustBeTrue(state, UltExpr::create(p, mo->getBaseExpr()), mustBeTruef))
         return true;
-      if (mustBeTrue)
+      if (mustBeTruef)
         break;
       // XXX I think there is some query wasteage here?
       ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
-      bool mayBeTrue;
-      if (!solver->mayBeTrue(state, inBounds, mayBeTrue))
+      bool mayBeTruef;
+      if (!mayBeTrue(state, inBounds, mayBeTruef))
         return true;
-      if (mayBeTrue) {
+      if (mayBeTruef) {
         rl.push_back(*oi);
         // fast path check
         unsigned size = rl.size();
         if (size==1) {
-          bool mustBeTrue;
-          if (!solver->mustBeTrue(state, inBounds, mustBeTrue))
+          bool mustBeTruef;
+          if (!mustBeTrue(state, inBounds, mustBeTruef))
             return true;
-          if (mustBeTrue)
+          if (mustBeTruef)
             return false;
         } else if (size==maxResolutions) {
           return true;
@@ -1314,7 +1314,7 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
 void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionList &results, const std::string &name) {
   // XXX we may want to be capping this?
   ResolutionList rl;
-  state.resolve(state, this, p, rl);
+  resolve(state, p, rl);
   ExecutionState *unbound = &state;
   for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
     ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
@@ -1442,7 +1442,7 @@ nextlab:
   // we are on an error path (no resolution, multiple resolution, one // resolution with out of bounds)
   ResolutionList rl;
   osolver->setCoreSolverTimeout(0);
-  bool incomplete = state.resolve(state, this, address, rl, 0, 0);
+  bool incomplete = resolve(state, address, rl, 0, 0);
   osolver->setCoreSolverTimeout(0);
   // XXX there is some query wasteage here. who cares?
   ExecutionState *unbound = &state;
