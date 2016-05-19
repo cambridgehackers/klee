@@ -1305,8 +1305,7 @@ void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionL
   resolve(state, p, rl);
   ExecutionState *unbound = &state;
   for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
-    ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
-    StatePair branches = stateFork(*unbound, inBounds, true);
+    StatePair branches = stateFork(*unbound, EqExpr::create(p, it->first->getBaseExpr()), true);
     if (branches.first)
       results.push_back(std::make_pair(*it, branches.first));
     unbound = branches.second;
@@ -1439,9 +1438,8 @@ nextlab:
     const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     StatePair branches = stateFork(*unbound, inBounds, true);
-    ExecutionState *bound = branches.first;
     // bound can be 0 on failure or overlapped
-    if (bound) {
+    if (ExecutionState *bound = branches.first) {
       if (isWrite) {
         if (os->readOnly)
           terminateStateOnError(*bound, "memory error: object read only", "readonly.err");
