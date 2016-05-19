@@ -567,7 +567,7 @@ void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &condi
       ns->ptreeNode = res.first;
       es->ptreeNode = res.second;
     }
-  // If necessary redistribute seeds to match conditions, killing states if necessary due to OnlyReplaySeeds (inefficient but // simple).
+  // redistribute seeds to match conditions, killing states if necessary (inefficient but simple).
   auto it = seedMap.find(&state);
   if (it != seedMap.end()) {
     std::vector<SeedInfo> seeds = it->second;
@@ -847,7 +847,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src, ExecutionS
   // instructions know which argument to eval, set the pc, and continue.
 
   // XXX this lookup has to go ?
-  KFunction *kf = functionMap[state.stack.back().func];
+  KFunction *kf = functionMap[state.stack.back().containingFunc];
   state.pc = &kf->instructions[kf->basicBlockEntry[dst]];
   if (state.pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(state.pc->inst);
@@ -2175,8 +2175,8 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
     if (!it->isDeclaration()) {
       KFunction *kf = new KFunction(it);
-      llvm::Function *func = it;
-      for (auto bbit = func->begin(), bbie = func->end(); bbit != bbie; ++bbit) {
+      llvm::Function *thisFunc = it;
+      for (auto bbit = thisFunc->begin(), bbie = thisFunc->end(); bbit != bbie; ++bbit) {
         BasicBlock *bb = bbit;
         kf->basicBlockEntry[bb] = kf->numInstructions;
         kf->numInstructions += bb->size();
@@ -2184,8 +2184,8 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       kf->instructions = new KInstruction*[kf->numInstructions]; 
       std::map<Instruction*, unsigned> registerMap; 
       unsigned insInd = 0;
-      unsigned rnum = func->arg_size(); // The first arg_size() registers are reserved for formals.
-      for (auto bbit = func->begin(), bbie = func->end(); bbit != bbie; ++bbit)
+      unsigned rnum = thisFunc->arg_size(); // The first arg_size() registers are reserved for formals.
+      for (auto bbit = thisFunc->begin(), bbie = thisFunc->end(); bbit != bbie; ++bbit)
         for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
           KInstruction *ki = new KInstruction();
           ki->offset = -1;

@@ -25,13 +25,13 @@ using namespace llvm;
 using namespace klee;
 
 StackFrame::StackFrame(KInstIterator _caller, Function *_kf, unsigned _numRegisters)
-  : caller(_caller), func(_kf), numRegisters(_numRegisters), varargs(0) {
+  : caller(_caller), containingFunc(_kf), numRegisters(_numRegisters), varargs(0) {
   locals = new Cell[numRegisters];
 }
 
 StackFrame::StackFrame(const StackFrame &s) 
   : caller(s.caller),
-    func(s.func),
+    containingFunc(s.containingFunc),
     numRegisters(s.numRegisters),
     allocas(s.allocas),
     varargs(s.varargs) {
@@ -133,7 +133,7 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
   const KInstruction *target = prevPC;
   for (auto it = stack.rbegin(), ie = stack.rend(); it != ie; ++it) {
     const StackFrame &sf = *it;
-    Function *f = sf.func;
+    Function *f = sf.containingFunc;
     out << "\t#" << idx++;
     std::stringstream AssStream;
     AssStream << std::setw(8) << std::setfill('0');
