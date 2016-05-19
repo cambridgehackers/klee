@@ -201,7 +201,6 @@ private:
   void initializeGlobalObject(ExecutionState &state, ObjectState *os, const llvm::Constant *c, unsigned offset);
   void initializeGlobals(ExecutionState &state);
   void transferToBasicBlock(llvm::BasicBlock *dst, llvm::BasicBlock *src, ExecutionState &state);
-  void callExternalFunction(ExecutionState &state, KInstruction *target, llvm::Function *function, std::vector<ref<Expr>> &arguments);
   // do address resolution / object binding / out of bounds checking // and perform the operation
   void executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */);
   /// Create a new state where each input condition has been added as

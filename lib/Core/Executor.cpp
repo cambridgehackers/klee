@@ -724,13 +724,67 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
   }
 }
 
+// XXX shoot me
+static const char *okExternalsList[] = { "printf", "fprintf", "puts", "getpid" };
+static std::set<std::string> okExternals(okExternalsList, okExternalsList + (sizeof(okExternalsList)/sizeof(okExternalsList[0])));
+
 void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f, std::vector<ref<Expr>> &arguments) {
   Instruction *i = ki->inst;
   if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
-    case Intrinsic::not_intrinsic:
       // state may be destroyed by this call, cannot touch
-      callExternalFunction(state, ki, f, arguments);
+    case Intrinsic::not_intrinsic: {
+      Function *function = f;
+      if (specialFunctionHandler->handle(state, function, ki, arguments))
+        break;
+      // normal external function handling path
+      // allocate 128 bits for each argument (+return value) to support fp80's;
+      // we could iterate through all the arguments first and determine the exact
+      // size we need, but this is faster, and the memory usage isn't significant.
+      uint64_t *args = (uint64_t*) alloca(2*sizeof(*args) * (arguments.size() + 1));
+      memset(args, 0, 2 * sizeof(*args) * (arguments.size() + 1));
+      unsigned wordIndex = 2;
+      for (auto ai = arguments.begin(), ae = arguments.end(); ai!=ae; ++ai) {
+          ref<Expr> arg = toUnique(state, *ai);
+          if (ConstantExpr *ce = dyn_cast<ConstantExpr>(arg)) {
+            // XXX kick toMemory fns from here
+            ce->toMemory(&args[wordIndex]);
+            wordIndex += (ce->getWidth()+63)/64;
+          } else {
+            terminateStateOnExecError(state, "external call with symbolic argument: " + function->getName());
+            goto overlab;
+          }
+      }
+      state.addressSpace.copyOutConcretes();
+    printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
+      std::string TmpStr;
+      llvm::raw_string_ostream messageOs(TmpStr);
+      messageOs << "calling external: " << function->getName().str() << "(";
+      for (unsigned i=0; i<arguments.size(); i++) {
+          messageOs << arguments[i];
+          if (i != arguments.size()-1)
+	    messageOs << ", ";
+      }
+      messageOs << ")";
+      klee_warning("%s", messageOs.str().c_str());
+      // MCJIT needs unique module, so we create quick external dispatcher for call.
+      // reference: // http://blog.llvm.org/2013/07/using-mcjit-with-kaleidoscope-tutorial.html
+      ExternalDispatcher *e = new ExternalDispatcher();
+      bool success = e->executeCall(function, ki->inst, args);
+      delete e;
+      if (!success)
+          terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
+      else if (!state.addressSpace.copyInConcretes())
+          terminateStateOnError(state, "external modified read-only object", "external.err");
+      else {
+          LLVM_TYPE_Q Type *resultType = ki->inst->getType();
+          if (resultType != Type::getVoidTy(getGlobalContext())) {
+            ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
+            bindLocal(ki, state, e);
+          }
+      }
+    }
+overlab:
       break;
       // va_arg is handled by caller and intrinsic lowering, see comment for // ExecutionState::varargs
     case Intrinsic::vastart:  {
@@ -973,61 +1027,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   if (info_str != "")
     msg << "Info: \n" << info_str;
   terminateStateCase(state, msg.str().c_str(), suffix);
-}
-
-// XXX shoot me
-static const char *okExternalsList[] = { "printf", "fprintf", "puts", "getpid" };
-static std::set<std::string> okExternals(okExternalsList, okExternalsList + (sizeof(okExternalsList)/sizeof(okExternalsList[0])));
-void Executor::callExternalFunction(ExecutionState &state, KInstruction *target, Function *function, std::vector<ref<Expr>> &arguments){
-  // check if specialFunctionHandler wants it
-  if (specialFunctionHandler->handle(state, function, target, arguments))
-    return;
-  // normal external function handling path
-  // allocate 128 bits for each argument (+return value) to support fp80's;
-  // we could iterate through all the arguments first and determine the exact
-  // size we need, but this is faster, and the memory usage isn't significant.
-  uint64_t *args = (uint64_t*) alloca(2*sizeof(*args) * (arguments.size() + 1));
-  memset(args, 0, 2 * sizeof(*args) * (arguments.size() + 1));
-  unsigned wordIndex = 2;
-  for (auto ai = arguments.begin(), ae = arguments.end(); ai!=ae; ++ai) {
-      ref<Expr> arg = toUnique(state, *ai);
-      if (ConstantExpr *ce = dyn_cast<ConstantExpr>(arg)) {
-        // XXX kick toMemory fns from here
-        ce->toMemory(&args[wordIndex]);
-        wordIndex += (ce->getWidth()+63)/64;
-      } else {
-        terminateStateOnExecError(state, "external call with symbolic argument: " + function->getName());
-        return;
-      }
-  }
-  state.addressSpace.copyOutConcretes();
-printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
-  std::string TmpStr;
-  llvm::raw_string_ostream messageOs(TmpStr);
-  messageOs << "calling external: " << function->getName().str() << "(";
-  for (unsigned i=0; i<arguments.size(); i++) {
-      messageOs << arguments[i];
-      if (i != arguments.size()-1)
-	messageOs << ", ";
-  }
-  messageOs << ")";
-  klee_warning("%s", messageOs.str().c_str());
-  // MCJIT needs unique module, so we create quick external dispatcher for call.
-  // reference: // http://blog.llvm.org/2013/07/using-mcjit-with-kaleidoscope-tutorial.html
-  ExternalDispatcher *e = new ExternalDispatcher();
-  bool success = e->executeCall(function, target->inst, args);
-  delete e;
-  if (!success)
-      terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
-  else if (!state.addressSpace.copyInConcretes())
-      terminateStateOnError(state, "external modified read-only object", "external.err");
-  else {
-      LLVM_TYPE_Q Type *resultType = target->inst->getType();
-      if (resultType != Type::getVoidTy(getGlobalContext())) {
-        ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
-        bindLocal(target, state, e);
-      }
-  }
 }
 
 ObjectState *Executor::bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array) {
