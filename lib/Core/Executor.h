@@ -24,6 +24,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/DataLayout.h"
 #include "klee/Solver.h"
+#include "Memory.h"
 #include "ObjectHolder.h"
 #include <vector>
 #include <string>
@@ -74,7 +75,7 @@ namespace klee {
   typedef std::vector<ObjectPair> ResolutionList;
   /// Function object ordering MemoryObject's by address.
   struct MemoryObjectLT {
-    bool operator()(const MemoryObject *a, const MemoryObject *b) const;
+    bool operator()(const MemoryObject *a, const MemoryObject *b) const { return a->address < b->address; }
   };
   typedef ImmutableMap<const MemoryObject*, ObjectHolder, MemoryObjectLT> MemoryMap;
 
@@ -116,20 +117,26 @@ public:
   /// @brief Remember from which Basic Block control flow arrived /// (i.e. to select the right phi values)
   unsigned incomingBBIndex;
   private:
-    /// Epoch counter used to control ownership of objects.
-    mutable unsigned cowKey;
+  /// Epoch counter used to control ownership of objects.
+  mutable unsigned cowKey;
   public:
-    /// The MemoryObject -> ObjectState map that constitutes the address space.
-    /// The set of objects where o->copyOnWriteOwner == cowKey are the objects that we own.
-    /// \invariant forall o in objects, o->copyOnWriteOwner <= cowKey
-    MemoryMap objects;
-    bool resolveOne(const ref<ConstantExpr> &address, ObjectPair &result);
-    /// Resolve address to a list of ObjectPairs it can point to. If
-    /// maxResolutions is non-zero then no more than that many pairs will be returned.
-    /// \return true iff the resolution is incomplete (maxResolutions
-    /// is non-zero and the search terminated early, or a query timed out).
-    void bindObject(const MemoryObject *mo, ObjectState *os);
-    void unbindObject(const MemoryObject *mo);
+  /// The MemoryObject -> ObjectState map that constitutes the address space.
+  /// The set of objects where o->copyOnWriteOwner == cowKey are the objects that we own.
+  /// \invariant forall o in objects, o->copyOnWriteOwner <= cowKey
+  MemoryMap objects;
+  bool resolveOne(const ref<ConstantExpr> &address, ObjectPair &result);
+  /// Resolve address to a list of ObjectPairs it can point to. If
+  /// maxResolutions is non-zero then no more than that many pairs will be returned.
+  /// \return true iff the resolution is incomplete (maxResolutions
+  /// is non-zero and the search terminated early, or a query timed out).
+  void bindObject(const MemoryObject *mo, ObjectState *os) {
+    assert(os->copyOnWriteOwner==0 && "object already has owner");
+    os->copyOnWriteOwner = cowKey;
+    objects = objects.replace(std::make_pair(mo, os));
+  }
+  void unbindObject(const MemoryObject *mo) {
+    objects = objects.remove(mo);
+  }
     /// \brief Obtain an ObjectState suitable for writing.
     /// This returns a writeable object state, creating a new copy of
     /// the given ObjectState if necessary. If the address space owns
@@ -340,8 +347,14 @@ public: //friends
   setModule(llvm::Module *module, const ModuleOptions &opts);
   virtual void runFunctionAsMain(llvm::Function *f, int argc, char **argv, char **envp);
   /*** State accessor methods ***/
-  virtual unsigned getPathStreamID(const ExecutionState &state);
-  virtual unsigned getSymbolicPathStreamID(const ExecutionState &state);
+  unsigned getPathStreamID(const ExecutionState &state) {
+    assert(pathWriter);
+    return state.pathOS.getID();
+  }
+  unsigned getSymbolicPathStreamID(const ExecutionState &state) {
+    assert(symPathWriter);
+    return state.symPathOS.getID();
+  }
   virtual void getConstraintLog(const ExecutionState &state, std::string &res, Interpreter::LogType logFormat);
   virtual bool getSymbolicSolution(const ExecutionState &state, std::vector< std::pair<std::string, std::vector<unsigned char>>> &res);
   void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned>> &res) {res = state.coveredLines;}

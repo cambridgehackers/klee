@@ -9,7 +9,6 @@
 #include "Executor.h"
 #include "CoreStats.h"
 #include "ExternalDispatcher.h"
-#include "Memory.h"
 #include "MemoryManager.h"
 #include "SeedInfo.h"
 #include "SpecialFunctionHandler.h"
@@ -188,16 +187,6 @@ public:
   bool empty() { return states.empty(); }
 };
 
-void ExecutionState::bindObject(const MemoryObject *mo, ObjectState *os) {
-  assert(os->copyOnWriteOwner==0 && "object already has owner");
-  os->copyOnWriteOwner = cowKey;
-  objects = objects.replace(std::make_pair(mo, os));
-}
-
-void ExecutionState::unbindObject(const MemoryObject *mo) {
-  objects = objects.remove(mo);
-}
-
 ObjectState *ExecutionState::getWriteable(const MemoryObject *mo, const ObjectState *os) {
   assert(!os->readOnly);
   if (cowKey==os->copyOnWriteOwner)
@@ -259,10 +248,6 @@ bool ExecutionState::copyInConcretes() {
   return true;
 }
 
-bool MemoryObjectLT::operator()(const MemoryObject *a, const MemoryObject *b) const {
-  return a->address < b->address;
-}
-
 /// Check for special cases where we statically know an instruction is
 /// uncoverable. Currently the case is an unreachable instruction
 /// following a noreturn call; the instruction is really only there to
@@ -296,16 +281,6 @@ void Executor::writeStatsLine() {
        << "," << stats::arrayHashTime / 1000000.
 #endif
        << ")\n";
-}
-
-unsigned Executor::getPathStreamID(const ExecutionState &state) {
-  assert(pathWriter);
-  return state.pathOS.getID();
-}
-
-unsigned Executor::getSymbolicPathStreamID(const ExecutionState &state) {
-  assert(symPathWriter);
-  return state.symPathOS.getID();
 }
 
 void Executor::getConstraintLog(const ExecutionState &state, std::string &res, Interpreter::LogType logFormat) {
