@@ -205,9 +205,9 @@ const ObjectState *ExecutionState::findObject(const MemoryObject *mo) const {
 
 ObjectState *ExecutionState::getWriteable(const MemoryObject *mo, const ObjectState *os) {
   assert(!os->readOnly); 
-  if (cowKey==os->copyOnWriteOwner) {
+  if (cowKey==os->copyOnWriteOwner)
     return const_cast<ObjectState*>(os);
-  } else {
+  else {
     ObjectState *n = new ObjectState(*os);
     n->copyOnWriteOwner = cowKey;
     objects = objects.replace(std::make_pair(mo, n));
@@ -220,8 +220,7 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   MemoryObject hack(address); 
   if (const MemoryMap::value_type *res = objects.lookup_previous(&hack)) {
     const MemoryObject *mo = res->first;
-    if ((mo->size==0 && address==mo->address) ||
-        (address - mo->address < mo->size)) {
+    if ((mo->size==0 && address==mo->address) || (address - mo->address < mo->size)) {
       result = *res;
       return true;
     }
@@ -229,7 +228,7 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-bool ExecutionState::resolveOneS(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success) {
+bool ExecutionState::resolveOneS(Executor *solver, ref<Expr> address, ObjectPair &result, bool &success) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
     success = resolveOne(CE, result);
     return true;
@@ -237,7 +236,7 @@ bool ExecutionState::resolveOneS(ExecutionState &state, Executor *solver, ref<Ex
     TimerStatIncrementer timer(stats::resolveTime); 
     // try cheap search, will succeed for any inbounds pointer 
     ref<ConstantExpr> cex;
-    if (!solver->solveGetValue(state, address, cex))
+    if (!solver->solveGetValue(*this, address, cex))
       return false;
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
@@ -259,7 +258,7 @@ bool ExecutionState::resolveOneS(ExecutionState &state, Executor *solver, ref<Ex
       --oi;
       const MemoryObject *mo = oi->first; 
       bool mayBeTrue;
-      if (!solver->mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTrue))
+      if (!solver->mayBeTrue(*this, mo->getBoundsCheckPointer(address), mayBeTrue))
         return false;
       if (mayBeTrue) {
         result = *oi;
@@ -267,7 +266,7 @@ bool ExecutionState::resolveOneS(ExecutionState &state, Executor *solver, ref<Ex
         return true;
       } else {
         bool mustBeTrue;
-        if (!solver->mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), mustBeTrue))
+        if (!solver->mustBeTrue(*this, UgeExpr::create(address, mo->getBaseExpr()), mustBeTrue))
           return false;
         if (mustBeTrue)
           break;
@@ -277,13 +276,13 @@ bool ExecutionState::resolveOneS(ExecutionState &state, Executor *solver, ref<Ex
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first; 
       bool mustBeTrue;
-      if (!solver->mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), mustBeTrue))
+      if (!solver->mustBeTrue(*this, UltExpr::create(address, mo->getBaseExpr()), mustBeTrue))
         return false;
       if (mustBeTrue) {
         break;
       } else {
         bool mayBeTrue; 
-        if (!solver->mayBeTrue(state, mo->getBoundsCheckPointer(address), mayBeTrue))
+        if (!solver->mayBeTrue(*this, mo->getBoundsCheckPointer(address), mayBeTrue))
           return false;
         if (mayBeTrue) {
           result = *oi;
@@ -1405,7 +1404,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   ObjectPair op;
   bool success;
   osolver->setCoreSolverTimeout(0);
-  if (!state.resolveOneS(state, this, address, op, success)) {
+  if (!state.resolveOneS(this, address, op, success)) {
     address = toConstant(state, address, "resolveOneS failure");
     success = state.resolveOne(cast<ConstantExpr>(address), op);
   }

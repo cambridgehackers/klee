@@ -136,7 +136,7 @@ public:
     /// \param address The address to search for.
     /// \param[out] result An ObjectPair this address can resolve to (when returning true).
     /// \return true iff an object was found at \a address.
-    bool resolveOneS(ExecutionState &state, Executor *solver, ref<Expr> address, ObjectPair &result, bool &success); 
+    bool resolveOneS(Executor *solver, ref<Expr> address, ObjectPair &result, bool &success); 
     /// Resolve address to a list of ObjectPairs it can point to. If
     /// maxResolutions is non-zero then no more than that many pairs will be returned.
     /// \return true iff the resolution is incomplete (maxResolutions
