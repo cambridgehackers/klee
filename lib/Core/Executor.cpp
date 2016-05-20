@@ -550,8 +550,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       MemoryObject *mo = globalObjects.find(i)->second;
       const MemoryMap::value_type *res = state.objects.lookup(mo);
       assert(res && res->second);
-      ObjectState *wos = state.getWriteable(mo, res->second);
-      initializeGlobalObject(state, wos, i->getInitializer(), 0);
+      initializeGlobalObject(state, state.getWriteable(mo, res->second), i->getInitializer(), 0);
     }
   }
 }
@@ -804,8 +803,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *fu
               terminateStateOnError(state, "external modified read-only object", "external.err");
               break;
             }
-            ObjectState *wos = state.getWriteable(mo, os);
-            memcpy(wos->concreteStore, address, mo->size);
+            memcpy(state.getWriteable(mo, os)->concreteStore, address, mo->size);
           }
         }
       }
@@ -1303,10 +1301,8 @@ nextlab:
       if (isWrite) {
         if (os->readOnly)
           terminateStateOnError(state, "memory error: object read only", "readonly.err");
-        else {
-          ObjectState *wos = state.getWriteable(mo, os);
-          wos->write(offset, value);
-        }
+        else
+          state.getWriteable(mo, os)->write(offset, value);
       } else {
         ref<Expr> result = os->read(offset, type);
         // right now, we don't replace symbolics (is there any reason to?)
@@ -1343,10 +1339,8 @@ nextlab:
       if (isWrite) {
         if (os->readOnly)
           terminateStateOnError(*bound, "memory error: object read only", "readonly.err");
-        else {
-          ObjectState *wos = bound->getWriteable(mo, os);
-          wos->write(mo->getOffsetExpr(address), value);
-        }
+        else
+          bound->getWriteable(mo, os)->write(mo->getOffsetExpr(address), value);
       } else {
         ref<Expr> result = os->read(mo->getOffsetExpr(address), type);
         bindLocal(target, *bound, result);
