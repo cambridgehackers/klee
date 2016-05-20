@@ -231,7 +231,6 @@ private:
   void executeInstruction(ExecutionState &state);
   void runExecutor(ExecutionState &initialState);
   void initializeGlobalObject(ExecutionState &state, ObjectState *os, const llvm::Constant *c, unsigned offset);
-  void initializeGlobals(ExecutionState &state);
   void transferToBasicBlock(llvm::BasicBlock *dst, llvm::BasicBlock *src, ExecutionState &state);
   // do address resolution / object binding / out of bounds checking // and perform the operation
   void executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */);

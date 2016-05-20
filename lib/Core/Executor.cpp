@@ -508,55 +508,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-void Executor::initializeGlobals(ExecutionState &state) {
-  Module *m = module;
-  // represent function globals using the address of the actual llvm function
-  // object. given that we use malloc to allocate memory in states this also
-  // ensures that we won't conflict. we don't need to allocate a memory object
-  // since reading/writing via a function pointer is unsupported anyway.
-  for (auto i = m->begin(), ie = m->end(); i != ie; ++i) {
-    ref<ConstantExpr> addr(0);
-    addr = Expr::createPointer((unsigned long) (void*) i);
-    legalFunctions.insert((uint64_t) (unsigned long) (void*) i);
-    globalAddresses.insert(std::make_pair(i, addr));
-  }
-
-  // allocate and initialize globals, done in two passes since we may
-  // need address of a global in order to initialize some other one.
-  // allocate memory objects for all globals
-  for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
-    LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
-    uint64_t size = targetData->getTypeStoreSize(ty);
-    MemoryObject *mo = memory->allocate(size, false, true, i);
-    ObjectState *os = bindObjectInState(state, mo, false);
-    globalObjects.insert(std::make_pair(i, mo));
-    globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
-    if (i->isDeclaration()) {
-      // Program already running = object already initialized.  Read // concrete value and write it to our copy.
-      if (size == 0)
-        llvm::errs() << "Unable to find size for global variable: " << i->getName() << " (use will result in out of bounds access)\n";
-      else {
-        unsigned char *addr = (unsigned char *)externalDispatcher->resolveSymbol(i->getName());
-        if (!addr)
-          klee_error("unable to load symbol(%s) while initializing globals.", i->getName().data());
-        for (unsigned offset=0; offset<mo->size; offset++)
-          os->write8(offset, addr[offset]);
-      }
-    }
-    else if (!i->hasInitializer())
-        os->initializeToRandom();
-  }
-  // once all objects are allocated, do the actual initialization
-  for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
-    if (i->hasInitializer()) {
-      MemoryObject *mo = globalObjects.find(i)->second;
-      const MemoryMap::value_type *res = state.objects.lookup(mo);
-      assert(res && res->second);
-      initializeGlobalObject(state, state.getWriteable(mo, res->second), i->getInitializer(), 0);
-    }
-  }
-}
-
 void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &conditions, std::vector<ExecutionState*> &result) {
   TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
@@ -1365,13 +1316,11 @@ void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionL
   ResolutionList rl;
   resolve(state, p, rl);
   ExecutionState *unbound = &state;
-  for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
+  for (auto it = rl.begin(), ie = rl.end(); it != ie && unbound; ++it) {
     StatePair branches = stateFork(*unbound, EqExpr::create(p, it->first->getBaseExpr()), true);
     if (branches.first)
       results.push_back(std::make_pair(*it, branches.first));
     unbound = branches.second;
-    if (!unbound) // Fork failure
-      break;
   }
   if (unbound)
     terminateStateOnError(*unbound, "merror: invalid pointer: " + name, "ptr.err", getAddressInfo(*unbound, p));
@@ -1425,17 +1374,14 @@ void Executor::executeInstruction(ExecutionState &state)
   llvm::errs() << "     [EXECUTE]:";
   llvm::errs().indent(10) << stats::instructions << " " << *(state.pc->inst) << '\n';
   static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0);
-  sys::TimeValue sys(0,0);
-  if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0)
-    sys::Process::GetTimeUsage(lastNowTime,lastUserTime,sys);
-  else {
-    sys::TimeValue now(0,0),user(0,0);
-    sys::Process::GetTimeUsage(now,user,sys);
+  sys::TimeValue now(0,0),user(0,0), sys(0,0);
+  sys::Process::GetTimeUsage(now,user,sys);
+  if (lastUserTime.seconds()!=0 || lastUserTime.nanoseconds() !=0) {
     stats::instructionTime += (user - lastUserTime).usec();
     stats::instructionRealTime += (now - lastNowTime).usec();
-    lastUserTime = user;
-    lastNowTime = now;
   }
+  lastUserTime = user;
+  lastNowTime = now;
   theStatisticManager->setIndex(0/*ii.id*/);
   if (state.instsSinceCovNew)
     ++state.instsSinceCovNew;
@@ -2112,7 +2058,49 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       argvOS->write(i * NumPtrBytes, val);
     }
   }
-  initializeGlobals(*startingState);
+  // represent function globals using the address of the actual llvm function
+  // object. given that we use malloc to allocate memory in states this also
+  // ensures that we won't conflict. we don't need to allocate a memory object
+  // since reading/writing via a function pointer is unsupported anyway.
+  for (auto i = module->begin(), ie = module->end(); i != ie; ++i) {
+    ref<ConstantExpr> addr(0);
+    addr = Expr::createPointer((unsigned long) (void*) i);
+    legalFunctions.insert((uint64_t) (unsigned long) (void*) i);
+    globalAddresses.insert(std::make_pair(i, addr));
+  }
+
+  // allocate and initialize globals, done in two passes since we may
+  // need address of a global in order to initialize some other one.
+  // allocate memory objects for all globals
+  for (auto i = module->global_begin(), e = module->global_end(); i != e; ++i) {
+    LLVM_TYPE_Q Type *ty = i->getType()->getElementType();
+    uint64_t size = targetData->getTypeStoreSize(ty);
+    MemoryObject *mo = memory->allocate(size, false, true, i);
+    ObjectState *os = bindObjectInState(*startingState, mo, false);
+    globalObjects.insert(std::make_pair(i, mo));
+    globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
+    if (i->isDeclaration()) {
+      // Program already running = object already initialized.  Read // concrete value and write it to our copy.
+      if (size == 0)
+        llvm::errs() << "Unable to find size for global variable: " << i->getName() << " (use will result in out of bounds access)\n";
+      else if (unsigned char *addr = (unsigned char *)externalDispatcher->resolveSymbol(i->getName()))
+        for (unsigned offset=0; offset<mo->size; offset++)
+          os->write8(offset, addr[offset]);
+      else
+        klee_error("unable to load symbol(%s) while initializing globals.", i->getName().data());
+    }
+    else if (!i->hasInitializer())
+        os->initializeToRandom();
+  }
+  // once all objects are allocated, do the actual initialization
+  for (auto i = module->global_begin(), e = module->global_end(); i != e; ++i) {
+    if (i->hasInitializer()) {
+      MemoryObject *mo = globalObjects.find(i)->second;
+      const MemoryMap::value_type *res = startingState->objects.lookup(mo);
+      assert(res && res->second);
+      initializeGlobalObject(*startingState, startingState->getWriteable(mo, res->second), i->getInitializer(), 0);
+    }
+  }
   processTree = new PTree(startingState);
   startingState->ptreeNode = processTree->root;
   // Delay init till now so that ticks don't accrue during optimization and such.
