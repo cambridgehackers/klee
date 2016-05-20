@@ -1175,47 +1175,43 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
       const MemoryObject *mo = oi->first;
       // XXX I think there is some query wasteage here?
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      bool mayBeTruef;
-      if (!mayBeTrue(state, inBounds, mayBeTruef))
+      bool retFlag;
+      if (!mayBeTrue(state, inBounds, retFlag))
         return true;
-      if (mayBeTruef) {
+      if (retFlag) {
         rl.push_back(*oi);
         // fast path check
         if (rl.size()==1) {
-          bool mustBeTruef;
-          if (!mustBeTrue(state, inBounds, mustBeTruef))
+          if (!mustBeTrue(state, inBounds, retFlag))
             return true;
-          if (mustBeTruef)
+          if (retFlag)
             return false;
         }
       }
-      bool mustBeTruef;
-      if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), mustBeTruef))
+      if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), retFlag))
         return true;
-      if (mustBeTruef)
+      if (retFlag)
         break;
     }
     // search forwards
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
-      bool mustBeTruef;
-      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), mustBeTruef))
+      bool retFlag;
+      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), retFlag))
         return true;
-      if (mustBeTruef)
+      if (retFlag)
         break;
       // XXX I think there is some query wasteage here?
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      bool mayBeTruef;
-      if (!mayBeTrue(state, inBounds, mayBeTruef))
+      if (!mayBeTrue(state, inBounds, retFlag))
         return true;
-      if (mayBeTruef) {
+      if (retFlag) {
         rl.push_back(*oi);
         // fast path check
         if (rl.size()==1) {
-          bool mustBeTruef;
-          if (!mustBeTrue(state, inBounds, mustBeTruef))
+          if (!mustBeTrue(state, inBounds, retFlag))
             return true;
-          if (mustBeTruef)
+          if (retFlag)
             return false;
         }
       }
@@ -1254,33 +1250,30 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       --oi;
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      bool mayBeTruef;
-      if (!mayBeTrue(state, inBounds, mayBeTruef))
+      bool retFlag;
+      if (!mayBeTrue(state, inBounds, retFlag))
         goto truelab;
-      if (mayBeTruef) {
+      if (retFlag) {
         op = *oi;
         goto nextlab;
-      } else {
-        bool mustBeTruef;
-        if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), mustBeTruef))
-          goto truelab;
-        if (mustBeTruef)
-          break;
       }
+      if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), retFlag))
+        goto truelab;
+      if (retFlag)
+        break;
     }
     // search forwards
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
-      bool mustBeTruef;
-      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), mustBeTruef))
+      bool retFlag;
+      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), retFlag))
         goto truelab;
-      if (mustBeTruef)
+      if (retFlag)
         break;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      bool mayBeTruef;
-      if (!mayBeTrue(state, inBounds, mayBeTruef))
+      if (!mayBeTrue(state, inBounds, retFlag))
         goto truelab;
-      if (mayBeTruef) {
+      if (retFlag) {
         op = *oi;
         goto nextlab;
       }
