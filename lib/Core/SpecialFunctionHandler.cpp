@@ -200,8 +200,8 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state, ref<Expr> add
   ref<ConstantExpr> address = cast<ConstantExpr>(addressExpr);
   if (!state.resolveOne(address, op))
     assert(0 && "XXX out of bounds / multiple resolution unhandled");
-  bool res __attribute__ ((unused));
-  assert((executor.mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr())) == 1) && "XXX interior pointer unhandled");
+  if (executor.mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr())) != 1)
+    assert(0 && "XXX interior pointer unhandled");
   const MemoryObject *mo = op.first;
   const ObjectState *os = op.second;
 
@@ -420,14 +420,9 @@ void SpecialFunctionHandler::handleCheckMemoryAccess(ExecutionState &state, KIns
     executor.terminateStateOnError(state, "check_memory_access requires constant args", "user.err");
   } else {
     ObjectPair op; 
-    if (!state.resolveOne(cast<ConstantExpr>(address), op)) {
+    if (!state.resolveOne(cast<ConstantExpr>(address), op)
+     || !op.first->getBoundsCheckPointer(address, cast<ConstantExpr>(size)->getZExtValue())->isTrue())
       executor.terminateStateOnError(state, "check_memory_access: memory error", "ptr.err", executor.getAddressInfo(state, address));
-    } else {
-      ref<Expr> chk = op.first->getBoundsCheckPointer(address, cast<ConstantExpr>(size)->getZExtValue());
-      if (!chk->isTrue()) {
-        executor.terminateStateOnError(state, "check_memory_access: memory error", "ptr.err", executor.getAddressInfo(state, address));
-      }
-    }
   }
 }
 
@@ -480,8 +475,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state, KInstruct
     } 
 
     // FIXME: Type coercion should be done consistently somewhere.
-    int res =
-      executor.mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1], Context::get().getPointerWidth()), mo->getSizeExpr()));
+    int res = executor.mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1], Context::get().getPointerWidth()), mo->getSizeExpr()));
     assert(res != -1 && "FIXME: Unhandled solver failure");
     if (res) {
       executor.executeMakeSymbolic(*s, mo, name);
