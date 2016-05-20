@@ -1061,19 +1061,6 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
   }
 }
 
-bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result) {
-  uint64_t address = addr->getZExtValue();
-  MemoryObject hack(address);
-  if (const MemoryMap::value_type *res = objects.lookup_previous(&hack)) {
-    const MemoryObject *mo = res->first;
-    if ((mo->size==0 && address==mo->address) || (address - mo->address < mo->size)) {
-      result = *res;
-      return true;
-    }
-  }
-  return false;
-}
-
 bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl)
 {
   int retFlag = 0;
@@ -1155,6 +1142,19 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
 retlab:
   if (retFlag == -1)
     return true;
+  return false;
+}
+
+bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result) {
+  uint64_t address = addr->getZExtValue();
+  MemoryObject hack(address);
+  if (const MemoryMap::value_type *res = objects.lookup_previous(&hack)) {
+    const MemoryObject *mo = res->first;
+    if ((mo->size==0 && address==mo->address) || (address - mo->address < mo->size)) {
+      result = *res;
+      return true;
+    }
+  }
   return false;
 }
 
