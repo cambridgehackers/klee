@@ -1064,11 +1064,7 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
 bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl)
 {
   int retFlag = 0;
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
-    ObjectPair res;
-    if (state.resolveOne(CE, res))
-      rl.push_back(res);
-  } else {
+  if (!dyn_cast<ConstantExpr>(address)) {
     TimerStatIncrementer timer(stats::resolveTime);
     // XXX in general this isn't exactly what we want... for
     // a multiple resolution case (or for example, a \in {b,c,0})
@@ -1138,6 +1134,10 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
         }
       }
     }
+  } else {
+    ObjectPair res;
+    if (state.resolveOne(dyn_cast<ConstantExpr>(address), res))
+      rl.push_back(res);
   }
 retlab:
   if (retFlag == -1)
@@ -1158,7 +1158,8 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */) {
+void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */)
+{
   Expr::Width type = (isWrite ? value->getWidth() : getWidthForLLVMType(target->inst->getType()));
   unsigned bytes = Expr::getMinBytesForWidth(type);
   // fast path: single in-bounds resolution
