@@ -76,10 +76,8 @@ void SeedInfo::patchSeed(const ExecutionState &state, ref<Expr> condition, Execu
     Assignment::bindings_ty::iterator it2 = assignment.bindings.find(array);
     if (it2 != assignment.bindings.end()) {
       ref<Expr> isSeed = EqExpr::create(read, ConstantExpr::alloc(it2->second[i], Expr::Int8));
-      bool res;
-      bool success = solver->mustBeFalse(tmp, isSeed, res);
-      assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
+      int res = solver->mustBeFalse(tmp, isSeed);
+      assert(res != -1 && "FIXME: Unhandled solver failure");
       if (res) {
         ref<ConstantExpr> value;
         bool success = solver->solveGetValue(tmp, read, value);
@@ -91,10 +89,8 @@ void SeedInfo::patchSeed(const ExecutionState &state, ref<Expr> condition, Execu
         tmp.addConstraint(isSeed);
     }
   } 
-  bool res;
-  bool success = solver->mayBeTrue(state, assignment.evaluate(condition), res);
-  assert(success && "FIXME: Unhandled solver failure");
-  (void) success;
+  int res = solver->mayBeTrue(state, assignment.evaluate(condition));
+  assert(res != -1 && "FIXME: Unhandled solver failure");
   if (res)
     return; 
   // We could still do a lot better than this, for example by looking at
@@ -105,10 +101,8 @@ void SeedInfo::patchSeed(const ExecutionState &state, ref<Expr> condition, Execu
     for (unsigned i=0; i<array->size; ++i) {
       ref<Expr> read = ReadExpr::create(UpdateList(array, 0), ConstantExpr::alloc(i, Expr::Int32));
       ref<Expr> isSeed = EqExpr::create(read, ConstantExpr::alloc(it->second[i], Expr::Int8));
-      bool res;
-      bool success = solver->mustBeFalse(tmp, isSeed, res);
-      assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
+      int res = solver->mustBeFalse(tmp, isSeed);
+      assert(res != -1 && "FIXME: Unhandled solver failure");
       if (res) {
         ref<ConstantExpr> value;
         bool success = solver->solveGetValue(tmp, read, value);
@@ -122,11 +116,9 @@ void SeedInfo::patchSeed(const ExecutionState &state, ref<Expr> condition, Execu
   } 
 #ifndef NDEBUG
   {
-    bool res;
-    bool success = 
-      solver->mayBeTrue(state, assignment.evaluate(condition), res);
-    assert(success && "FIXME: Unhandled solver failure");            
-    (void) success;
+    int res = 
+      solver->mayBeTrue(state, assignment.evaluate(condition));
+    assert(res != -1 && "FIXME: Unhandled solver failure");            
     assert(res && "seed patching failed");
   }
 #endif

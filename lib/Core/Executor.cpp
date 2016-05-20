@@ -292,14 +292,13 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     const MemoryObject *mo = state.symbolics[i].first;
     auto pi = mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
     for (; pi != pie; ++pi) {
-      bool retFlag;
       // Attempt to bound byte to constraints held in cexPreferences
-      bool success = mustBeTrue(tmp, Expr::createIsZero(*pi), retFlag);
+      int retFlag = mustBeTrue(tmp, Expr::createIsZero(*pi));
       // If it isn't possible to constrain this particular byte in the desired
       // way (normally this would mean that the byte can't be constrained to
       // be between 0 and 127 without making the entire constraint list UNSAT)
       // then just continue on to the next byte.
-      if (!success) break;
+      if (retFlag == -1) break;
       // If the particular constraint operated on in this iteration through
       // the loop isn't implied then add it to the list of constraints.
       if (!retFlag) tmp.addConstraint(*pi);
@@ -417,12 +416,15 @@ Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
   return osolver->getRange(Query(state.constraints, expr));
 }
 
-bool Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
+int Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr) {
+  bool result;
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
   bool success = osolver->mustBeTrue(Query(state.constraints, expr), result);
   stats::solverTime += (util::getWallTimeVal() - now).usec();
-  return success;
+  if (!success)
+      return -1;
+  return (int)result;
 }
 
 bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
@@ -614,9 +616,8 @@ void Executor::executeAddConstraint(ExecutionState &state, ref<Expr> condition) 
   if (it != seedMap.end()) {
     bool warn = false;
     for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
-      bool retFlag;
-      bool success = mustBeFalse(state, siit->assignment.evaluate(condition), retFlag);
-      assert(success && "FIXME: Unhandled solver failure");
+      int retFlag = mustBeFalse(state, siit->assignment.evaluate(condition));
+      assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag) {
         siit->patchSeed(state, condition, this);
         warn = true;
@@ -671,10 +672,9 @@ ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
   ref<Expr> result = e;
   if (!isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
-    bool isTrue = false;
     osolver->setCoreSolverTimeout(0);
     if (solveGetValue(state, e, value)
-     && mustBeTrue(state, EqExpr::create(e, value), isTrue) && isTrue)
+     && mustBeTrue(state, EqExpr::create(e, value)) == 1)
       result = value;
     osolver->setCoreSolverTimeout(0);
   }
@@ -1074,9 +1074,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     Expr::Width W = example->getWidth();
     while (example->Ugt(ConstantExpr::alloc(128, W))->isTrue()) {
       ref<ConstantExpr> tmp = example->LShr(ConstantExpr::alloc(1, W));
-      bool retFlag;
-      bool success = mayBeTrue(state, EqExpr::create(tmp, size), retFlag);
-      assert(success && "FIXME: Unhandled solver failure");
+      int retFlag = mayBeTrue(state, EqExpr::create(tmp, size));
+      assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (!retFlag)
         break;
       example = tmp;
@@ -1087,9 +1086,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       ref<ConstantExpr> tmp;
       bool success = solveGetValue(*fixedSize.second, size, tmp);
       assert(success && "FIXME: Unhandled solver failure");
-      bool retFlag;
-      success = mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), retFlag);
-      assert(success && "FIXME: Unhandled solver failure");
+      int retFlag = mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size));
+      assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag)
         executeAlloc(*fixedSize.second, tmp, isLocal, target, zeroMemory, reallocFrom);
       else {
@@ -1172,20 +1170,22 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
       --oi;
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      bool retFlag;
-      if (!mayBeTrue(state, inBounds, retFlag))
+      int retFlag = mayBeTrue(state, inBounds);
+      if (retFlag == -1)
         return true;
       if (retFlag) {
         rl.push_back(*oi);
         // fast path check
         if (rl.size()==1) {
-          if (!mustBeTrue(state, inBounds, retFlag))
+          retFlag = mustBeTrue(state, inBounds);
+          if (retFlag == -1)
             return true;
           if (retFlag)
             return false;
         }
       }
-      if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), retFlag))
+      retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
+      if (retFlag == -1)
         return true;
       if (retFlag)
         break;
@@ -1194,18 +1194,20 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      bool retFlag;
-      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), retFlag))
+      int retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()));
+      if (retFlag == -1)
         return true;
       if (retFlag)
         break;
-      if (!mayBeTrue(state, inBounds, retFlag))
+      retFlag = mayBeTrue(state, inBounds);
+      if (retFlag == -1)
         return true;
       if (retFlag) {
         rl.push_back(*oi);
         // fast path check
         if (rl.size()==1) {
-          if (!mustBeTrue(state, inBounds, retFlag))
+          retFlag = mustBeTrue(state, inBounds);
+          if (retFlag == -1)
             return true;
           if (retFlag)
             return false;
@@ -1246,14 +1248,15 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       --oi;
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      bool retFlag;
-      if (!mayBeTrue(state, inBounds, retFlag))
+      int retFlag = mayBeTrue(state, inBounds);
+      if (retFlag == -1)
         goto truelab;
       if (retFlag) {
         op = *oi;
         goto nextlab;
       }
-      if (!mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()), retFlag))
+      retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
+      if (retFlag == -1)
         goto truelab;
       if (retFlag)
         break;
@@ -1262,12 +1265,13 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      bool retFlag;
-      if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), retFlag))
+      int retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()));
+      if (retFlag == -1)
         goto truelab;
       if (retFlag)
         break;
-      if (!mayBeTrue(state, inBounds, retFlag))
+      retFlag = mayBeTrue(state, inBounds);
+      if (retFlag == -1)
         goto truelab;
       if (retFlag) {
         op = *oi;
@@ -1287,11 +1291,10 @@ nextlab:
     const MemoryObject *mo = op.first;
     ref<Expr> offset = mo->getOffsetExpr(address);
     ref<Expr> inBounds = mo->getBoundsCheckPointer(offset, bytes);
-    bool retFlag;
     osolver->setCoreSolverTimeout(0);
-    bool success = mustBeTrue(state, inBounds, retFlag);
+    int retFlag = mustBeTrue(state, inBounds);
     osolver->setCoreSolverTimeout(0);
-    if (!success) {
+    if (retFlag == -1) {
       state.pc = state.prevPC;
       terminateStateEarly(state, "Query timed out (bounds check).");
       return;
@@ -1542,20 +1545,19 @@ void Executor::executeInstruction(ExecutionState &state)
     } else {
       std::map<BasicBlock *, ref<Expr>> targets;
       ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
-      bool retFlag;
       for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e; ++i) {
         ref<Expr> match = EqExpr::create(cond, evalConstant(i.getCaseValue()));
         isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
-        bool success = mayBeTrue(state, match, retFlag);
-        assert(success && "FIXME: Unhandled solver failure");
+        int retFlag = mayBeTrue(state, match);
+        assert(retFlag != -1 && "FIXME: Unhandled solver failure");
         if (retFlag) {
           BasicBlock *caseSuccessor = i.getCaseSuccessor();
           auto it = targets.insert(std::make_pair(caseSuccessor, ConstantExpr::alloc(0, Expr::Bool))).first;
           it->second = OrExpr::create(match, it->second);
         }
       }
-      bool success = mayBeTrue(state, isDefault, retFlag);
-      assert(success && "FIXME: Unhandled solver failure");
+      int retFlag = mayBeTrue(state, isDefault);
+      assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag)
         targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
       std::vector<ref<Expr>> conditions;

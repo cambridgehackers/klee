@@ -262,16 +262,15 @@ public: //friends
   /// necessary. Note that this function breaks completeness and
   /// should generally be avoided.  /// /// \param purpose An identify string to printed in case of concretization.
   ref<klee::ConstantExpr> toConstant(ExecutionState &state, ref<Expr> e, const char *purpose);
-  bool mustBeTrue(const ExecutionState&, ref<Expr>, bool &result);
-  bool mustBeFalse(const ExecutionState& state, ref<Expr> expr, bool &result) {
-    return mustBeTrue(state, Expr::createIsZero(expr), result);
+  int mustBeTrue(const ExecutionState&, ref<Expr>);
+  int mustBeFalse(const ExecutionState& state, ref<Expr> expr) {
+    return mustBeTrue(state, Expr::createIsZero(expr));
   }
-  bool mayBeTrue(const ExecutionState& state, ref<Expr> expr, bool &result) {
-    bool res;
-    if (!mustBeFalse(state, expr, res))
-      return false;
-    result = !res;
-    return true;
+  bool mayBeTrue(const ExecutionState& state, ref<Expr> expr) {
+    int res = mustBeFalse(state, expr);
+    if (res == -1)
+      return -1;
+    return 1-res;
   }
   bool solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array = 0);

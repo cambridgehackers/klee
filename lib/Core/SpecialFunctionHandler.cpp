@@ -201,7 +201,7 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state, ref<Expr> add
   if (!state.resolveOne(address, op))
     assert(0 && "XXX out of bounds / multiple resolution unhandled");
   bool res __attribute__ ((unused));
-  assert(executor.mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr()), res) && res && "XXX interior pointer unhandled");
+  assert((executor.mustBeTrue(state, EqExpr::create(address, op.first->getBaseExpr())) == 1) && "XXX interior pointer unhandled");
   const MemoryObject *mo = op.first;
   const ObjectState *os = op.second;
 
@@ -341,9 +341,8 @@ void SpecialFunctionHandler::handlePrintRange(ExecutionState &state, KInstructio
     ref<ConstantExpr> value;
     bool success __attribute__ ((unused)) = executor.solveGetValue(state, arguments[1], value);
     assert(success && "FIXME: Unhandled solver failure");
-    bool res;
-    success = executor.mustBeTrue(state, EqExpr::create(arguments[1], value), res);
-    assert(success && "FIXME: Unhandled solver failure");
+    int res = executor.mustBeTrue(state, EqExpr::create(arguments[1], value));
+    assert(res != -1 && "FIXME: Unhandled solver failure");
     if (res) {
       llvm::errs() << " == " << value;
     } else { 
@@ -481,11 +480,9 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state, KInstruct
     } 
 
     // FIXME: Type coercion should be done consistently somewhere.
-    bool res;
-    bool success __attribute__ ((unused)) =
-      executor.mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1], Context::get().getPointerWidth()), mo->getSizeExpr()), res);
-    assert(success && "FIXME: Unhandled solver failure");
-    
+    int res =
+      executor.mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1], Context::get().getPointerWidth()), mo->getSizeExpr()));
+    assert(res != -1 && "FIXME: Unhandled solver failure");
     if (res) {
       executor.executeMakeSymbolic(*s, mo, name);
     } else {      
