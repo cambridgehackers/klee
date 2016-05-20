@@ -1335,9 +1335,8 @@ nextlab:
   for (auto i = rl.begin(), ie = rl.end(); i != ie; ++i) {
     const MemoryObject *mo = i->first;
     ref<Expr> offset = mo->getOffsetExpr(address);
-    ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     const ObjectState *os = i->second;
-    StatePair branches = stateFork(*unbound, inBounds, true);
+    StatePair branches = stateFork(*unbound, mo->getBoundsCheckPointer(address, bytes), true);
     // bound can be 0 on failure or overlapped
     if (ExecutionState *bound = branches.first) {
       if (isWrite) {
@@ -1457,79 +1456,78 @@ void Executor::executeInstruction(ExecutionState &state)
   switch (opcode) {
     // Control flow
   case Instruction::Ret: {
-    ReturnInst *ri = cast<ReturnInst>(i);
     KInstIterator kcaller = state.stack.back().caller;
     Instruction *caller = kcaller ? kcaller->inst : 0;
+    if (state.stack.size() <= 1) {
+      assert(!caller && "caller set on initial stack frame");
+      terminateStateOnExit(state);
+      break;
+    }
+    ReturnInst *ri = cast<ReturnInst>(i);
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
     if (!isVoidReturn)
       result = eval(ki, 0, state);
-    if (state.stack.size() <= 1) {
-      assert(!caller && "caller set on initial stack frame");
-      terminateStateOnExit(state);
-    } else {
-      state.popFrame();
-      if (InvokeInst *ii = dyn_cast<InvokeInst>(caller))
-        transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
-      else {
-        state.pc = kcaller;
-        ++state.pc;
-      }
-      if (!isVoidReturn) {
-        LLVM_TYPE_Q Type *t = caller->getType();
-        if (t != Type::getVoidTy(getGlobalContext())) {
-          // may need to do coercion due to bitcasts
-          Expr::Width from = result->getWidth();
-          Expr::Width to = getWidthForLLVMType(t);
-          if (from != to) {
-            CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller)));
-            // XXX need to check other param attrs ?
-            if (cs.paramHasAttr(0, llvm::Attribute::SExt))
-              result = SExtExpr::create(result, to);
-            else
-              result = ZExtExpr::create(result, to);
-          }
-          bindLocal(kcaller, state, result);
-        }
-      } else if (!caller->use_empty())
-        terminateStateOnExecError(state, "return void when caller expected a result");
-        // check that return value has no users instead of checking the type, since C defaults to returning int for undeclared fns
+    state.popFrame();
+    if (InvokeInst *ii = dyn_cast<InvokeInst>(caller))
+      transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
+    else {
+      state.pc = kcaller;
+      ++state.pc;
     }
+    if (!isVoidReturn) {
+      LLVM_TYPE_Q Type *t = caller->getType();
+      if (t != Type::getVoidTy(getGlobalContext())) {
+        // may need to do coercion due to bitcasts
+        Expr::Width from = result->getWidth();
+        Expr::Width to = getWidthForLLVMType(t);
+        if (from != to) {
+          CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller)));
+          // XXX need to check other param attrs ?
+          if (cs.paramHasAttr(0, llvm::Attribute::SExt))
+            result = SExtExpr::create(result, to);
+          else
+            result = ZExtExpr::create(result, to);
+        }
+        bindLocal(kcaller, state, result);
+      }
+    } else if (!caller->use_empty())
+      terminateStateOnExecError(state, "return void when caller expected a result");
+      // check that return value has no users instead of checking the type, since C defaults to returning int for undeclared fns
     break;
   }
   case Instruction::Br: {
     BranchInst *bi = cast<BranchInst>(i);
-    if (bi->isUnconditional())
+    if (bi->isUnconditional()) {
       transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), state);
-    else {
-      // FIXME: Find a way that we don't have this hidden dependency.
-      assert(bi->getCondition() == bi->getOperand(0) && "Wrong operand index!");
-      ref<Expr> cond = eval(ki, 0, state);
-      Executor::StatePair branches = stateFork(state, cond, false);
-      ExecutionState *visitedTrue = branches.first, *visitedFalse = branches.second;
-      unsigned id = theStatisticManager->getIndex();
-      uint64_t hasTrue = theStatisticManager->getIndexedValue(stats::trueBranches, id);
-      uint64_t hasFalse = theStatisticManager->getIndexedValue(stats::falseBranches, id);
-      if (visitedTrue && !hasTrue) {
-        visitedTrue->coveredNew = true;
-        visitedTrue->instsSinceCovNew = 1;
-        ++stats::trueBranches;
-        if (hasFalse) { ++fullBranches; --partialBranches; }
-        else ++partialBranches;
-        hasTrue = 1;
-      }
-      if (visitedFalse && !hasFalse) {
-        visitedFalse->coveredNew = true;
-        visitedFalse->instsSinceCovNew = 1;
-        ++stats::falseBranches;
-        if (hasTrue) { ++fullBranches; --partialBranches; }
-        else ++partialBranches;
-      }
-      if (branches.first)
-        transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
-      if (branches.second)
-        transferToBasicBlock(bi->getSuccessor(1), bi->getParent(), *branches.second);
+      break;
     }
+    // FIXME: Find a way that we don't have this hidden dependency.
+    assert(bi->getCondition() == bi->getOperand(0) && "Wrong operand index!");
+    Executor::StatePair branches = stateFork(state, eval(ki, 0, state), false);
+    ExecutionState *visitedTrue = branches.first, *visitedFalse = branches.second;
+    unsigned id = theStatisticManager->getIndex();
+    uint64_t hasTrue = theStatisticManager->getIndexedValue(stats::trueBranches, id);
+    uint64_t hasFalse = theStatisticManager->getIndexedValue(stats::falseBranches, id);
+    if (visitedTrue && !hasTrue) {
+      visitedTrue->coveredNew = true;
+      visitedTrue->instsSinceCovNew = 1;
+      ++stats::trueBranches;
+      if (hasFalse) { ++fullBranches; --partialBranches; }
+      else ++partialBranches;
+      hasTrue = 1;
+    }
+    if (visitedFalse && !hasFalse) {
+      visitedFalse->coveredNew = true;
+      visitedFalse->instsSinceCovNew = 1;
+      ++stats::falseBranches;
+      if (hasTrue) { ++fullBranches; --partialBranches; }
+      else ++partialBranches;
+    }
+    if (branches.first)
+      transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
+    if (branches.second)
+      transferToBasicBlock(bi->getSuccessor(1), bi->getParent(), *branches.second);
     break;
   }
   case Instruction::Switch: {
