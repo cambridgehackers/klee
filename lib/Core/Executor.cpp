@@ -218,15 +218,14 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
 /// satisfy LLVM's termination requirement.
 static bool instructionIsCoverable(Instruction *i) {
   if (i->getOpcode() == Instruction::Unreachable) {
-    BasicBlock *bb = i->getParent();
     BasicBlock::iterator it(i);
-    if (it != bb->begin()) {
+    if (it != i->getParent()->begin()) {
       Instruction *prev = --it;
       if (isa<CallInst>(prev) || isa<InvokeInst>(prev)) {
         CallSite cs(prev);
-        Function *target = getDirectCallTarget(cs);
-        if (target && target->doesNotReturn())
-          return false;
+        if (Function *target = getDirectCallTarget(cs))
+          if (target->doesNotReturn())
+            return false;
       }
     }
   }
@@ -298,13 +297,13 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       // way (normally this would mean that the byte can't be constrained to
       // be between 0 and 127 without making the entire constraint list UNSAT)
       // then just continue on to the next byte.
-      if (retFlag == -1) break;
+      if (retFlag == -1) goto topnext;
       // If the particular constraint operated on in this iteration through
       // the loop isn't implied then add it to the list of constraints.
       if (!retFlag) tmp.addConstraint(*pi);
     }
-    if (pi!=pie) break;
   }
+topnext:
   std::vector< std::vector<unsigned char>> values;
   std::vector<const Array*> objects;
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
