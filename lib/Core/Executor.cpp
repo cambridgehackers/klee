@@ -1076,10 +1076,10 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     Expr::Width W = example->getWidth();
     while (example->Ugt(ConstantExpr::alloc(128, W))->isTrue()) {
       ref<ConstantExpr> tmp = example->LShr(ConstantExpr::alloc(1, W));
-      bool res;
-      bool success = mayBeTrue(state, EqExpr::create(tmp, size), res);
+      bool retFlag;
+      bool success = mayBeTrue(state, EqExpr::create(tmp, size), retFlag);
       assert(success && "FIXME: Unhandled solver failure");
-      if (!res)
+      if (!retFlag)
         break;
       example = tmp;
     }
@@ -1173,7 +1173,6 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
     while (oi!=begin) {
       --oi;
       const MemoryObject *mo = oi->first;
-      // XXX I think there is some query wasteage here?
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       bool retFlag;
       if (!mayBeTrue(state, inBounds, retFlag))
@@ -1196,13 +1195,12 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
     // search forwards
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
+      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       bool retFlag;
       if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), retFlag))
         return true;
       if (retFlag)
         break;
-      // XXX I think there is some query wasteage here?
-      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       if (!mayBeTrue(state, inBounds, retFlag))
         return true;
       if (retFlag) {
@@ -1265,12 +1263,12 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     // search forwards
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
+      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       bool retFlag;
       if (!mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()), retFlag))
         goto truelab;
       if (retFlag)
         break;
-      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       if (!mayBeTrue(state, inBounds, retFlag))
         goto truelab;
       if (retFlag) {
@@ -1290,16 +1288,17 @@ nextlab:
   if (success) {
     const MemoryObject *mo = op.first;
     ref<Expr> offset = mo->getOffsetExpr(address);
-    bool inBounds;
+    ref<Expr> inBounds = mo->getBoundsCheckPointer(offset, bytes);
+    bool retFlag;
     osolver->setCoreSolverTimeout(0);
-    bool success = mustBeTrue(state, mo->getBoundsCheckOffset(offset, bytes), inBounds);
+    bool success = mustBeTrue(state, inBounds, retFlag);
     osolver->setCoreSolverTimeout(0);
     if (!success) {
       state.pc = state.prevPC;
       terminateStateEarly(state, "Query timed out (bounds check).");
       return;
     }
-    if (inBounds) {
+    if (retFlag) {
       const ObjectState *os = op.second;
       if (isWrite) {
         if (os->readOnly)
@@ -1336,8 +1335,8 @@ nextlab:
   ExecutionState *unbound = &state;
   for (auto i = rl.begin(), ie = rl.end(); i != ie; ++i) {
     const MemoryObject *mo = i->first;
-    const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
+    const ObjectState *os = i->second;
     StatePair branches = stateFork(*unbound, inBounds, true);
     // bound can be 0 on failure or overlapped
     if (ExecutionState *bound = branches.first) {
@@ -1549,25 +1548,22 @@ void Executor::executeInstruction(ExecutionState &state)
     } else {
       std::map<BasicBlock *, ref<Expr>> targets;
       ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
+      bool retFlag;
       for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e; ++i) {
         ref<Expr> value = evalConstant(i.getCaseValue());
         ref<Expr> match = EqExpr::create(cond, value);
         isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
-        bool result;
-        bool success = mayBeTrue(state, match, result);
+        bool success = mayBeTrue(state, match, retFlag);
         assert(success && "FIXME: Unhandled solver failure");
-        (void)success;
-        if (result) {
+        if (retFlag) {
           BasicBlock *caseSuccessor = i.getCaseSuccessor();
           auto it = targets.insert(std::make_pair(caseSuccessor, ConstantExpr::alloc(0, Expr::Bool))).first;
           it->second = OrExpr::create(match, it->second);
         }
       }
-      bool res;
-      bool success = mayBeTrue(state, isDefault, res);
+      bool success = mayBeTrue(state, isDefault, retFlag);
       assert(success && "FIXME: Unhandled solver failure");
-      (void)success;
-      if (res)
+      if (retFlag)
         targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
       std::vector<ref<Expr>> conditions;
       for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it)
