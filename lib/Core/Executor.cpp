@@ -338,7 +338,7 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
   stats::solverTime += (util::getWallTimeVal() - now).usec();
   if (!success) {
     current.pc = current.prevPC;
-    terminateStateEarly(current, "Query timed out (fork).");
+    terminateStateCase(current, "Query timed out (fork).\n", "early");
     return StatePair(0, 0);
   }
 
@@ -961,14 +961,6 @@ void Executor::terminateStateCase(ExecutionState &state, const char *err, const 
   }
 }
 
-void Executor::terminateStateEarly(ExecutionState &state, const Twine &message) {
-  terminateStateCase(state, (message + "\n").str().c_str(), "early");
-}
-
-void Executor::terminateStateOnExit(ExecutionState &state) {
-  terminateStateCase(state, 0, 0);
-}
-
 void Executor::terminateStateOnError(ExecutionState &state, const llvm::Twine &messaget, const char *suffix, const llvm::Twine &info) {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   std::string message = messaget.str();
@@ -1246,7 +1238,7 @@ nextlab:
     osolver->setCoreSolverTimeout(0);
     if (retFlag == -1) {
       state.pc = state.prevPC;
-      terminateStateEarly(state, "Query timed out (bounds check).");
+      terminateStateCase(state, "Query timed out (bounds check).\n", "early");
       return;
     }
     if (retFlag) {
@@ -1306,7 +1298,7 @@ nextlab:
   // XXX should we distinguish out of bounds and overlapped cases?
   if (unbound) {
     if (incomplete)
-      terminateStateEarly(*unbound, "Query timed out (resolve).");
+      terminateStateCase(*unbound, "Query timed out (resolve).\n", "early");
     else
       terminateStateOnError(*unbound, "memory error: out of bound pointer", "ptr.err", getAddressInfo(*unbound, address));
   }
@@ -1340,8 +1332,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
     auto it = seedMap.find(&state);
     if (it!=seedMap.end())        // In seed mode we need to add this as a binding
       for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
-        SeedInfo &si = *siit;
-        KTestObject *obj = si.getNextInput(mo, false);
+        KTestObject *obj = siit->getNextInput(mo, false);
         if (!obj) {
             terminateStateOnError(state, "ran out of inputs during seeding", "user.err");
             break;
@@ -1352,7 +1343,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo
             terminateStateOnError(state, msg.str(), "user.err");
             break;
         }
-        std::vector<unsigned char> &values = si.assignment.bindings[array];
+        std::vector<unsigned char> &values = siit->assignment.bindings[array];
         values.insert(values.begin(), obj->bytes, obj->bytes + std::min(obj->numBytes, mo->size));
       }
 }
@@ -1405,7 +1396,7 @@ void Executor::executeInstruction(ExecutionState &state)
     Instruction *caller = kcaller ? kcaller->inst : 0;
     if (state.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
-      terminateStateOnExit(state);
+      terminateStateCase(state, 0, 0);
       break;
     }
     ReturnInst *ri = cast<ReturnInst>(i);

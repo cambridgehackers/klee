@@ -245,7 +245,6 @@ private:
         state.stack.back().locals[i] = arguments[i];
   }
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce);
-  void terminateStateEarly(ExecutionState &state, const llvm::Twine &message);
   template <typename TypeIt>
   void computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie);
   void prepareModule(const Interpreter::ModuleOptions &opts);
@@ -317,11 +316,10 @@ public: //friends
   /// Get textual information regarding a memory address.
   std::string getAddressInfo(ExecutionState &state, ref<Expr> address);
   void terminateStateCase(ExecutionState &state, const char *err, const char *suffix);
-  void terminateStateOnError(ExecutionState &state, const llvm::Twine &message, const char *suffix, const llvm::Twine &longMessage="");
-  void terminateStateOnExecError(ExecutionState &state, const llvm::Twine &message, const llvm::Twine &info="") {
-    terminateStateOnError(state, message, "exec.err", info);
+  void terminateStateOnError(ExecutionState &state, const llvm::Twine &message, const char *suffix, const llvm::Twine &longMessage = "");
+  void terminateStateOnExecError(ExecutionState &state, const llvm::Twine &message) {
+    terminateStateOnError(state, message, "exec.err", "");
   }
-  void terminateStateOnExit(ExecutionState &state);
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();
   // XXX should just be moved out to utility module
