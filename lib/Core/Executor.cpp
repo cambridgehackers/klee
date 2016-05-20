@@ -1210,7 +1210,7 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
           if (retFlag == -1)
             return true;
           if (retFlag)
-            return false;
+            break;
         }
       }
     }
@@ -1334,6 +1334,7 @@ nextlab:
   ExecutionState *unbound = &state;
   for (auto i = rl.begin(), ie = rl.end(); i != ie; ++i) {
     const MemoryObject *mo = i->first;
+    ref<Expr> offset = mo->getOffsetExpr(address);
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     const ObjectState *os = i->second;
     StatePair branches = stateFork(*unbound, inBounds, true);
@@ -1343,9 +1344,9 @@ nextlab:
         if (os->readOnly)
           terminateStateOnError(*bound, "memory error: object read only", "readonly.err");
         else
-          bound->getWriteable(mo, os)->write(mo->getOffsetExpr(address), value);
+          bound->getWriteable(mo, os)->write(offset, value);
       } else {
-        ref<Expr> result = os->read(mo->getOffsetExpr(address), type);
+        ref<Expr> result = os->read(offset, type);
         bindLocal(target, *bound, result);
       }
     }
