@@ -687,7 +687,7 @@ static std::set<std::string> okExternals(okExternalsList, okExternalsList + (siz
 
 void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *function, std::vector<ref<Expr>> &arguments) {
   Instruction *i = ki->inst;
-  if (function && function->isDeclaration()) {
+  if (function->isDeclaration()) {
     switch(function->getIntrinsicID()) {
       // state may be destroyed by this call, cannot touch
     case Intrinsic::not_intrinsic: {
@@ -807,7 +807,7 @@ overlab:
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = functionMap[function];
-    state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
+    state.pushFrame(state.prevPC, function, kf->numRegisters);
     state.pc = kf->instructions;
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
@@ -844,19 +844,20 @@ overlab:
       ObjectState *os = bindObjectInState(state, mo, true);
       unsigned offset = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
+        unsigned tsize;
         // FIXME: This is really specific to the architecture, not the pointer
         // size. This happens to work fir x86-32 and x86-64, however.
-        if (WordSize == Expr::Int32) {
-          os->write(offset, arguments[i]);
-          offset += Expr::getMinBytesForWidth(arguments[i]->getWidth());
-        } else {
+        if (WordSize == Expr::Int32)
+          tsize = Expr::getMinBytesForWidth(arguments[i]->getWidth());
+        else {
           assert(WordSize == Expr::Int64 && "Unknown word size!");
           Expr::Width argWidth = arguments[i]->getWidth();
           if (argWidth > Expr::Int64)
              offset = llvm::RoundUpToAlignment(offset, 16);
-          os->write(offset, arguments[i]);
-          offset += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
+          tsize = llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
         }
+        os->write(offset, arguments[i]);
+        offset += tsize;
       }
     }
     getArgumentCell(state, kf, function->arg_size(), arguments);
