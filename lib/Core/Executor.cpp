@@ -643,10 +643,10 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       return Expr::createPointer(0);
   else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c))
       return ConstantExpr::create(0, getWidthForLLVMType(c->getType()));
-  else if (const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c)) {
+  else if (const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c))
       for (unsigned i = 0, e = cds->getNumElements(); i != e; ++i)
         kids.push_back(evalConstant(cds->getElementAsConstant(i)));
-  } else if (const ConstantStruct *cs = dyn_cast<ConstantStruct>(c)) {
+  else if (const ConstantStruct *cs = dyn_cast<ConstantStruct>(c)) {
       const StructLayout *sl = targetData->getStructLayout(cs->getType());
       for (unsigned i = cs->getNumOperands(); i != 0; --i) {
         unsigned op = i-1;
@@ -659,10 +659,9 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
         }
         kids.push_back(kid);
       }
-  } else if (const ConstantArray *ca = dyn_cast<ConstantArray>(c)){
+  } else if (const ConstantArray *ca = dyn_cast<ConstantArray>(c))
       for (unsigned i = ca->getNumOperands(); i != 0; --i)
         kids.push_back(evalConstant(ca->getOperand(i - 1)));
-  }
   else
       llvm::report_fatal_error("invalid argument to evalConstant()");
   ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
@@ -736,13 +735,12 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
 static const char *okExternalsList[] = { "printf", "fprintf", "puts", "getpid" };
 static std::set<std::string> okExternals(okExternalsList, okExternalsList + (sizeof(okExternalsList)/sizeof(okExternalsList[0])));
 
-void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f, std::vector<ref<Expr>> &arguments) {
+void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *function, std::vector<ref<Expr>> &arguments) {
   Instruction *i = ki->inst;
-  if (f && f->isDeclaration()) {
-    switch(f->getIntrinsicID()) {
+  if (function && function->isDeclaration()) {
+    switch(function->getIntrinsicID()) {
       // state may be destroyed by this call, cannot touch
     case Intrinsic::not_intrinsic: {
-      Function *function = f;
       if (specialFunctionHandler->handle(state, function, ki, arguments))
         break;
       // normal external function handling path
@@ -789,9 +787,9 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       klee_warning("%s", messageOs.str().c_str());
       // MCJIT needs unique module, so we create quick external dispatcher for call.
       // reference: // http://blog.llvm.org/2013/07/using-mcjit-with-kaleidoscope-tutorial.html
-      ExternalDispatcher *e = new ExternalDispatcher();
-      bool success = e->executeCall(function, ki->inst, args);
-      delete e;
+      ExternalDispatcher *extDisp = new ExternalDispatcher();
+      bool success = extDisp->executeCall(function, ki->inst, args);
+      delete extDisp;
       if (!success) {
           terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
           break;
@@ -806,17 +804,15 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
               terminateStateOnError(state, "external modified read-only object", "external.err");
               break;
             }
-            else {
-              ObjectState *wos = state.getWriteable(mo, os);
-              memcpy(wos->concreteStore, address, mo->size);
-            }
+            ObjectState *wos = state.getWriteable(mo, os);
+            memcpy(wos->concreteStore, address, mo->size);
           }
         }
       }
       LLVM_TYPE_Q Type *resultType = ki->inst->getType();
       if (resultType != Type::getVoidTy(getGlobalContext())) {
-        ref<Expr> e = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
-        bindLocal(ki, state, e);
+        ref<Expr> fromMem = ConstantExpr::fromMemory((void*) args, getWidthForLLVMType(resultType));
+        bindLocal(ki, state, fromMem);
       }
     }
 overlab:
@@ -828,9 +824,9 @@ overlab:
       // FIXME: This is really specific to the architecture, not the pointer
       // size. This happens to work fir x86-32 and x86-64, however.
       Expr::Width WordSize = Context::get().getPointerWidth();
-      if (WordSize == Expr::Int32) {
+      if (WordSize == Expr::Int32)
         executeMemoryOperation(state, true, arguments[0], sf.varargs->getBaseExpr(), 0);
-      } else {
+      else {
         assert(WordSize == Expr::Int64 && "Unknown word size!");
         // X86-64 has quite complicated calling convention. However,
         // instead of implementing it, we can do a simple hack: just
@@ -852,7 +848,7 @@ overlab:
     case Intrinsic::vacopy: // va_copy should have been lowered.
       // FIXME: It would be nice to check for errors in the usage of this as // well.
     default:
-      klee_error("unknown intrinsic: %s", f->getName().data());
+      klee_error("unknown intrinsic: %s", function->getName().data());
     }
     if (InvokeInst *ii = dyn_cast<InvokeInst>(i))
       transferToBasicBlock(ii->getNormalDest(), i->getParent(), state);
@@ -861,25 +857,21 @@ overlab:
     // guess. This just done to avoid having to pass KInstIterator everywhere
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
-    KFunction *kf = functionMap[f];
+    KFunction *kf = functionMap[function];
     state.pushFrame(state.prevPC, kf->function, kf->numRegisters);
     state.pc = kf->instructions;
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
-    unsigned callingArgs = arguments.size(), funcArgs = f->arg_size();
-    if (!f->isVarArg()) {
+    unsigned callingArgs = arguments.size(), funcArgs = function->arg_size();
+    if (callingArgs < funcArgs) {
+      terminateStateOnError(state, "calling function with too few arguments", "user.err");
+      return;
+    }
+    if (!function->isVarArg()) {
       if (callingArgs > funcArgs)
-        klee_warning_once(f, "calling %s with extra arguments.", f->getName().data());
-      else if (callingArgs < funcArgs) {
-        terminateStateOnError(state, "calling function with too few arguments", "user.err");
-        return;
-      }
+        klee_warning_once(function, "calling %s with extra arguments.", function->getName().data());
     } else {
       Expr::Width WordSize = Context::get().getPointerWidth();
-      if (callingArgs < funcArgs) {
-        terminateStateOnError(state, "calling function with too few arguments", "user.err");
-        return;
-      }
       StackFrame &sf = state.stack.back();
       unsigned size = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -918,7 +910,7 @@ overlab:
         }
       }
     }
-    getArgumentCell(state, kf, f->arg_size(), arguments);
+    getArgumentCell(state, kf, function->arg_size(), arguments);
   }
 }
 
@@ -1004,7 +996,6 @@ void Executor::terminateStateCase(ExecutionState &state, const char *err, const 
 {
   interpreterHandler->processTestCase(state, err, suffix);
   interpreterHandler->incPathsExplored();
-
   auto it = addedStates.find(&state);
   if (it==addedStates.end()) {
     state.pc = state.prevPC;
