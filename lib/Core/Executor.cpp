@@ -292,9 +292,9 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     const MemoryObject *mo = state.symbolics[i].first;
     auto pi = mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
     for (; pi != pie; ++pi) {
-      bool lmustBeTrue;
+      bool retFlag;
       // Attempt to bound byte to constraints held in cexPreferences
-      bool success = mustBeTrue(tmp, Expr::createIsZero(*pi), lmustBeTrue);
+      bool success = mustBeTrue(tmp, Expr::createIsZero(*pi), retFlag);
       // If it isn't possible to constrain this particular byte in the desired
       // way (normally this would mean that the byte can't be constrained to
       // be between 0 and 127 without making the entire constraint list UNSAT)
@@ -302,7 +302,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
       if (!success) break;
       // If the particular constraint operated on in this iteration through
       // the loop isn't implied then add it to the list of constraints.
-      if (!lmustBeTrue) tmp.addConstraint(*pi);
+      if (!retFlag) tmp.addConstraint(*pi);
     }
     if (pi!=pie) break;
   }
@@ -614,10 +614,10 @@ void Executor::executeAddConstraint(ExecutionState &state, ref<Expr> condition) 
   if (it != seedMap.end()) {
     bool warn = false;
     for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
-      bool res;
-      bool success = mustBeFalse(state, siit->assignment.evaluate(condition), res);
+      bool retFlag;
+      bool success = mustBeFalse(state, siit->assignment.evaluate(condition), retFlag);
       assert(success && "FIXME: Unhandled solver failure");
-      if (res) {
+      if (retFlag) {
         siit->patchSeed(state, condition, this);
         warn = true;
       }
@@ -1087,10 +1087,10 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       ref<ConstantExpr> tmp;
       bool success = solveGetValue(*fixedSize.second, size, tmp);
       assert(success && "FIXME: Unhandled solver failure");
-      bool res;
-      success = mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), res);
+      bool retFlag;
+      success = mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size), retFlag);
       assert(success && "FIXME: Unhandled solver failure");
-      if (res)
+      if (retFlag)
         executeAlloc(*fixedSize.second, tmp, isLocal, target, zeroMemory, reallocFrom);
       else {
         // See if a *really* big value is possible. If so assume
@@ -1163,7 +1163,7 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
     MemoryMap::iterator end = state.objects.end();
     MemoryMap::iterator start = oi;
     // XXX in the common case we can save one query if we ask
-    // mustBeTrue before mayBeTrue for the first result. easy
+    // must BeTrue before may BeTrue for the first result. easy
     // to add I just want to have a nice symbolic test case first.
     // search backwards, start with one minus because this
     // is the object that address *should* be within, which means we
@@ -1544,8 +1544,7 @@ void Executor::executeInstruction(ExecutionState &state)
       ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
       bool retFlag;
       for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e; ++i) {
-        ref<Expr> value = evalConstant(i.getCaseValue());
-        ref<Expr> match = EqExpr::create(cond, value);
+        ref<Expr> match = EqExpr::create(cond, evalConstant(i.getCaseValue()));
         isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
         bool success = mayBeTrue(state, match, retFlag);
         assert(success && "FIXME: Unhandled solver failure");
