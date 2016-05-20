@@ -199,19 +199,6 @@ ObjectState *ExecutionState::getWriteable(const MemoryObject *mo, const ObjectSt
   }
 }
 
-bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result) {
-  uint64_t address = addr->getZExtValue();
-  MemoryObject hack(address);
-  if (const MemoryMap::value_type *res = objects.lookup_previous(&hack)) {
-    const MemoryObject *mo = res->first;
-    if ((mo->size==0 && address==mo->address) || (address - mo->address < mo->size)) {
-      result = *res;
-      return true;
-    }
-  }
-  return false;
-}
-
 /// Check for special cases where we statically know an instruction is
 /// uncoverable. Currently the case is an unreachable instruction
 /// following a noreturn call; the instruction is really only there to
@@ -672,9 +659,8 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     branch(state, conditions, branches);
     auto bit = branches.begin();
     for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
-      ExecutionState *es = *bit;
-      if (es)
-        bindLocal(target, *es, *vit);
+      if (*bit)
+        bindLocal(target, **bit, *vit);
       ++bit;
     }
   }
@@ -1075,6 +1061,19 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
   }
 }
 
+bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result) {
+  uint64_t address = addr->getZExtValue();
+  MemoryObject hack(address);
+  if (const MemoryMap::value_type *res = objects.lookup_previous(&hack)) {
+    const MemoryObject *mo = res->first;
+    if ((mo->size==0 && address==mo->address) || (address - mo->address < mo->size)) {
+      result = *res;
+      return true;
+    }
+  }
+  return false;
+}
+
 bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl)
 {
   int retFlag = 0;
@@ -1115,18 +1114,18 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       retFlag = mayBeTrue(state, inBounds);
-      if (retFlag == -1)
-        goto retlab;
-      if (retFlag) {
-        rl.push_back(*oi);
-        // fast path check
-        if (rl.size()==1) {
-          retFlag = mustBeTrue(state, inBounds);
-          if (retFlag)
-            goto retlab;
+      if (retFlag != -1) {
+        if (retFlag) {
+          rl.push_back(*oi);
+          // fast path check
+          if (rl.size()==1) {
+            retFlag = mustBeTrue(state, inBounds);
+            if (retFlag)
+              goto retlab;
+          }
         }
+        retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
       }
-      retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
       if (retFlag == -1)
         goto retlab;
       if (retFlag)
@@ -1223,7 +1222,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     goto nextlab;
     }
 truelab:
-    address = toConstant(state, address, "resolveOneS failure");
+    address = toConstant(state, address, "resolve OneS failure");
   }
   success = state.resolveOne(cast<ConstantExpr>(address), op);
 nextlab:
@@ -1501,9 +1500,8 @@ void Executor::executeInstruction(ExecutionState &state)
       branch(state, conditions, branches);
       auto bit = branches.begin();
       for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
-        ExecutionState *es = *bit;
-        if (es)
-          transferToBasicBlock(it->first, bb, *es);
+        if (*bit)
+          transferToBasicBlock(it->first, bb, **bit);
         ++bit;
       }
     }
