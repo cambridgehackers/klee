@@ -1134,6 +1134,7 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
 
 bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl)
 {
+  int retFlag = 0;
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address)) {
     ObjectPair res;
     if (state.resolveOne(CE, res))
@@ -1170,23 +1171,21 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
       --oi;
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      int retFlag = mayBeTrue(state, inBounds);
+      retFlag = mayBeTrue(state, inBounds);
       if (retFlag == -1)
-        return true;
+        goto retlab;
       if (retFlag) {
         rl.push_back(*oi);
         // fast path check
         if (rl.size()==1) {
           retFlag = mustBeTrue(state, inBounds);
-          if (retFlag == -1)
-            return true;
           if (retFlag)
-            return false;
+            goto retlab;
         }
       }
       retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
       if (retFlag == -1)
-        return true;
+        goto retlab;
       if (retFlag)
         break;
     }
@@ -1194,27 +1193,26 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      int retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()));
-      if (retFlag == -1)
-        return true;
+      retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()));
       if (retFlag)
         break;
       retFlag = mayBeTrue(state, inBounds);
       if (retFlag == -1)
-        return true;
+        break;
       if (retFlag) {
         rl.push_back(*oi);
         // fast path check
         if (rl.size()==1) {
           retFlag = mustBeTrue(state, inBounds);
-          if (retFlag == -1)
-            return true;
           if (retFlag)
             break;
         }
       }
     }
   }
+retlab:
+  if (retFlag == -1)
+    return true;
   return false;
 }
 
