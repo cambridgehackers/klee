@@ -318,7 +318,6 @@ printf("[%s:%d] name %s val \n", __FUNCTION__, __LINE__, state.symbolics[i].firs
 Executor::StatePair
 Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
-  auto it = seedMap.find(&current);
   osolver->setCoreSolverTimeout(0);
   sys::TimeValue now = util::getWallTimeVal();
 printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
@@ -350,6 +349,7 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
   falseState->coveredNew = false;
   falseState->coveredLines.clear(); 
   addedStates.insert(falseState);
+  auto it = seedMap.find(&current);
   if (it != seedMap.end()) {
     std::vector<SeedInfo> seeds = it->second;
     it->second.clear();
@@ -503,21 +503,21 @@ void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &condi
   TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
   assert(N);
-    stats::forks += N-1;
-    // XXX do proper balance or keep random?
-    result.push_back(&state);
-    for (unsigned i=1; i<N; ++i) {
-      ExecutionState *es = result[theRNG.getInt32() % i];
-      ExecutionState *ns = new ExecutionState(*es);
-      ns->coveredNew = false;
-      ns->coveredLines.clear(); 
-      addedStates.insert(ns);
-      result.push_back(ns);
-      es->ptreeNode->data = 0;
-      std::pair<PTreeNode*,PTreeNode*> res = processTree->split(es->ptreeNode, ns, es);
-      ns->ptreeNode = res.first;
-      es->ptreeNode = res.second;
-    }
+  stats::forks += N-1;
+  // XXX do proper balance or keep random?
+  result.push_back(&state);
+  for (unsigned i=1; i<N; ++i) {
+    ExecutionState *es = result[theRNG.getInt32() % i];
+    ExecutionState *ns = new ExecutionState(*es);
+    ns->coveredNew = false;
+    ns->coveredLines.clear(); 
+    addedStates.insert(ns);
+    result.push_back(ns);
+    es->ptreeNode->data = 0;
+    std::pair<PTreeNode*,PTreeNode*> res = processTree->split(es->ptreeNode, ns, es);
+    ns->ptreeNode = res.first;
+    es->ptreeNode = res.second;
+  }
   // redistribute seeds to match conditions, killing states if necessary (inefficient but simple).
   auto it = seedMap.find(&state);
   if (it != seedMap.end()) {
@@ -675,7 +675,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
 static const char *okExternalsList[] = { "printf", "fprintf", "puts", "getpid" };
 static std::set<std::string> okExternals(okExternalsList, okExternalsList + (sizeof(okExternalsList)/sizeof(okExternalsList[0])));
 
-void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *function, std::vector<ref<Expr>> &arguments) {
+void Executor::executeIntCall(ExecutionState &state, KInstruction *ki, Function *function, std::vector<ref<Expr>> &arguments) {
   Instruction *i = ki->inst;
   if (function->isDeclaration()) {
     switch(function->getIntrinsicID()) {
@@ -1575,14 +1575,13 @@ void Executor::executeInstruction(ExecutionState &state)
           i++;
         }
       }
-      executeCall(state, ki, f, arguments);
+      executeIntCall(state, ki, f, arguments);
     } else {
       ref<Expr> v = eval(ki, 0, state);
       ExecutionState *free = &state;
-      bool hasInvalid = false, first = true;
-      /* XXX This is wasteful, no need to do a full evaluate since we
-         have already got a value. But in the end the caches should handle it for us, albeit with some overhead. */
-      do {
+      /* XXX This is wasteful, no need to do a full evaluate since we have already got a value.
+         But in the end the caches should handle it for us, albeit with some overhead. */
+      while(free) {
         ref<ConstantExpr> value;
         bool success = solveGetValue(*free, v, value);
         assert(success && "FIXME: Unhandled solver failure");
@@ -1592,19 +1591,14 @@ void Executor::executeInstruction(ExecutionState &state)
           if (legalFunctions.count(addr)) {
             f = (Function*) addr;
             // Don't give warning on unique resolution
-            if (res.second || !first)
+            if (res.second)
               klee_warning_once((void*) (unsigned long) addr, "resolved symbolic function pointer to: %s", f->getName().data());
-            executeCall(*res.first, ki, f, arguments);
-          } else {
-            if (!hasInvalid) {
-              terminateStateOnExecError(state, "invalid function pointer");
-              hasInvalid = true;
-            }
-          }
+            executeIntCall(*res.first, ki, f, arguments);
+          } else
+            terminateStateOnExecError(state, "invalid function pointer");
         }
-        first = false;
         free = res.second;
-      } while (free);
+      };
     }
     break;
   }

@@ -295,7 +295,7 @@ public: //friends
   /// convenience for realloc). Note that this function can cause the
   /// state to fork and that \ref state cannot be safely accessed /// afterwards.
   void executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target = 0);
-  void executeCall(ExecutionState &state, KInstruction *ki, llvm::Function *f, std::vector<ref<Expr>> &arguments);
+  void executeIntCall(ExecutionState &state, KInstruction *ki, llvm::Function *f, std::vector<ref<Expr>> &arguments);
   void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name);
   // Fork current and return states in which condition holds / does
   // not hold, respectively. One of the states is necessarily the // current state, and one of the states may be null.
