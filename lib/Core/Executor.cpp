@@ -298,6 +298,7 @@ topnext:
   bool success = true;
   if (!objects.empty()) {
       sys::TimeValue now = util::getWallTimeVal();
+printf("[%s:%d] call getInitialValues\n", __FUNCTION__, __LINE__);
       success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values);
       stats::solverTime += (util::getWallTimeVal() - now).usec();
   }
@@ -320,6 +321,7 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
   auto it = seedMap.find(&current);
   osolver->setCoreSolverTimeout(0);
   sys::TimeValue now = util::getWallTimeVal();
+printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
   bool success = osolver->evaluate(Query(current.constraints, current.constraints.simplifyExpr(condition)), res);
   stats::solverTime += (util::getWallTimeVal() - now).usec();
   if (!success) {
@@ -399,6 +401,7 @@ Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInterna
 
 std::pair<ref<Expr>, ref<Expr>>
 Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
+printf("[%s:%d] call getRange\n", __FUNCTION__, __LINE__);
   return osolver->getRange(Query(state.constraints, expr));
 }
 
@@ -406,6 +409,7 @@ int Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr) {
   bool result;
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
+printf("[%s:%d] call mustBeTrue\n", __FUNCTION__, __LINE__);
   bool success = osolver->mustBeTrue(Query(state.constraints, expr), result);
   stats::solverTime += (util::getWallTimeVal() - now).usec();
   if (!success)
@@ -416,6 +420,7 @@ int Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr) {
 bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
   sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
+printf("[%s:%d] call getValue\n", __FUNCTION__, __LINE__);
   bool success = osolver->getValue(Query(state.constraints, expr), result);
   stats::solverTime += (util::getWallTimeVal() - now).usec();
   return success;
