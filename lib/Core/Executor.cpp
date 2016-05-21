@@ -1422,7 +1422,7 @@ void Executor::executeInstruction(ExecutionState &state)
         Expr::Width from = result->getWidth();
         Expr::Width to = getWidthForLLVMType(t);
         if (from != to) {
-          CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : CallSite(cast<CallInst>(caller)));
+          CallSite cs(caller);
           // XXX need to check other param attrs ?
           if (cs.paramHasAttr(0, llvm::Attribute::SExt))
             result = SExtExpr::create(result, to);
@@ -1586,18 +1586,18 @@ void Executor::executeInstruction(ExecutionState &state)
         bool success = solveGetValue(*free, v, value);
         assert(success && "FIXME: Unhandled solver failure");
         StatePair res = stateFork(*free, EqExpr::create(v, value), true);
+        free = res.second;
         if (res.first) {
           uint64_t addr = value->getZExtValue();
           if (legalFunctions.count(addr)) {
             f = (Function*) addr;
             // Don't give warning on unique resolution
-            if (res.second)
+            if (free)
               klee_warning_once((void*) (unsigned long) addr, "resolved symbolic function pointer to: %s", f->getName().data());
             executeIntCall(*res.first, ki, f, arguments);
           } else
             terminateStateOnExecError(state, "invalid function pointer");
         }
-        free = res.second;
       };
     }
     break;
