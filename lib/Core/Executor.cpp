@@ -1419,9 +1419,8 @@ void Executor::executeInstruction(ExecutionState &state)
       LLVM_TYPE_Q Type *t = caller->getType();
       if (t != Type::getVoidTy(getGlobalContext())) {
         // may need to do coercion due to bitcasts
-        Expr::Width from = result->getWidth();
         Expr::Width to = getWidthForLLVMType(t);
-        if (from != to) {
+        if (result->getWidth() != to) {
           CallSite cs(caller);
           // XXX need to check other param attrs ?
           if (cs.paramHasAttr(0, llvm::Attribute::SExt))
@@ -1593,7 +1592,7 @@ void Executor::executeInstruction(ExecutionState &state)
             f = (Function*) addr;
             // Don't give warning on unique resolution
             if (free)
-              klee_warning_once((void*) (unsigned long) addr, "resolved symbolic function pointer to: %s", f->getName().data());
+              klee_warning_once(f, "resolved symbolic function pointer to: %s", f->getName().data());
             executeIntCall(*res.first, ki, f, arguments);
           } else
             terminateStateOnExecError(state, "invalid function pointer");
@@ -1602,11 +1601,9 @@ void Executor::executeInstruction(ExecutionState &state)
     }
     break;
   }
-  case Instruction::PHI: {
-    ref<Expr> result = eval(ki, state.incomingBBIndex, state);
-    bindLocal(ki, state, result);
+  case Instruction::PHI:
+    bindLocal(ki, state, eval(ki, state.incomingBBIndex, state));
     break;
-  }
 
     // Special instructions
   case Instruction::Select: {
@@ -1725,20 +1722,15 @@ void Executor::executeInstruction(ExecutionState &state)
     AllocaInst *ai = cast<AllocaInst>(i);
     unsigned elementSize = targetData->getTypeStoreSize(ai->getAllocatedType());
     ref<Expr> size = Expr::createPointer(elementSize);
-    if (ai->isArrayAllocation()) {
-      ref<Expr> count = eval(ki, 0, state);
-      count = Expr::createZExtToPointerWidth(count);
-      size = MulExpr::create(size, count);
-    }
+    if (ai->isArrayAllocation())
+      size = MulExpr::create(size, Expr::createZExtToPointerWidth(eval(ki, 0, state)));
     executeAlloc(state, size, true, ki);
     break;
   }
 
-  case Instruction::Load: {
-    ref<Expr> base = eval(ki, 0, state);
-    executeMemoryOperation(state, false, base, 0, ki);
+  case Instruction::Load:
+    executeMemoryOperation(state, false, eval(ki, 0, state), 0, ki);
     break;
-  }
   case Instruction::Store: {
     ref<Expr> base = eval(ki, 1, state);
     ref<Expr> value = eval(ki, 0, state);
