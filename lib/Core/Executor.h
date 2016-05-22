@@ -181,8 +181,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       }
     }
   };
-  public:
-    static size_t allocated;
+public:
     class iterator {
     class FixedStack {
       unsigned pos, max;
@@ -288,9 +287,6 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       }
     };
   public:
-    ImmutableTree() : node(MemNode::terminator.incref()) { }
-    ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
-    ~ImmutableTree() { node->decref(); }
     ImmutableTree &operator=(const ImmutableTree &s) {
       MemNode *n = s.node->incref();
       node->decref();
@@ -359,7 +355,11 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
         ++it;
       return it;
     }
-    static size_t getAllocated() { return allocated; }
+    //static size_t getAllocated() { return allocated; }
+    static size_t allocated;
+    ImmutableTree() : node(MemNode::terminator.incref()) { }
+    ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
+    ~ImmutableTree() { node->decref(); }
   private:
     MemNode *node;
     ImmutableTree(MemNode *_node) : node(_node) { }
