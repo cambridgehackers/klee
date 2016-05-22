@@ -30,9 +30,26 @@
 #include <map>
 #include <set>
 
-#if 1 //jca
+struct KTest;
+
+namespace llvm {
+  class BasicBlock;
+  class BranchInst;
+  class CallInst;
+  class Constant;
+  class ConstantExpr;
+  class Function;
+  class GlobalValue;
+  class Instruction;
+  class DataLayout;
+  class Twine;
+  class Value;
+  class Module;
+}
+
 namespace klee {
 static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->address < b->address; }
+  class MemoryMap {
   class ImmutableTree {
   class MemNode {
   public:
@@ -347,7 +364,6 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
     MemNode *node;
     ImmutableTree(MemNode *_node) : node(_node) { }
   };
-  class MemoryMap {
     ImmutableTree elts;
     MemoryMap(const ImmutableTree &b): elts(b) {}
   public:
@@ -362,27 +378,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
     ImmutableTree::iterator end() const { return elts.end(); }
     ImmutableTree::iterator upper_bound(const MemoryObject* key) const { return elts.upper_bound(key); }
   };
-}
-#endif //jca
 
-struct KTest;
-
-namespace llvm {
-  class BasicBlock;
-  class BranchInst;
-  class CallInst;
-  class Constant;
-  class ConstantExpr;
-  class Function;
-  class GlobalValue;
-  class Instruction;
-  class DataLayout;
-  class Twine;
-  class Value;
-  class Module;
-}
-
-namespace klee {
   class ExternalDispatcher;
   class Expr;
   class KInstIterator;
