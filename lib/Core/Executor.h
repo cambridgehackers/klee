@@ -49,8 +49,8 @@ namespace llvm {
 
 namespace klee {
 static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->address < b->address; }
+#define ImmutableTree MemoryMap
   class MemoryMap {
-  class ImmutableTree {
   class MemNode {
   public:
     static MemNode terminator;
@@ -290,7 +290,7 @@ public:
       node = n;
       return *this;
     }
-    const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* &k) const {
+    const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* k) const {
       MemNode *n = node;
       while (!n->isTerminator()) {
         const MemoryObject* key = n->value.first;
@@ -304,7 +304,7 @@ public:
       }
       return 0;
     }
-    const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* &k) const {
+    const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* k) const {
       MemNode *n = node;
       MemNode *result = 0;
       while (!n->isTerminator()) {
@@ -326,7 +326,7 @@ public:
     ImmutableTree popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) const { return ImmutableTree(node->popMin(valueOut)); }
     iterator begin() const { return iterator(node, true); }
     iterator end() const { return iterator(node, false); }
-    iterator lower_bound(const MemoryObject* &k) const {
+    iterator lower_bound(const MemoryObject* k) const {
       iterator it(node,false);
       for (MemNode *root=node; !root->isTerminator();) {
         it.stack.push_back(root);
@@ -345,7 +345,7 @@ public:
       }
       return it;
     }
-    iterator upper_bound(const MemoryObject* &key) const {
+    iterator upper_bound(const MemoryObject* key) const {
       iterator end(node,false),it = lower_bound(key);
       if (it!=end && !MOLT(key,it->first))
         ++it;
@@ -357,20 +357,6 @@ public:
   private:
     MemNode *node;
     ImmutableTree(MemNode *_node) : node(_node) { }
-  };
-    ImmutableTree elts;
-    MemoryMap(const ImmutableTree &b): elts(b) {}
-  public:
-    MemoryMap() {}
-    MemoryMap(const MemoryMap &b) : elts(b.elts) {}
-    ~MemoryMap() {}
-    const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* key) const { return elts.lookup(key); }
-    const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* key) const { return elts.lookup_previous(key); }
-    MemoryMap replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return elts.replace(value); }
-    MemoryMap remove(const MemoryObject* key) const { return elts.remove(key); }
-    ImmutableTree::iterator begin() const { return elts.begin(); }
-    ImmutableTree::iterator end() const { return elts.end(); }
-    ImmutableTree::iterator upper_bound(const MemoryObject* key) const { return elts.upper_bound(key); }
   };
 
   class ExternalDispatcher;
