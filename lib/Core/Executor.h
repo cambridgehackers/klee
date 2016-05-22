@@ -370,33 +370,29 @@ namespace klee {
     D &operator()(V &a) const { return a.first; }
     const D &operator()(const V &a) const { return a.first; }
   };
-  template<class K, class D, class CMP=std::less<K> >
-  class ImmutableMap {
+  class MemoryMap {
   public:
-    typedef K key_type;
-    typedef std::pair<K,D> value_type;
-    typedef ImmutableTree<K, value_type, _Select1st<value_type,key_type>, CMP> Tree;
+    typedef const MemoryObject* key_type;
+    typedef std::pair<const MemoryObject*,ObjectHolder> value_type;
+    typedef ImmutableTree<const MemoryObject*, value_type, _Select1st<value_type,key_type>, MemoryObjectLT> Tree;
     typedef typename Tree::iterator iterator;
   private:
     Tree elts;
-    ImmutableMap(const Tree &b): elts(b) {}
+    MemoryMap(const Tree &b): elts(b) {}
   public:
-    ImmutableMap() {}
-    ImmutableMap(const ImmutableMap &b) : elts(b.elts) {}
-    ~ImmutableMap() {}
+    MemoryMap() {}
+    MemoryMap(const MemoryMap &b) : elts(b.elts) {}
+    ~MemoryMap() {}
     const value_type *lookup(const key_type &key) const { return elts.lookup(key); }
     const value_type *lookup_previous(const key_type &key) const { return elts.lookup_previous(key); }
-    ImmutableMap replace(const value_type &value) const { return elts.replace(value); }
-    ImmutableMap remove(const key_type &key) const { return elts.remove(key); }
+    MemoryMap replace(const value_type &value) const { return elts.replace(value); }
+    MemoryMap remove(const key_type &key) const { return elts.remove(key); }
     iterator begin() const { return elts.begin(); }
     iterator end() const { return elts.end(); }
     iterator upper_bound(const key_type &key) const { return elts.upper_bound(key); }
   };
 }
 #endif //jca
-namespace klee {
-  typedef ImmutableMap<const MemoryObject*, ObjectHolder, MemoryObjectLT> MemoryMap;
-}
 
 struct KTest;
 
