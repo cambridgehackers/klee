@@ -177,33 +177,35 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       }
     }
   };
+    MemNode *node;
+    MemoryMap(MemNode *_node) : node(_node) { }
 public:
     class iterator {
-    class FixedStack {
-      unsigned pos, max;
-      MemNode **elts;
-    public:
-      FixedStack(unsigned _max) : pos(0), max(_max), elts(new MemNode*[max]) {}
-      FixedStack(const FixedStack &b) : pos(b.pos), max(b.max), elts(new MemNode*[b.max]) {
-        std::copy(b.elts, b.elts+pos, elts);
-      }
-      ~FixedStack() { delete[] elts; }
-      void push_back(MemNode* elt) { elts[pos++] = elt; }
-      void pop_back() { --pos; }
-      bool empty() { return pos==0; }
-      MemNode* &back() { return elts[pos-1]; }
-      FixedStack &operator=(const FixedStack &b) {
-        assert(max == b.max); 
-        pos = b.pos;
-        std::copy(b.elts, b.elts+pos, elts);
-        return *this;
-      }
-      bool operator==(const FixedStack &b) {
-        return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
-      }
-      bool operator!=(const FixedStack &b) { return !(*this==b); }
-    };
       friend class MemoryMap;
+      class FixedStack {
+        unsigned pos, max;
+        MemNode **elts;
+      public:
+        FixedStack(unsigned _max) : pos(0), max(_max), elts(new MemNode*[max]) {}
+        FixedStack(const FixedStack &b) : pos(b.pos), max(b.max), elts(new MemNode*[b.max]) {
+          std::copy(b.elts, b.elts+pos, elts);
+        }
+        ~FixedStack() { delete[] elts; }
+        void push_back(MemNode* elt) { elts[pos++] = elt; }
+        void pop_back() { --pos; }
+        bool empty() { return pos==0; }
+        MemNode* &back() { return elts[pos-1]; }
+        FixedStack &operator=(const FixedStack &b) {
+          assert(max == b.max); 
+          pos = b.pos;
+          std::copy(b.elts, b.elts+pos, elts);
+          return *this;
+        }
+        bool operator==(const FixedStack &b) {
+          return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
+        }
+        bool operator!=(const FixedStack &b) { return !(*this==b); }
+      };
     private:
       MemNode *root; 
       FixedStack stack;
@@ -353,9 +355,6 @@ public:
     MemoryMap() : node(MemNode::terminator.incref()) { }
     MemoryMap(const MemoryMap &s) : node(s.node->incref()) { }
     ~MemoryMap() { node->decref(); }
-  private:
-    MemNode *node;
-    MemoryMap(MemNode *_node) : node(_node) { }
   };
 
   class ExternalDispatcher;
