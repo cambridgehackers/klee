@@ -49,7 +49,6 @@ namespace llvm {
 
 namespace klee {
 static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->address < b->address; }
-#define ImmutableTree MemoryMap
   class MemoryMap {
   class MemNode {
   public:
@@ -204,7 +203,7 @@ public:
       }
       bool operator!=(const FixedStack &b) { return !(*this==b); }
     };
-      friend class ImmutableTree;
+      friend class MemoryMap;
     private:
       MemNode *root; 
       FixedStack stack;
@@ -284,7 +283,7 @@ public:
       }
     };
   public:
-    ImmutableTree &operator=(const ImmutableTree &s) {
+    MemoryMap &operator=(const MemoryMap &s) {
       MemNode *n = s.node->incref();
       node->decref();
       node = n;
@@ -320,10 +319,10 @@ public:
       }
       return result ? &result->value : 0;
     }
-    ImmutableTree insert(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->insert(value)); }
-    ImmutableTree replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->replace(value)); }
-    ImmutableTree remove(const MemoryObject* &key) const { return ImmutableTree(node->remove(key)); }
-    ImmutableTree popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) const { return ImmutableTree(node->popMin(valueOut)); }
+    MemoryMap insert(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return MemoryMap(node->insert(value)); }
+    MemoryMap replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return MemoryMap(node->replace(value)); }
+    MemoryMap remove(const MemoryObject* &key) const { return MemoryMap(node->remove(key)); }
+    MemoryMap popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) const { return MemoryMap(node->popMin(valueOut)); }
     iterator begin() const { return iterator(node, true); }
     iterator end() const { return iterator(node, false); }
     iterator lower_bound(const MemoryObject* k) const {
@@ -351,12 +350,12 @@ public:
         ++it;
       return it;
     }
-    ImmutableTree() : node(MemNode::terminator.incref()) { }
-    ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
-    ~ImmutableTree() { node->decref(); }
+    MemoryMap() : node(MemNode::terminator.incref()) { }
+    MemoryMap(const MemoryMap &s) : node(s.node->incref()) { }
+    ~MemoryMap() { node->decref(); }
   private:
     MemNode *node;
-    ImmutableTree(MemNode *_node) : node(_node) { }
+    MemoryMap(MemNode *_node) : node(_node) { }
   };
 
   class ExternalDispatcher;

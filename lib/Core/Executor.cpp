@@ -46,7 +46,7 @@ using namespace klee;
 static RNG theRNG;
 
 namespace klee {
-  typename MemoryMap::ImmutableTree::MemNode MemoryMap::ImmutableTree::MemNode::terminator;
+  typename MemoryMap::MemNode MemoryMap::MemNode::terminator;
   struct KFunction {
 public:
     llvm::Function *function;
