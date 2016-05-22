@@ -172,69 +172,92 @@ namespace klee {
   };
   public:
     static size_t allocated;
-  class iterator {
-  template<typename T>
-  class FixedStack {
-    unsigned pos, max;
-    T *elts;
-  public:
-    FixedStack(unsigned _max) : pos(0), max(_max), elts(new T[max]) {}
-    FixedStack(const FixedStack &b) : pos(b.pos), max(b.max), elts(new T[b.max]) {
-      std::copy(b.elts, b.elts+pos, elts);
-    }
-    ~FixedStack() { delete[] elts; }
-    void push_back(const T &elt) { elts[pos++] = elt; }
-    void pop_back() { --pos; }
-    bool empty() { return pos==0; }
-    T &back() { return elts[pos-1]; }
-    FixedStack &operator=(const FixedStack &b) {
-      assert(max == b.max); 
-      pos = b.pos;
-      std::copy(b.elts, b.elts+pos, elts);
-      return *this;
-    }
-    bool operator==(const FixedStack &b) {
-      return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
-    }
-    bool operator!=(const FixedStack &b) { return !(*this==b); }
-  };
-    friend class ImmutableTree;
-  private:
-    MemNode *root; 
-    FixedStack<MemNode*> stack;
-  public:
-    iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
-      if (atBeginning) {
-        for (MemNode *n=root; !n->isTerminator(); n=n->left)
-          stack.push_back(n);
+    class iterator {
+    template<typename T>
+    class FixedStack {
+      unsigned pos, max;
+      T *elts;
+    public:
+      FixedStack(unsigned _max) : pos(0), max(_max), elts(new T[max]) {}
+      FixedStack(const FixedStack &b) : pos(b.pos), max(b.max), elts(new T[b.max]) {
+        std::copy(b.elts, b.elts+pos, elts);
       }
-    }
-    iterator(const iterator &i) : root(i.root->incref()), stack(i.stack) { }
-    ~iterator() { root->decref(); }
-    iterator &operator=(const iterator &b) {
-      b.root->incref();
-      root->decref();
-      root = b.root;
-      stack = b.stack;
-      return *this;
-    }
-    const std::pair<const MemoryObject*,ObjectHolder> &operator*() {
-      MemNode *n = stack.back();
-      return n->value;
-    }
-    const std::pair<const MemoryObject*,ObjectHolder> *operator->() {
-      MemNode *n = stack.back();
-      return &n->value;
-    }
-    bool operator==(const iterator &b) { return stack==b.stack; }
-    bool operator!=(const iterator &b) { return stack!=b.stack; }
-    iterator &operator--() {
-      if (stack.empty()) {
-        for (MemNode *n=root; !n->isTerminator(); n=n->right)
-          stack.push_back(n);
-      } else {
+      ~FixedStack() { delete[] elts; }
+      void push_back(const T &elt) { elts[pos++] = elt; }
+      void pop_back() { --pos; }
+      bool empty() { return pos==0; }
+      T &back() { return elts[pos-1]; }
+      FixedStack &operator=(const FixedStack &b) {
+        assert(max == b.max); 
+        pos = b.pos;
+        std::copy(b.elts, b.elts+pos, elts);
+        return *this;
+      }
+      bool operator==(const FixedStack &b) {
+        return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
+      }
+      bool operator!=(const FixedStack &b) { return !(*this==b); }
+    };
+      friend class ImmutableTree;
+    private:
+      MemNode *root; 
+      FixedStack<MemNode*> stack;
+    public:
+      iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
+        if (atBeginning) {
+          for (MemNode *n=root; !n->isTerminator(); n=n->left)
+            stack.push_back(n);
+        }
+      }
+      iterator(const iterator &i) : root(i.root->incref()), stack(i.stack) { }
+      ~iterator() { root->decref(); }
+      iterator &operator=(const iterator &b) {
+        b.root->incref();
+        root->decref();
+        root = b.root;
+        stack = b.stack;
+        return *this;
+      }
+      const std::pair<const MemoryObject*,ObjectHolder> &operator*() {
         MemNode *n = stack.back();
-        if (n->left->isTerminator()) {
+        return n->value;
+      }
+      const std::pair<const MemoryObject*,ObjectHolder> *operator->() {
+        MemNode *n = stack.back();
+        return &n->value;
+      }
+      bool operator==(const iterator &b) { return stack==b.stack; }
+      bool operator!=(const iterator &b) { return stack!=b.stack; }
+      iterator &operator--() {
+        if (stack.empty()) {
+          for (MemNode *n=root; !n->isTerminator(); n=n->right)
+            stack.push_back(n);
+        } else {
+          MemNode *n = stack.back();
+          if (n->left->isTerminator()) {
+            for (;;) {
+              MemNode *prev = n;
+              stack.pop_back();
+              if (stack.empty()) {
+                break;
+              } else {
+                n = stack.back();
+                if (prev==n->right)
+                  break;
+              }
+            }
+          } else {
+            stack.push_back(n->left);
+            for (n=n->left->right; !n->isTerminator(); n=n->right)
+              stack.push_back(n);
+          }
+        }
+        return *this;
+      }
+      iterator &operator++() {
+        assert(!stack.empty());
+        MemNode *n = stack.back();
+        if (n->right->isTerminator()) {
           for (;;) {
             MemNode *prev = n;
             stack.pop_back();
@@ -242,41 +265,18 @@ namespace klee {
               break;
             } else {
               n = stack.back();
-              if (prev==n->right)
+              if (prev==n->left)
                 break;
             }
           }
         } else {
-          stack.push_back(n->left);
-          for (n=n->left->right; !n->isTerminator(); n=n->right)
+          stack.push_back(n->right);
+          for (n=n->right->left; !n->isTerminator(); n=n->left)
             stack.push_back(n);
         }
+        return *this;
       }
-      return *this;
-    }
-    iterator &operator++() {
-      assert(!stack.empty());
-      MemNode *n = stack.back();
-      if (n->right->isTerminator()) {
-        for (;;) {
-          MemNode *prev = n;
-          stack.pop_back();
-          if (stack.empty()) {
-            break;
-          } else {
-            n = stack.back();
-            if (prev==n->left)
-              break;
-          }
-        }
-      } else {
-        stack.push_back(n->right);
-        for (n=n->right->left; !n->isTerminator(); n=n->left)
-          stack.push_back(n);
-      }
-      return *this;
-    }
-  };
+    };
   public:
     ImmutableTree() : node(MemNode::terminator.incref()) { }
     ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
@@ -354,16 +354,9 @@ namespace klee {
     MemNode *node;
     ImmutableTree(MemNode *_node) : node(_node) { }
   };
-  /***/
-  //typename ImmutableTree::MemNode ImmutableTree::MemNode::terminator;
-  //size_t ImmutableTree::allocated = 0;
   class MemoryMap {
-  public:
-    typedef ImmutableTree Tree;
-    typedef typename Tree::iterator iterator;
-  private:
-    Tree elts;
-    MemoryMap(const Tree &b): elts(b) {}
+    ImmutableTree elts;
+    MemoryMap(const ImmutableTree &b): elts(b) {}
   public:
     MemoryMap() {}
     MemoryMap(const MemoryMap &b) : elts(b.elts) {}
@@ -372,9 +365,9 @@ namespace klee {
     const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* key) const { return elts.lookup_previous(key); }
     MemoryMap replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return elts.replace(value); }
     MemoryMap remove(const MemoryObject* key) const { return elts.remove(key); }
-    iterator begin() const { return elts.begin(); }
-    iterator end() const { return elts.end(); }
-    iterator upper_bound(const MemoryObject* key) const { return elts.upper_bound(key); }
+    ImmutableTree::iterator begin() const { return elts.begin(); }
+    ImmutableTree::iterator end() const { return elts.end(); }
+    ImmutableTree::iterator upper_bound(const MemoryObject* key) const { return elts.upper_bound(key); }
   };
 }
 #endif //jca

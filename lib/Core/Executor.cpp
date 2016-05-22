@@ -707,7 +707,7 @@ void Executor::executeIntCall(ExecutionState &state, KInstruction *ki, Function 
       // store inside of the object states, which allows them to
       // transparently avoid screwing up symbolics (if the byte is symbolic
       // then its concrete cache byte isn't being used) but is just a hack.
-      for (MemoryMap::iterator it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
+      for (auto it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
         const MemoryObject *mo = it->first;
         if (!mo->isUserSpecified) {
           ObjectState *os = it->second;
@@ -736,7 +736,7 @@ void Executor::executeIntCall(ExecutionState &state, KInstruction *ki, Function 
           terminateStateOnError(state, "failed external call: " + function->getName(), "external.err");
           break;
       }
-      for (MemoryMap::iterator it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
+      for (auto it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
         const MemoryObject *mo = it->first;
         if (!mo->isUserSpecified) {
           const ObjectState *os = it->second;
@@ -1089,10 +1089,10 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
       return true;
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
-    MemoryMap::iterator oi = state.objects.upper_bound(&hack);
-    MemoryMap::iterator begin = state.objects.begin();
-    MemoryMap::iterator end = state.objects.end();
-    MemoryMap::iterator start = oi;
+    auto oi = state.objects.upper_bound(&hack);
+    auto begin = state.objects.begin();
+    auto end = state.objects.end();
+    auto start = oi;
     // XXX in the common case we can save one query if we ask
     // must BeTrue before may BeTrue for the first result. easy
     // to add I just want to have a nice symbolic test case first.
@@ -1188,10 +1188,10 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       }
     }
     // didn't work, now we have to search
-    MemoryMap::iterator oi = state.objects.upper_bound(&hack);
-    MemoryMap::iterator begin = state.objects.begin();
-    MemoryMap::iterator end = state.objects.end();
-    MemoryMap::iterator start = oi;
+    auto oi = state.objects.upper_bound(&hack);
+    auto begin = state.objects.begin();
+    auto end = state.objects.end();
+    auto start = oi;
     while (oi!=begin) {
       --oi;
       const MemoryObject *mo = oi->first;
