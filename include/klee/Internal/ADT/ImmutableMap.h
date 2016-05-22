@@ -56,8 +56,14 @@ namespace klee {
       right->decref();
       --allocated;
     }
-    void decref();
-    Node *incref();
+    void decref() {
+      --references;
+      if (references==0) delete this;
+    }
+    Node *incref() {
+      ++references;
+      return this;
+    }
     bool isTerminator() { return this==&terminator; }
     size_t size() {
       if (isTerminator()) {
@@ -66,10 +72,61 @@ namespace klee {
         return left->size() + 1 + right->size();
       }
     }
-    Node *popMin(value_type &valueOut);
-    Node *insert(const value_type &v);
-    Node *replace(const value_type &v);
-    Node *remove(const key_type &k);
+    Node *popMin(value_type &valueOut) {
+      if (left->isTerminator()) {
+        valueOut = value;
+        return right->incref();
+      } else {
+        return balance(left->popMin(valueOut), value, right->incref());
+      }
+    }
+    Node *insert(const value_type &v) {
+      if (isTerminator()) {
+        return new Node(terminator.incref(), terminator.incref(), v);
+      } else {
+        if (key_compare()(key_of_value()(v), key_of_value()(value))) {
+          return balance(left->insert(v), value, right->incref());
+        } else if (key_compare()(key_of_value()(value), key_of_value()(v))) {
+          return balance(left->incref(), value, right->insert(v));
+        } else {
+          return incref();
+        }
+      }
+    }
+    Node *replace(const value_type &v) {
+      if (isTerminator()) {
+        return new Node(terminator.incref(), terminator.incref(), v);
+      } else {
+        if (key_compare()(key_of_value()(v), key_of_value()(value))) {
+          return balance(left->replace(v), value, right->incref());
+        } else if (key_compare()(key_of_value()(value), key_of_value()(v))) {
+          return balance(left->incref(), value, right->replace(v));
+        } else {
+          return new Node(left->incref(), right->incref(), v);
+        }
+      }
+    }
+    Node *remove(const key_type &k) {
+      if (isTerminator()) {
+        return incref();
+      } else {
+        if (key_compare()(k, key_of_value()(value))) {
+          return balance(left->remove(k), value, right->incref());
+        } else if (key_compare()(key_of_value()(value), k)) {
+          return balance(left->incref(), value, right->remove(k));
+        } else {
+          if (left->isTerminator()) {
+            return right->incref();
+          } else if (right->isTerminator()) {
+            return left->incref();
+          } else {
+            value_type min;
+            Node *nr = right->popMin(min);
+            return balance(left->incref(), min, nr);
+          }
+        }
+      }
+    }
   };
   template<typename T>
   class FixedStack {
@@ -184,17 +241,6 @@ namespace klee {
   template<class K, class V, class KOV, class CMP> 
   size_t ImmutableTree<K,V,KOV,CMP>::allocated = 0;
   template<class K, class V, class KOV, class CMP>
-  inline void ImmutableTree<K,V,KOV,CMP>::Node::decref() {
-    --references;
-    if (references==0) delete this;
-  }
-  template<class K, class V, class KOV, class CMP>
-  inline typename ImmutableTree<K,V,KOV,CMP>::Node *ImmutableTree<K,V,KOV,CMP>::Node::incref() {
-    ++references;
-    return this;
-  }
-  /***/
-  template<class K, class V, class KOV, class CMP>
   typename ImmutableTree<K,V,KOV,CMP>::Node *
   ImmutableTree<K,V,KOV,CMP>::Node::balance(Node *left, const value_type &value, Node *right) {
     if (left->height > right->height + 2) {
@@ -233,69 +279,6 @@ namespace klee {
       }
     } else {
       return new Node(left, right, value);
-    }
-  }
-  template<class K, class V, class KOV, class CMP>
-  typename ImmutableTree<K,V,KOV,CMP>::Node *
-  ImmutableTree<K,V,KOV,CMP>::Node::popMin(value_type &valueOut) {
-    if (left->isTerminator()) {
-      valueOut = value;
-      return right->incref();
-    } else {
-      return balance(left->popMin(valueOut), value, right->incref());
-    }
-  }
-  template<class K, class V, class KOV, class CMP>
-  typename ImmutableTree<K,V,KOV,CMP>::Node *
-  ImmutableTree<K,V,KOV,CMP>::Node::insert(const value_type &v) {
-    if (isTerminator()) {
-      return new Node(terminator.incref(), terminator.incref(), v);
-    } else {
-      if (key_compare()(key_of_value()(v), key_of_value()(value))) {
-        return balance(left->insert(v), value, right->incref());
-      } else if (key_compare()(key_of_value()(value), key_of_value()(v))) {
-        return balance(left->incref(), value, right->insert(v));
-      } else {
-        return incref();
-      }
-    }
-  }
-  template<class K, class V, class KOV, class CMP>
-  typename ImmutableTree<K,V,KOV,CMP>::Node *
-  ImmutableTree<K,V,KOV,CMP>::Node::replace(const value_type &v) {
-    if (isTerminator()) {
-      return new Node(terminator.incref(), terminator.incref(), v);
-    } else {
-      if (key_compare()(key_of_value()(v), key_of_value()(value))) {
-        return balance(left->replace(v), value, right->incref());
-      } else if (key_compare()(key_of_value()(value), key_of_value()(v))) {
-        return balance(left->incref(), value, right->replace(v));
-      } else {
-        return new Node(left->incref(), right->incref(), v);
-      }
-    }
-  }
-  template<class K, class V, class KOV, class CMP>
-  typename ImmutableTree<K,V,KOV,CMP>::Node *
-  ImmutableTree<K,V,KOV,CMP>::Node::remove(const key_type &k) {
-    if (isTerminator()) {
-      return incref();
-    } else {
-      if (key_compare()(k, key_of_value()(value))) {
-        return balance(left->remove(k), value, right->incref());
-      } else if (key_compare()(key_of_value()(value), k)) {
-        return balance(left->incref(), value, right->remove(k));
-      } else {
-        if (left->isTerminator()) {
-          return right->incref();
-        } else if (right->isTerminator()) {
-          return left->incref();
-        } else {
-          value_type min;
-          Node *nr = right->popMin(min);
-          return balance(left->incref(), min, nr);
-        }
-      }
     }
   }
   /***/
