@@ -14,26 +14,82 @@ namespace klee {
     typedef KOV key_of_value;
     typedef CMP key_compare;
   public:
-    ImmutableTree();
-    ImmutableTree(const ImmutableTree &s);
-    ~ImmutableTree();
-    ImmutableTree &operator=(const ImmutableTree &s);
-    const value_type *lookup(const key_type &key) const;
-    const value_type *lookup_previous(const key_type &key) const;
-    size_t size() const;
-    ImmutableTree insert(const value_type &value) const;
-    ImmutableTree replace(const value_type &value) const;
-    ImmutableTree remove(const key_type &key) const;
-    ImmutableTree popMin(value_type &valueOut) const;
-    iterator begin() const;
-    iterator end() const;
-    iterator lower_bound(const key_type &key) const;
-    iterator upper_bound(const key_type &key) const;
+    ImmutableTree() : node(Node::terminator.incref()) { }
+    ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
+    ~ImmutableTree() { node->decref(); }
+    ImmutableTree &operator=(const ImmutableTree &s) {
+      Node *n = s.node->incref();
+      node->decref();
+      node = n;
+      return *this;
+    }
+    const value_type *lookup(const key_type &k) const {
+      Node *n = node;
+      while (!n->isTerminator()) {
+        key_type key = key_of_value()(n->value);
+        if (key_compare()(k, key)) {
+          n = n->left;
+        } else if (key_compare()(key, k)) {
+          n = n->right;
+        } else {
+          return &n->value;
+        }
+      }
+      return 0;
+    }
+    const value_type *lookup_previous(const key_type &k) const {
+      Node *n = node;
+      Node *result = 0;
+      while (!n->isTerminator()) {
+        key_type key = key_of_value()(n->value);
+        if (key_compare()(k, key)) {
+          n = n->left;
+        } else if (key_compare()(key, k)) {
+          result = n;
+          n = n->right;
+        } else {
+          return &n->value;
+        }
+      }
+      return result ? &result->value : 0;
+    }
+    size_t size() const { return node->size(); }
+    ImmutableTree insert(const value_type &value) const { return ImmutableTree(node->insert(value)); }
+    ImmutableTree replace(const value_type &value) const { return ImmutableTree(node->replace(value)); }
+    ImmutableTree remove(const key_type &key) const { return ImmutableTree(node->remove(key)); }
+    ImmutableTree popMin(value_type &valueOut) const { return ImmutableTree(node->popMin(valueOut)); }
+    iterator begin() const { return iterator(node, true); }
+    iterator end() const { return iterator(node, false); }
+    iterator lower_bound(const key_type &k) const {
+      iterator it(node,false);
+      for (Node *root=node; !root->isTerminator();) {
+        it.stack.push_back(root);
+        if (key_compare()(k, key_of_value()(root->value))) {
+          root = root->left;
+        } else if (key_compare()(key_of_value()(root->value), k)) {
+          root = root->right;
+        } else {
+          return it;
+        }
+      }
+      if (!it.stack.empty()) {
+        Node *last = it.stack.back();
+        if (key_compare()(key_of_value()(last->value), k))
+          ++it;
+      }
+      return it;
+    }
+    iterator upper_bound(const key_type &key) const {
+      iterator end(node,false),it = lower_bound(key);
+      if (it!=end && !key_compare()(key,key_of_value()(*it)))
+        ++it;
+      return it;
+    }
     static size_t getAllocated() { return allocated; }
   private:
     class Node;
     Node *node;
-    ImmutableTree(Node *_node);
+    ImmutableTree(Node *_node) : node(_node) { }
   };
   template<class K, class V, class KOV, class CMP>
   class ImmutableTree<K,V,KOV,CMP>::Node {
@@ -44,7 +100,45 @@ namespace klee {
     unsigned height, references;
   protected:
     Node() : left(&terminator), right(&terminator), height(0), references(3) { assert(this==&terminator); }
-    static Node *balance(Node *left, const value_type &value, Node *right);
+    static Node *balance(Node *left, const value_type &value, Node *right) {
+      if (left->height > right->height + 2) {
+        Node *ll = left->left;
+        Node *lr = left->right;
+        if (ll->height >= lr->height) {
+          Node *nlr = new Node(lr->incref(), right, value);
+          Node *res = new Node(ll->incref(), nlr, left->value);
+          left->decref();
+          return res;
+        } else {
+          Node *lrl = lr->left;
+          Node *lrr = lr->right;
+          Node *nll = new Node(ll->incref(), lrl->incref(), left->value);
+          Node *nlr = new Node(lrr->incref(), right, value);
+          Node *res = new Node(nll, nlr, lr->value);
+          left->decref();
+          return res;
+        }
+      } else if (right->height > left->height + 2) {
+        Node *rl = right->left;
+        Node *rr = right->right;
+        if (rr->height >= rl->height) {
+          Node *nrl = new Node(left, rl->incref(), value);
+          Node *res = new Node(nrl, rr->incref(), right->value);
+          right->decref();
+          return res;
+        } else {
+          Node *rll = rl->left;
+          Node *rlr = rl->right;
+          Node *nrl = new Node(left, rll->incref(), value);
+          Node *nrr = new Node(rlr->incref(), rr->incref(), right->value);
+          Node *res = new Node(nrl, nrr, rl->value);
+          right->decref();
+          return res;
+        }
+      } else {
+        return new Node(left, right, value);
+      }
+    }
   public:
     Node(Node *_left, Node *_right, const value_type &_value)
       : left(_left), right(_right), value(_value), 
@@ -240,154 +334,6 @@ namespace klee {
   ImmutableTree<K,V,KOV,CMP>::Node::terminator;
   template<class K, class V, class KOV, class CMP> 
   size_t ImmutableTree<K,V,KOV,CMP>::allocated = 0;
-  template<class K, class V, class KOV, class CMP>
-  typename ImmutableTree<K,V,KOV,CMP>::Node *
-  ImmutableTree<K,V,KOV,CMP>::Node::balance(Node *left, const value_type &value, Node *right) {
-    if (left->height > right->height + 2) {
-      Node *ll = left->left;
-      Node *lr = left->right;
-      if (ll->height >= lr->height) {
-        Node *nlr = new Node(lr->incref(), right, value);
-        Node *res = new Node(ll->incref(), nlr, left->value);
-        left->decref();
-        return res;
-      } else {
-        Node *lrl = lr->left;
-        Node *lrr = lr->right;
-        Node *nll = new Node(ll->incref(), lrl->incref(), left->value);
-        Node *nlr = new Node(lrr->incref(), right, value);
-        Node *res = new Node(nll, nlr, lr->value);
-        left->decref();
-        return res;
-      }
-    } else if (right->height > left->height + 2) {
-      Node *rl = right->left;
-      Node *rr = right->right;
-      if (rr->height >= rl->height) {
-        Node *nrl = new Node(left, rl->incref(), value);
-        Node *res = new Node(nrl, rr->incref(), right->value);
-        right->decref();
-        return res;
-      } else {
-        Node *rll = rl->left;
-        Node *rlr = rl->right;
-        Node *nrl = new Node(left, rll->incref(), value);
-        Node *nrr = new Node(rlr->incref(), rr->incref(), right->value);
-        Node *res = new Node(nrl, nrr, rl->value);
-        right->decref();
-        return res;
-      }
-    } else {
-      return new Node(left, right, value);
-    }
-  }
-  /***/
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP>::ImmutableTree() 
-    : node(Node::terminator.incref()) {
-  }
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP>::ImmutableTree(Node *_node) 
-    : node(_node) {
-  }
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP>::ImmutableTree(const ImmutableTree &s) 
-    : node(s.node->incref()) {
-  }
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP>::~ImmutableTree() {
-    node->decref(); 
-  }
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP> &ImmutableTree<K,V,KOV,CMP>::operator=(const ImmutableTree &s) {
-    Node *n = s.node->incref();
-    node->decref();
-    node = n;
-    return *this;
-  }
-  template<class K, class V, class KOV, class CMP>
-  const typename ImmutableTree<K,V,KOV,CMP>::value_type *
-  ImmutableTree<K,V,KOV,CMP>::lookup(const key_type &k) const {
-    Node *n = node;
-    while (!n->isTerminator()) {
-      key_type key = key_of_value()(n->value);
-      if (key_compare()(k, key)) {
-        n = n->left;
-      } else if (key_compare()(key, k)) {
-        n = n->right;
-      } else {
-        return &n->value;
-      }
-    }
-    return 0;
-  }
-  template<class K, class V, class KOV, class CMP>
-  const typename ImmutableTree<K,V,KOV,CMP>::value_type *
-  ImmutableTree<K,V,KOV,CMP>::lookup_previous(const key_type &k) const {
-    Node *n = node;
-    Node *result = 0;
-    while (!n->isTerminator()) {
-      key_type key = key_of_value()(n->value);
-      if (key_compare()(k, key)) {
-        n = n->left;
-      } else if (key_compare()(key, k)) {
-        result = n;
-        n = n->right;
-      } else {
-        return &n->value;
-      }
-    }
-    return result ? &result->value : 0;
-  }
-  template<class K, class V, class KOV, class CMP>
-  size_t ImmutableTree<K,V,KOV,CMP>::size() const { return node->size(); }
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP> 
-  ImmutableTree<K,V,KOV,CMP>::insert(const value_type &value) const { return ImmutableTree(node->insert(value)); }
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP> 
-  ImmutableTree<K,V,KOV,CMP>::replace(const value_type &value) const { return ImmutableTree(node->replace(value)); }
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP> 
-  ImmutableTree<K,V,KOV,CMP>::remove(const key_type &key) const { return ImmutableTree(node->remove(key)); }
-  template<class K, class V, class KOV, class CMP>
-  ImmutableTree<K,V,KOV,CMP> 
-  ImmutableTree<K,V,KOV,CMP>::popMin(value_type &valueOut) const { return ImmutableTree(node->popMin(valueOut)); }
-  template<class K, class V, class KOV, class CMP>
-  inline typename ImmutableTree<K,V,KOV,CMP>::iterator 
-  ImmutableTree<K,V,KOV,CMP>::begin() const { return iterator(node, true); }
-  template<class K, class V, class KOV, class CMP>
-  inline typename ImmutableTree<K,V,KOV,CMP>::iterator 
-  ImmutableTree<K,V,KOV,CMP>::end() const { return iterator(node, false); }
-  template<class K, class V, class KOV, class CMP>
-  inline typename ImmutableTree<K,V,KOV,CMP>::iterator 
-  ImmutableTree<K,V,KOV,CMP>::lower_bound(const key_type &k) const {
-    iterator it(node,false);
-    for (Node *root=node; !root->isTerminator();) {
-      it.stack.push_back(root);
-      if (key_compare()(k, key_of_value()(root->value))) {
-        root = root->left;
-      } else if (key_compare()(key_of_value()(root->value), k)) {
-        root = root->right;
-      } else {
-        return it;
-      }
-    }
-    if (!it.stack.empty()) {
-      Node *last = it.stack.back();
-      if (key_compare()(key_of_value()(last->value), k))
-        ++it;
-    }
-    return it;
-  }
-  template<class K, class V, class KOV, class CMP>
-  typename ImmutableTree<K,V,KOV,CMP>::iterator 
-  ImmutableTree<K,V,KOV,CMP>::upper_bound(const key_type &key) const {
-    iterator end(node,false),it = lower_bound(key);
-    if (it!=end && !key_compare()(key,key_of_value()(*it)))
-      ++it;
-    return it;
-  }
   template<class V, class D>
   struct _Select1st {
     D &operator()(V &a) const { return a.first; }
