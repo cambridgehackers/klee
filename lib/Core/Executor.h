@@ -33,10 +33,6 @@
 #if 1 //jca
 namespace klee {
 static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->address < b->address; }
-  struct _Select1st {
-    const MemoryObject* operator()(std::pair<const MemoryObject*,ObjectHolder> &a) const { return a.first; }
-    const MemoryObject* operator()(const std::pair<const MemoryObject*,ObjectHolder> &a) const { return a.first; }
-  };
   class ImmutableTree {
   class MemNode {
   public:
@@ -124,9 +120,9 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       if (isTerminator()) {
         return new MemNode(terminator.incref(), terminator.incref(), v);
       } else {
-        if (MOLT(_Select1st()(v), _Select1st()(value))) {
+        if (MOLT(v.first, value.first)) {
           return balance(left->insert(v), value, right->incref());
-        } else if (MOLT(_Select1st()(value), _Select1st()(v))) {
+        } else if (MOLT(value.first, v.first)) {
           return balance(left->incref(), value, right->insert(v));
         } else {
           return incref();
@@ -137,9 +133,9 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       if (isTerminator()) {
         return new MemNode(terminator.incref(), terminator.incref(), v);
       } else {
-        if (MOLT(_Select1st()(v), _Select1st()(value))) {
+        if (MOLT(v.first, value.first)) {
           return balance(left->replace(v), value, right->incref());
-        } else if (MOLT(_Select1st()(value), _Select1st()(v))) {
+        } else if (MOLT(value.first, v.first)) {
           return balance(left->incref(), value, right->replace(v));
         } else {
           return new MemNode(left->incref(), right->incref(), v);
@@ -150,9 +146,9 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       if (isTerminator()) {
         return incref();
       } else {
-        if (MOLT(k, _Select1st()(value))) {
+        if (MOLT(k, value.first)) {
           return balance(left->remove(k), value, right->incref());
-        } else if (MOLT(_Select1st()(value), k)) {
+        } else if (MOLT(value.first, k)) {
           return balance(left->incref(), value, right->remove(k));
         } else {
           if (left->isTerminator()) {
@@ -287,7 +283,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
     const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* &k) const {
       MemNode *n = node;
       while (!n->isTerminator()) {
-        const MemoryObject* key = _Select1st()(n->value);
+        const MemoryObject* key = n->value.first;
         if (MOLT(k, key)) {
           n = n->left;
         } else if (MOLT(key, k)) {
@@ -302,7 +298,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       MemNode *n = node;
       MemNode *result = 0;
       while (!n->isTerminator()) {
-        const MemoryObject* key = _Select1st()(n->value);
+        const MemoryObject* key = n->value.first;
         if (MOLT(k, key)) {
           n = n->left;
         } else if (MOLT(key, k)) {
@@ -325,9 +321,9 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       iterator it(node,false);
       for (MemNode *root=node; !root->isTerminator();) {
         it.stack.push_back(root);
-        if (MOLT(k, _Select1st()(root->value))) {
+        if (MOLT(k, root->value.first)) {
           root = root->left;
-        } else if (MOLT(_Select1st()(root->value), k)) {
+        } else if (MOLT(root->value.first, k)) {
           root = root->right;
         } else {
           return it;
@@ -335,14 +331,14 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       }
       if (!it.stack.empty()) {
         MemNode *last = it.stack.back();
-        if (MOLT(_Select1st()(last->value), k))
+        if (MOLT(last->value.first, k))
           ++it;
       }
       return it;
     }
     iterator upper_bound(const MemoryObject* &key) const {
       iterator end(node,false),it = lower_bound(key);
-      if (it!=end && !MOLT(key,_Select1st()(*it)))
+      if (it!=end && !MOLT(key,it->first))
         ++it;
       return it;
     }
