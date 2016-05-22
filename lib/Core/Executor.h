@@ -44,21 +44,20 @@ namespace klee {
   public:
     static size_t allocated;
     class iterator;
-    typedef KOV key_of_value;
   public:
-    ImmutableTree() : node(Node::terminator.incref()) { }
+    ImmutableTree() : node(MemNode::terminator.incref()) { }
     ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
     ~ImmutableTree() { node->decref(); }
     ImmutableTree &operator=(const ImmutableTree &s) {
-      Node *n = s.node->incref();
+      MemNode *n = s.node->incref();
       node->decref();
       node = n;
       return *this;
     }
     const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* &k) const {
-      Node *n = node;
+      MemNode *n = node;
       while (!n->isTerminator()) {
-        const MemoryObject* key = key_of_value()(n->value);
+        const MemoryObject* key = _Select1st()(n->value);
         if (MemoryObjectLT()(k, key)) {
           n = n->left;
         } else if (MemoryObjectLT()(key, k)) {
@@ -70,10 +69,10 @@ namespace klee {
       return 0;
     }
     const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* &k) const {
-      Node *n = node;
-      Node *result = 0;
+      MemNode *n = node;
+      MemNode *result = 0;
       while (!n->isTerminator()) {
-        const MemoryObject* key = key_of_value()(n->value);
+        const MemoryObject* key = _Select1st()(n->value);
         if (MemoryObjectLT()(k, key)) {
           n = n->left;
         } else if (MemoryObjectLT()(key, k)) {
@@ -94,90 +93,90 @@ namespace klee {
     iterator end() const { return iterator(node, false); }
     iterator lower_bound(const MemoryObject* &k) const {
       iterator it(node,false);
-      for (Node *root=node; !root->isTerminator();) {
+      for (MemNode *root=node; !root->isTerminator();) {
         it.stack.push_back(root);
-        if (MemoryObjectLT()(k, key_of_value()(root->value))) {
+        if (MemoryObjectLT()(k, _Select1st()(root->value))) {
           root = root->left;
-        } else if (MemoryObjectLT()(key_of_value()(root->value), k)) {
+        } else if (MemoryObjectLT()(_Select1st()(root->value), k)) {
           root = root->right;
         } else {
           return it;
         }
       }
       if (!it.stack.empty()) {
-        Node *last = it.stack.back();
-        if (MemoryObjectLT()(key_of_value()(last->value), k))
+        MemNode *last = it.stack.back();
+        if (MemoryObjectLT()(_Select1st()(last->value), k))
           ++it;
       }
       return it;
     }
     iterator upper_bound(const MemoryObject* &key) const {
       iterator end(node,false),it = lower_bound(key);
-      if (it!=end && !MemoryObjectLT()(key,key_of_value()(*it)))
+      if (it!=end && !MemoryObjectLT()(key,_Select1st()(*it)))
         ++it;
       return it;
     }
     static size_t getAllocated() { return allocated; }
   private:
-    class Node;
-    Node *node;
-    ImmutableTree(Node *_node) : node(_node) { }
+    class MemNode;
+    MemNode *node;
+    ImmutableTree(MemNode *_node) : node(_node) { }
   };
   template<class KOV>
-  class ImmutableTree<KOV>::Node {
+  class ImmutableTree<KOV>::MemNode {
   public:
-    static Node terminator;
-    Node *left, *right;
+    static MemNode terminator;
+    MemNode *left, *right;
     std::pair<const MemoryObject*,ObjectHolder> value;
     unsigned height, references;
   protected:
-    Node() : left(&terminator), right(&terminator), height(0), references(3) { assert(this==&terminator); }
-    static Node *balance(Node *left, const std::pair<const MemoryObject*,ObjectHolder> &value, Node *right) {
+    MemNode() : left(&terminator), right(&terminator), height(0), references(3) { assert(this==&terminator); }
+    static MemNode *balance(MemNode *left, const std::pair<const MemoryObject*,ObjectHolder> &value, MemNode *right) {
       if (left->height > right->height + 2) {
-        Node *ll = left->left;
-        Node *lr = left->right;
+        MemNode *ll = left->left;
+        MemNode *lr = left->right;
         if (ll->height >= lr->height) {
-          Node *nlr = new Node(lr->incref(), right, value);
-          Node *res = new Node(ll->incref(), nlr, left->value);
+          MemNode *nlr = new MemNode(lr->incref(), right, value);
+          MemNode *res = new MemNode(ll->incref(), nlr, left->value);
           left->decref();
           return res;
         } else {
-          Node *lrl = lr->left;
-          Node *lrr = lr->right;
-          Node *nll = new Node(ll->incref(), lrl->incref(), left->value);
-          Node *nlr = new Node(lrr->incref(), right, value);
-          Node *res = new Node(nll, nlr, lr->value);
+          MemNode *lrl = lr->left;
+          MemNode *lrr = lr->right;
+          MemNode *nll = new MemNode(ll->incref(), lrl->incref(), left->value);
+          MemNode *nlr = new MemNode(lrr->incref(), right, value);
+          MemNode *res = new MemNode(nll, nlr, lr->value);
           left->decref();
           return res;
         }
       } else if (right->height > left->height + 2) {
-        Node *rl = right->left;
-        Node *rr = right->right;
+        MemNode *rl = right->left;
+        MemNode *rr = right->right;
         if (rr->height >= rl->height) {
-          Node *nrl = new Node(left, rl->incref(), value);
-          Node *res = new Node(nrl, rr->incref(), right->value);
+          MemNode *nrl = new MemNode(left, rl->incref(), value);
+          MemNode *res = new MemNode(nrl, rr->incref(), right->value);
           right->decref();
           return res;
         } else {
-          Node *rll = rl->left;
-          Node *rlr = rl->right;
-          Node *nrl = new Node(left, rll->incref(), value);
-          Node *nrr = new Node(rlr->incref(), rr->incref(), right->value);
-          Node *res = new Node(nrl, nrr, rl->value);
+          MemNode *rll = rl->left;
+          MemNode *rlr = rl->right;
+          MemNode *nrl = new MemNode(left, rll->incref(), value);
+          MemNode *nrr = new MemNode(rlr->incref(), rr->incref(), right->value);
+          MemNode *res = new MemNode(nrl, nrr, rl->value);
           right->decref();
           return res;
         }
       } else {
-        return new Node(left, right, value);
+        return new MemNode(left, right, value);
       }
     }
   public:
-    Node(Node *_left, Node *_right, const std::pair<const MemoryObject*,ObjectHolder> &_value)
+    MemNode(MemNode *_left, MemNode *_right, const std::pair<const MemoryObject*,ObjectHolder> &_value)
       : left(_left), right(_right), value(_value), 
         height(std::max(left->height, right->height) + 1), references(1) {
       ++allocated;
     }
-    ~Node() {
+    ~MemNode() {
       left->decref();
       right->decref();
       --allocated;
@@ -186,7 +185,7 @@ namespace klee {
       --references;
       if (references==0) delete this;
     }
-    Node *incref() {
+    MemNode *incref() {
       ++references;
       return this;
     }
@@ -198,7 +197,7 @@ namespace klee {
         return left->size() + 1 + right->size();
       }
     }
-    Node *popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) {
+    MemNode *popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) {
       if (left->isTerminator()) {
         valueOut = value;
         return right->incref();
@@ -206,39 +205,39 @@ namespace klee {
         return balance(left->popMin(valueOut), value, right->incref());
       }
     }
-    Node *insert(const std::pair<const MemoryObject*,ObjectHolder> &v) {
+    MemNode *insert(const std::pair<const MemoryObject*,ObjectHolder> &v) {
       if (isTerminator()) {
-        return new Node(terminator.incref(), terminator.incref(), v);
+        return new MemNode(terminator.incref(), terminator.incref(), v);
       } else {
-        if (MemoryObjectLT()(key_of_value()(v), key_of_value()(value))) {
+        if (MemoryObjectLT()(_Select1st()(v), _Select1st()(value))) {
           return balance(left->insert(v), value, right->incref());
-        } else if (MemoryObjectLT()(key_of_value()(value), key_of_value()(v))) {
+        } else if (MemoryObjectLT()(_Select1st()(value), _Select1st()(v))) {
           return balance(left->incref(), value, right->insert(v));
         } else {
           return incref();
         }
       }
     }
-    Node *replace(const std::pair<const MemoryObject*,ObjectHolder> &v) {
+    MemNode *replace(const std::pair<const MemoryObject*,ObjectHolder> &v) {
       if (isTerminator()) {
-        return new Node(terminator.incref(), terminator.incref(), v);
+        return new MemNode(terminator.incref(), terminator.incref(), v);
       } else {
-        if (MemoryObjectLT()(key_of_value()(v), key_of_value()(value))) {
+        if (MemoryObjectLT()(_Select1st()(v), _Select1st()(value))) {
           return balance(left->replace(v), value, right->incref());
-        } else if (MemoryObjectLT()(key_of_value()(value), key_of_value()(v))) {
+        } else if (MemoryObjectLT()(_Select1st()(value), _Select1st()(v))) {
           return balance(left->incref(), value, right->replace(v));
         } else {
-          return new Node(left->incref(), right->incref(), v);
+          return new MemNode(left->incref(), right->incref(), v);
         }
       }
     }
-    Node *remove(const MemoryObject* &k) {
+    MemNode *remove(const MemoryObject* &k) {
       if (isTerminator()) {
         return incref();
       } else {
-        if (MemoryObjectLT()(k, key_of_value()(value))) {
+        if (MemoryObjectLT()(k, _Select1st()(value))) {
           return balance(left->remove(k), value, right->incref());
-        } else if (MemoryObjectLT()(key_of_value()(value), k)) {
+        } else if (MemoryObjectLT()(_Select1st()(value), k)) {
           return balance(left->incref(), value, right->remove(k));
         } else {
           if (left->isTerminator()) {
@@ -247,7 +246,7 @@ namespace klee {
             return left->incref();
           } else {
             std::pair<const MemoryObject*,ObjectHolder> min;
-            Node *nr = right->popMin(min);
+            MemNode *nr = right->popMin(min);
             return balance(left->incref(), min, nr);
           }
         }
@@ -283,12 +282,12 @@ namespace klee {
   class ImmutableTree<KOV>::iterator {
     friend class ImmutableTree<KOV>;
   private:
-    Node *root; 
-    FixedStack<Node*> stack;
+    MemNode *root; 
+    FixedStack<MemNode*> stack;
   public:
-    iterator(Node *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
+    iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
       if (atBeginning) {
-        for (Node *n=root; !n->isTerminator(); n=n->left)
+        for (MemNode *n=root; !n->isTerminator(); n=n->left)
           stack.push_back(n);
       }
     }
@@ -302,24 +301,24 @@ namespace klee {
       return *this;
     }
     const std::pair<const MemoryObject*,ObjectHolder> &operator*() {
-      Node *n = stack.back();
+      MemNode *n = stack.back();
       return n->value;
     }
     const std::pair<const MemoryObject*,ObjectHolder> *operator->() {
-      Node *n = stack.back();
+      MemNode *n = stack.back();
       return &n->value;
     }
     bool operator==(const iterator &b) { return stack==b.stack; }
     bool operator!=(const iterator &b) { return stack!=b.stack; }
     iterator &operator--() {
       if (stack.empty()) {
-        for (Node *n=root; !n->isTerminator(); n=n->right)
+        for (MemNode *n=root; !n->isTerminator(); n=n->right)
           stack.push_back(n);
       } else {
-        Node *n = stack.back();
+        MemNode *n = stack.back();
         if (n->left->isTerminator()) {
           for (;;) {
-            Node *prev = n;
+            MemNode *prev = n;
             stack.pop_back();
             if (stack.empty()) {
               break;
@@ -339,10 +338,10 @@ namespace klee {
     }
     iterator &operator++() {
       assert(!stack.empty());
-      Node *n = stack.back();
+      MemNode *n = stack.back();
       if (n->right->isTerminator()) {
         for (;;) {
-          Node *prev = n;
+          MemNode *prev = n;
           stack.pop_back();
           if (stack.empty()) {
             break;
@@ -362,8 +361,8 @@ namespace klee {
   };
   /***/
   template<class KOV> 
-  typename ImmutableTree<KOV>::Node 
-  ImmutableTree<KOV>::Node::terminator;
+  typename ImmutableTree<KOV>::MemNode 
+  ImmutableTree<KOV>::MemNode::terminator;
   template<class KOV> 
   size_t ImmutableTree<KOV>::allocated = 0;
   class MemoryMap {
