@@ -173,20 +173,19 @@ namespace klee {
   public:
     static size_t allocated;
     class iterator {
-    template<typename T>
     class FixedStack {
       unsigned pos, max;
-      T *elts;
+      MemNode **elts;
     public:
-      FixedStack(unsigned _max) : pos(0), max(_max), elts(new T[max]) {}
-      FixedStack(const FixedStack &b) : pos(b.pos), max(b.max), elts(new T[b.max]) {
+      FixedStack(unsigned _max) : pos(0), max(_max), elts(new MemNode*[max]) {}
+      FixedStack(const FixedStack &b) : pos(b.pos), max(b.max), elts(new MemNode*[b.max]) {
         std::copy(b.elts, b.elts+pos, elts);
       }
       ~FixedStack() { delete[] elts; }
-      void push_back(const T &elt) { elts[pos++] = elt; }
+      void push_back(MemNode* elt) { elts[pos++] = elt; }
       void pop_back() { --pos; }
       bool empty() { return pos==0; }
-      T &back() { return elts[pos-1]; }
+      MemNode* &back() { return elts[pos-1]; }
       FixedStack &operator=(const FixedStack &b) {
         assert(max == b.max); 
         pos = b.pos;
@@ -201,7 +200,7 @@ namespace klee {
       friend class ImmutableTree;
     private:
       MemNode *root; 
-      FixedStack<MemNode*> stack;
+      FixedStack stack;
     public:
       iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
         if (atBeginning) {
