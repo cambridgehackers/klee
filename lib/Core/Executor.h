@@ -250,7 +250,6 @@ namespace klee {
   private:
     MemNode *node;
     ImmutableTree(MemNode *_node) : node(_node) { }
-  };
   template<typename T>
   class FixedStack {
     unsigned pos, max;
@@ -275,6 +274,7 @@ namespace klee {
       return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
     }
     bool operator!=(const FixedStack &b) { return !(*this==b); }
+  };
   };
   template<class KOV>
   class ImmutableTree<KOV>::iterator {
