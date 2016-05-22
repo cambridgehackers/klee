@@ -101,13 +101,10 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
   public:
     MemNode(MemNode *_left, MemNode *_right, const std::pair<const MemoryObject*,ObjectHolder> &_value)
       : left(_left), right(_right), value(_value), 
-        height(std::max(left->height, right->height) + 1), references(1) {
-      ++allocated;
-    }
+        height(std::max(left->height, right->height) + 1), references(1) { }
     ~MemNode() {
       left->decref();
       right->decref();
-      --allocated;
     }
     void decref() {
       --references;
@@ -323,7 +320,6 @@ public:
       }
       return result ? &result->value : 0;
     }
-    size_t size() const { return node->size(); }
     ImmutableTree insert(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->insert(value)); }
     ImmutableTree replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->replace(value)); }
     ImmutableTree remove(const MemoryObject* &key) const { return ImmutableTree(node->remove(key)); }
@@ -355,8 +351,6 @@ public:
         ++it;
       return it;
     }
-    //static size_t getAllocated() { return allocated; }
-    static size_t allocated;
     ImmutableTree() : node(MemNode::terminator.incref()) { }
     ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
     ~ImmutableTree() { node->decref(); }
