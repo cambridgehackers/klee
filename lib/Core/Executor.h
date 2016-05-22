@@ -35,12 +35,15 @@ namespace klee {
   struct MemoryObjectLT {
     bool operator()(const MemoryObject *a, const MemoryObject *b) const { return a->address < b->address; }
   };
-  template<class V, class KOV>
+  struct _Select1st {
+    const MemoryObject* operator()(std::pair<const MemoryObject*,ObjectHolder> &a) const { return a.first; }
+    const MemoryObject* operator()(const std::pair<const MemoryObject*,ObjectHolder> &a) const { return a.first; }
+  };
+  template<class KOV>
   class ImmutableTree {
   public:
     static size_t allocated;
     class iterator;
-    typedef V value_type;
     typedef KOV key_of_value;
   public:
     ImmutableTree() : node(Node::terminator.incref()) { }
@@ -52,7 +55,7 @@ namespace klee {
       node = n;
       return *this;
     }
-    const value_type *lookup(const MemoryObject* &k) const {
+    const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* &k) const {
       Node *n = node;
       while (!n->isTerminator()) {
         const MemoryObject* key = key_of_value()(n->value);
@@ -66,7 +69,7 @@ namespace klee {
       }
       return 0;
     }
-    const value_type *lookup_previous(const MemoryObject* &k) const {
+    const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* &k) const {
       Node *n = node;
       Node *result = 0;
       while (!n->isTerminator()) {
@@ -83,10 +86,10 @@ namespace klee {
       return result ? &result->value : 0;
     }
     size_t size() const { return node->size(); }
-    ImmutableTree insert(const value_type &value) const { return ImmutableTree(node->insert(value)); }
-    ImmutableTree replace(const value_type &value) const { return ImmutableTree(node->replace(value)); }
+    ImmutableTree insert(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->insert(value)); }
+    ImmutableTree replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->replace(value)); }
     ImmutableTree remove(const MemoryObject* &key) const { return ImmutableTree(node->remove(key)); }
-    ImmutableTree popMin(value_type &valueOut) const { return ImmutableTree(node->popMin(valueOut)); }
+    ImmutableTree popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) const { return ImmutableTree(node->popMin(valueOut)); }
     iterator begin() const { return iterator(node, true); }
     iterator end() const { return iterator(node, false); }
     iterator lower_bound(const MemoryObject* &k) const {
@@ -120,16 +123,16 @@ namespace klee {
     Node *node;
     ImmutableTree(Node *_node) : node(_node) { }
   };
-  template<class V, class KOV>
-  class ImmutableTree<V,KOV>::Node {
+  template<class KOV>
+  class ImmutableTree<KOV>::Node {
   public:
     static Node terminator;
     Node *left, *right;
-    value_type value;
+    std::pair<const MemoryObject*,ObjectHolder> value;
     unsigned height, references;
   protected:
     Node() : left(&terminator), right(&terminator), height(0), references(3) { assert(this==&terminator); }
-    static Node *balance(Node *left, const value_type &value, Node *right) {
+    static Node *balance(Node *left, const std::pair<const MemoryObject*,ObjectHolder> &value, Node *right) {
       if (left->height > right->height + 2) {
         Node *ll = left->left;
         Node *lr = left->right;
@@ -169,7 +172,7 @@ namespace klee {
       }
     }
   public:
-    Node(Node *_left, Node *_right, const value_type &_value)
+    Node(Node *_left, Node *_right, const std::pair<const MemoryObject*,ObjectHolder> &_value)
       : left(_left), right(_right), value(_value), 
         height(std::max(left->height, right->height) + 1), references(1) {
       ++allocated;
@@ -195,7 +198,7 @@ namespace klee {
         return left->size() + 1 + right->size();
       }
     }
-    Node *popMin(value_type &valueOut) {
+    Node *popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) {
       if (left->isTerminator()) {
         valueOut = value;
         return right->incref();
@@ -203,7 +206,7 @@ namespace klee {
         return balance(left->popMin(valueOut), value, right->incref());
       }
     }
-    Node *insert(const value_type &v) {
+    Node *insert(const std::pair<const MemoryObject*,ObjectHolder> &v) {
       if (isTerminator()) {
         return new Node(terminator.incref(), terminator.incref(), v);
       } else {
@@ -216,7 +219,7 @@ namespace klee {
         }
       }
     }
-    Node *replace(const value_type &v) {
+    Node *replace(const std::pair<const MemoryObject*,ObjectHolder> &v) {
       if (isTerminator()) {
         return new Node(terminator.incref(), terminator.incref(), v);
       } else {
@@ -243,7 +246,7 @@ namespace klee {
           } else if (right->isTerminator()) {
             return left->incref();
           } else {
-            value_type min;
+            std::pair<const MemoryObject*,ObjectHolder> min;
             Node *nr = right->popMin(min);
             return balance(left->incref(), min, nr);
           }
@@ -276,9 +279,9 @@ namespace klee {
     }
     bool operator!=(const FixedStack &b) { return !(*this==b); }
   };
-  template<class V, class KOV>
-  class ImmutableTree<V,KOV>::iterator {
-    friend class ImmutableTree<V,KOV>;
+  template<class KOV>
+  class ImmutableTree<KOV>::iterator {
+    friend class ImmutableTree<KOV>;
   private:
     Node *root; 
     FixedStack<Node*> stack;
@@ -298,11 +301,11 @@ namespace klee {
       stack = b.stack;
       return *this;
     }
-    const value_type &operator*() {
+    const std::pair<const MemoryObject*,ObjectHolder> &operator*() {
       Node *n = stack.back();
       return n->value;
     }
-    const value_type *operator->() {
+    const std::pair<const MemoryObject*,ObjectHolder> *operator->() {
       Node *n = stack.back();
       return &n->value;
     }
@@ -358,20 +361,14 @@ namespace klee {
     }
   };
   /***/
-  template<class V, class KOV> 
-  typename ImmutableTree<V,KOV>::Node 
-  ImmutableTree<V,KOV>::Node::terminator;
-  template<class V, class KOV> 
-  size_t ImmutableTree<V,KOV>::allocated = 0;
-  template<class V>
-  struct _Select1st {
-    const MemoryObject* operator()(V &a) const { return a.first; }
-    const MemoryObject* operator()(const V &a) const { return a.first; }
-  };
+  template<class KOV> 
+  typename ImmutableTree<KOV>::Node 
+  ImmutableTree<KOV>::Node::terminator;
+  template<class KOV> 
+  size_t ImmutableTree<KOV>::allocated = 0;
   class MemoryMap {
   public:
-    typedef std::pair<const MemoryObject*,ObjectHolder> value_type;
-    typedef ImmutableTree<value_type, _Select1st<value_type>> Tree;
+    typedef ImmutableTree<_Select1st> Tree;
     typedef typename Tree::iterator iterator;
   private:
     Tree elts;
@@ -380,9 +377,9 @@ namespace klee {
     MemoryMap() {}
     MemoryMap(const MemoryMap &b) : elts(b.elts) {}
     ~MemoryMap() {}
-    const value_type *lookup(const MemoryObject* key) const { return elts.lookup(key); }
-    const value_type *lookup_previous(const MemoryObject* key) const { return elts.lookup_previous(key); }
-    MemoryMap replace(const value_type &value) const { return elts.replace(value); }
+    const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* key) const { return elts.lookup(key); }
+    const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* key) const { return elts.lookup_previous(key); }
+    MemoryMap replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return elts.replace(value); }
     MemoryMap remove(const MemoryObject* key) const { return elts.remove(key); }
     iterator begin() const { return elts.begin(); }
     iterator end() const { return elts.end(); }
