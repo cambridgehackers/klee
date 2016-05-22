@@ -39,7 +39,6 @@ namespace klee {
     const MemoryObject* operator()(std::pair<const MemoryObject*,ObjectHolder> &a) const { return a.first; }
     const MemoryObject* operator()(const std::pair<const MemoryObject*,ObjectHolder> &a) const { return a.first; }
   };
-  template<class KOV>
   class ImmutableTree {
   class MemNode {
   public:
@@ -173,86 +172,7 @@ namespace klee {
   };
   public:
     static size_t allocated;
-    class iterator;
-  public:
-    ImmutableTree() : node(MemNode::terminator.incref()) { }
-    ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
-    ~ImmutableTree() { node->decref(); }
-    ImmutableTree &operator=(const ImmutableTree &s) {
-      MemNode *n = s.node->incref();
-      node->decref();
-      node = n;
-      return *this;
-    }
-    const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* &k) const {
-      MemNode *n = node;
-      while (!n->isTerminator()) {
-        const MemoryObject* key = _Select1st()(n->value);
-        if (MemoryObjectLT()(k, key)) {
-          n = n->left;
-        } else if (MemoryObjectLT()(key, k)) {
-          n = n->right;
-        } else {
-          return &n->value;
-        }
-      }
-      return 0;
-    }
-    const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* &k) const {
-      MemNode *n = node;
-      MemNode *result = 0;
-      while (!n->isTerminator()) {
-        const MemoryObject* key = _Select1st()(n->value);
-        if (MemoryObjectLT()(k, key)) {
-          n = n->left;
-        } else if (MemoryObjectLT()(key, k)) {
-          result = n;
-          n = n->right;
-        } else {
-          return &n->value;
-        }
-      }
-      return result ? &result->value : 0;
-    }
-    size_t size() const { return node->size(); }
-    ImmutableTree insert(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->insert(value)); }
-    ImmutableTree replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->replace(value)); }
-    ImmutableTree remove(const MemoryObject* &key) const { return ImmutableTree(node->remove(key)); }
-    ImmutableTree popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) const { return ImmutableTree(node->popMin(valueOut)); }
-    iterator begin() const { return iterator(node, true); }
-    iterator end() const { return iterator(node, false); }
-    iterator lower_bound(const MemoryObject* &k) const {
-      iterator it(node,false);
-      for (MemNode *root=node; !root->isTerminator();) {
-        it.stack.push_back(root);
-        if (MemoryObjectLT()(k, _Select1st()(root->value))) {
-          root = root->left;
-        } else if (MemoryObjectLT()(_Select1st()(root->value), k)) {
-          root = root->right;
-        } else {
-          return it;
-        }
-      }
-      if (!it.stack.empty()) {
-        MemNode *last = it.stack.back();
-        if (MemoryObjectLT()(_Select1st()(last->value), k))
-          ++it;
-      }
-      return it;
-    }
-    iterator upper_bound(const MemoryObject* &key) const {
-      iterator end(node,false),it = lower_bound(key);
-      if (it!=end && !MemoryObjectLT()(key,_Select1st()(*it)))
-        ++it;
-      return it;
-    }
-    static size_t getAllocated() { return allocated; }
-  private:
-    MemNode *node;
-    ImmutableTree(MemNode *_node) : node(_node) { }
-  };
-  template<class KOV>
-  class ImmutableTree<KOV>::iterator {
+  class iterator {
   template<typename T>
   class FixedStack {
     unsigned pos, max;
@@ -278,7 +198,7 @@ namespace klee {
     }
     bool operator!=(const FixedStack &b) { return !(*this==b); }
   };
-    friend class ImmutableTree<KOV>;
+    friend class ImmutableTree;
   private:
     MemNode *root; 
     FixedStack<MemNode*> stack;
@@ -357,14 +277,89 @@ namespace klee {
       return *this;
     }
   };
+  public:
+    ImmutableTree() : node(MemNode::terminator.incref()) { }
+    ImmutableTree(const ImmutableTree &s) : node(s.node->incref()) { }
+    ~ImmutableTree() { node->decref(); }
+    ImmutableTree &operator=(const ImmutableTree &s) {
+      MemNode *n = s.node->incref();
+      node->decref();
+      node = n;
+      return *this;
+    }
+    const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* &k) const {
+      MemNode *n = node;
+      while (!n->isTerminator()) {
+        const MemoryObject* key = _Select1st()(n->value);
+        if (MemoryObjectLT()(k, key)) {
+          n = n->left;
+        } else if (MemoryObjectLT()(key, k)) {
+          n = n->right;
+        } else {
+          return &n->value;
+        }
+      }
+      return 0;
+    }
+    const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* &k) const {
+      MemNode *n = node;
+      MemNode *result = 0;
+      while (!n->isTerminator()) {
+        const MemoryObject* key = _Select1st()(n->value);
+        if (MemoryObjectLT()(k, key)) {
+          n = n->left;
+        } else if (MemoryObjectLT()(key, k)) {
+          result = n;
+          n = n->right;
+        } else {
+          return &n->value;
+        }
+      }
+      return result ? &result->value : 0;
+    }
+    size_t size() const { return node->size(); }
+    ImmutableTree insert(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->insert(value)); }
+    ImmutableTree replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return ImmutableTree(node->replace(value)); }
+    ImmutableTree remove(const MemoryObject* &key) const { return ImmutableTree(node->remove(key)); }
+    ImmutableTree popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) const { return ImmutableTree(node->popMin(valueOut)); }
+    iterator begin() const { return iterator(node, true); }
+    iterator end() const { return iterator(node, false); }
+    iterator lower_bound(const MemoryObject* &k) const {
+      iterator it(node,false);
+      for (MemNode *root=node; !root->isTerminator();) {
+        it.stack.push_back(root);
+        if (MemoryObjectLT()(k, _Select1st()(root->value))) {
+          root = root->left;
+        } else if (MemoryObjectLT()(_Select1st()(root->value), k)) {
+          root = root->right;
+        } else {
+          return it;
+        }
+      }
+      if (!it.stack.empty()) {
+        MemNode *last = it.stack.back();
+        if (MemoryObjectLT()(_Select1st()(last->value), k))
+          ++it;
+      }
+      return it;
+    }
+    iterator upper_bound(const MemoryObject* &key) const {
+      iterator end(node,false),it = lower_bound(key);
+      if (it!=end && !MemoryObjectLT()(key,_Select1st()(*it)))
+        ++it;
+      return it;
+    }
+    static size_t getAllocated() { return allocated; }
+  private:
+    MemNode *node;
+    ImmutableTree(MemNode *_node) : node(_node) { }
+  };
   /***/
-  template<class KOV> 
-  typename ImmutableTree<KOV>::MemNode ImmutableTree<KOV>::MemNode::terminator;
-  template<class KOV> 
-  size_t ImmutableTree<KOV>::allocated = 0;
+  //typename ImmutableTree::MemNode ImmutableTree::MemNode::terminator;
+  //size_t ImmutableTree::allocated = 0;
   class MemoryMap {
   public:
-    typedef ImmutableTree<_Select1st> Tree;
+    typedef ImmutableTree Tree;
     typedef typename Tree::iterator iterator;
   private:
     Tree elts;
