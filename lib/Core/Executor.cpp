@@ -1388,10 +1388,8 @@ void Executor::executeInstruction(ExecutionState &state)
       terminateStateCase(state, 0, 0);
       break;
     }
-    ReturnInst *ri = cast<ReturnInst>(i);
-    bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
-    if (!isVoidReturn)
+    if (i->getNumOperands())
       result = eval(ki, 0, state);
     state.popFrame();
     if (InvokeInst *ii = dyn_cast<InvokeInst>(caller))
@@ -1400,7 +1398,7 @@ void Executor::executeInstruction(ExecutionState &state)
       state.pc = kcaller;
       ++state.pc;
     }
-    if (!isVoidReturn) {
+    if (i->getNumOperands()) {
       LLVM_TYPE_Q Type *t = caller->getType();
       if (t != Type::getVoidTy(getGlobalContext())) {
         // may need to do coercion due to bitcasts
@@ -1474,8 +1472,7 @@ void Executor::executeInstruction(ExecutionState &state)
         int retFlag = mayBeTrue(state, match);
         assert(retFlag != -1 && "FIXME: Unhandled solver failure");
         if (retFlag) {
-          BasicBlock *caseSuccessor = i.getCaseSuccessor();
-          auto it = targets.insert(std::make_pair(caseSuccessor, ConstantExpr::alloc(0, Expr::Bool))).first;
+          auto it = targets.insert(std::make_pair(i.getCaseSuccessor(), ConstantExpr::alloc(0, Expr::Bool))).first;
           it->second = OrExpr::create(match, it->second);
         }
       }
@@ -2173,19 +2170,17 @@ static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap
     return a->getArgNo(); // Metadata is no longer a Value
   else if (isa<BasicBlock>(v) || isa<InlineAsm>(v))
     return -1;
+  assert(isa<Constant>(v));
+  Constant *c = cast<Constant>(v);
+  unsigned id = exec->constants.size();
+  auto it = exec->constantMap.find(c);
+  if (it != exec->constantMap.end())
+    id = it->second->id;
   else {
-    assert(isa<Constant>(v));
-    Constant *c = cast<Constant>(v);
-    unsigned id = exec->constants.size();
-    auto it = exec->constantMap.find(c);
-    if (it != exec->constantMap.end())
-      id = it->second->id;
-    else {
-      exec->constantMap.insert(std::make_pair(c, new KConstant(c, id, ki)));
-      exec->constants.push_back(c);
-    }
-    return -(id + 2);
+    exec->constantMap.insert(std::make_pair(c, new KConstant(c, id, ki)));
+    exec->constants.push_back(c);
   }
+  return -(id + 2);
 }
 
 const Module *Executor::setModule(llvm::Module *_module, const ModuleOptions &opts)
@@ -2281,11 +2276,8 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       unsigned rnum = thisFunc->arg_size(); // The first arg_size() registers are reserved for formals.
       for (auto bbit = thisFunc->begin(), bbie = thisFunc->end(); bbit != bbie; ++bbit)
         for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
-          KInstruction *ki = new KInstruction();
-          ki->offset = -1;
-          ki->inst = it;
           registerMap[it] = rnum++;
-          ki->dest = registerMap[it];
+          KInstruction *ki = new KInstruction(it, registerMap[it], -1);
           if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(it))
             computeOffsets(ki, gep_type_begin(gepi), gep_type_end(gepi));
           else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(it))
