@@ -82,7 +82,6 @@ public:
 };
 
 class PTreeNode {
-    friend class PTree;
 public:
     PTreeNode *parent, *left, *right;
     ExecutionState *data;
@@ -115,13 +114,6 @@ public:
         n = p;
       } while (n && !n->left && !n->right);
     }
-class PTree {
-    typedef ExecutionState* data_type;
-public:
-    PTreeNode *zzroot;
-    PTree(const data_type &_root) : zzroot(new PTreeNode(0,_root)) { }
-    ~PTree() {}
-};
 } // namespace klee
 
 namespace {
@@ -2075,8 +2067,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       initializeGlobalObject(*startingState, startingState->getWriteable(mo, res->second), i->getInitializer(), 0);
     }
   }
-  PTree *processTree = new PTree(startingState);
-  startingState->ptreeNode = processTree->zzroot;
+  startingState->ptreeNode = new PTreeNode(0, startingState);
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(startingState);
   if (CoreSearch.size() == 0) {
