@@ -1531,7 +1531,7 @@ void Executor::executeInstruction(ExecutionState &state)
     std::vector<ref<Expr>> arguments;
     arguments.reserve(numArgs);
     for (unsigned j=0; j<numArgs; ++j)
-      arguments.push_back(eval(ki, j+1, state));
+      arguments.push_back(eval(ki, j, state));
     if (f) {
       const FunctionType *fType = dyn_cast<FunctionType>(cast<PointerType>(f->getType())->getElementType());
       const FunctionType *fpType = dyn_cast<FunctionType>(cast<PointerType>(fp->getType())->getElementType());
@@ -1558,7 +1558,7 @@ void Executor::executeInstruction(ExecutionState &state)
       }
       executeIntCall(state, ki, f, arguments);
     } else {
-      ref<Expr> v = eval(ki, 0, state);
+      ref<Expr> v = eval(ki, numArgs, state);
       ExecutionState *free = &state;
       /* XXX This is wasteful, no need to do a full evaluate since we have already got a value.
          But in the end the caches should handle it for us, albeit with some overhead. */
@@ -2284,19 +2284,10 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
             computeOffsets(ki, iv_type_begin(ivi), iv_type_end(ivi));
           else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(it))
             computeOffsets(ki, ev_type_begin(evi), ev_type_end(evi));
-          if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
-            CallSite cs(it);
-            unsigned numArgs = cs.arg_size();
-            ki->operands = new int[numArgs+1];
-            ki->operands[0] = getOperandNum(cs.getCalledValue(), registerMap, ki, this);
-            for (unsigned j=0; j<numArgs; j++)
-              ki->operands[j+1] = getOperandNum(cs.getArgument(j), registerMap, ki, this);
-          } else {
-            unsigned numOperands = it->getNumOperands();
-            ki->operands = new int[numOperands];
-            for (unsigned j=0; j<numOperands; j++)
-              ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, ki, this);
-          }
+          unsigned numOperands = it->getNumOperands();
+          ki->operands = new int[numOperands];
+          for (unsigned j = 0; j < numOperands; j++)
+            ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, ki, this);
           theStatisticManager->setIndex(0);
           if (instructionIsCoverable(ki->inst))
             ++stats::uncoveredInstructions;
