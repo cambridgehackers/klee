@@ -2163,26 +2163,6 @@ void Executor::computeOffsets(KInstruction *ki, TypeIt ib, TypeIt ie) {
   ki->offset = constantOffset->getZExtValue();
 }
 
-static int getOperandNum(Value *v, std::map<Instruction*, unsigned> &registerMap, KInstruction *ki, Executor *exec) {
-  if (Instruction *inst = dyn_cast<Instruction>(v))
-    return registerMap[inst];
-  else if (Argument *a = dyn_cast<Argument>(v))
-    return a->getArgNo(); // Metadata is no longer a Value
-  else if (isa<BasicBlock>(v) || isa<InlineAsm>(v))
-    return -1;
-  assert(isa<Constant>(v));
-  Constant *c = cast<Constant>(v);
-  unsigned id = exec->constants.size();
-  auto it = exec->constantMap.find(c);
-  if (it != exec->constantMap.end())
-    id = it->second->id;
-  else {
-    exec->constantMap.insert(std::make_pair(c, new KConstant(c, id, ki)));
-    exec->constants.push_back(c);
-  }
-  return -(id + 2);
-}
-
 const Module *Executor::setModule(llvm::Module *_module, const ModuleOptions &opts)
 {
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
@@ -2285,9 +2265,28 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
           else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(it))
             computeOffsets(ki, ev_type_begin(evi), ev_type_end(evi));
           unsigned numOperands = it->getNumOperands();
-          ki->operands = new int[numOperands];
-          for (unsigned j = 0; j < numOperands; j++)
-            ki->operands[j] = getOperandNum(it->getOperand(j), registerMap, ki, this);
+          for (unsigned j = 0; j < numOperands; j++) {
+            Value *v = it->getOperand(j);
+            if (Instruction *inst = dyn_cast<Instruction>(v))
+              ki->operands[j] = registerMap[inst];
+            else if (Argument *a = dyn_cast<Argument>(v))
+              ki->operands[j] = a->getArgNo(); // Metadata is no longer a Value
+            else if (isa<BasicBlock>(v) || isa<InlineAsm>(v))
+              ki->operands[j] = -1;
+            else {
+              assert(isa<Constant>(v));
+              Constant *c = cast<Constant>(v);
+              unsigned id = constants.size();
+              auto it = constantMap.find(c);
+              if (it != constantMap.end())
+                id = it->second->id;
+              else {
+                constantMap.insert(std::make_pair(c, new KConstant(c, id, ki)));
+                constants.push_back(c);
+              }
+              ki->operands[j] = -(id + 2);
+            }
+          }
           theStatisticManager->setIndex(0);
           if (instructionIsCoverable(ki->inst))
             ++stats::uncoveredInstructions;

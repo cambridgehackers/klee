@@ -10,11 +10,9 @@
 #define KLEE_KINSTRUCTION_H
 #include "klee/Config/Version.h"
 #include "llvm/Support/DataTypes.h"
+#include "llvm/IR/Instructions.h"
 #include <vector>
 
-namespace llvm {
-  class Instruction;
-}
 namespace klee {
   /// KInstruction - Intermediate instruction representation used /// during execution.
   struct KInstruction {
@@ -32,7 +30,8 @@ namespace klee {
     std::vector< std::pair<unsigned, uint64_t> > indices;
     /// offset - A constant offset to add to the pointer operand to execute the /// instruction.
     uint64_t offset;
-    KInstruction(llvm::Instruction *_inst, unsigned _dest, uint64_t _offset): inst(_inst), dest(_dest), offset(_offset) {}
+    KInstruction(llvm::Instruction *_inst, unsigned _dest, uint64_t _offset)
+        : inst(_inst), operands(new int[inst->getNumOperands()]), dest(_dest), offset(_offset) {}
   public:
     virtual ~KInstruction(); 
   }; 
