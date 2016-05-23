@@ -187,7 +187,6 @@ public:
           std::copy(b.elts, b.elts+pos, elts);
         }
         ~FixedStack() { delete[] elts; }
-        void push_back(MemNode* elt) { elts[pos++] = elt; }
         FixedStack &operator=(const FixedStack &b) {
           assert(max == b.max); 
           pos = b.pos;
@@ -202,12 +201,13 @@ public:
       FixedStack stack;
     public:
       bool empty() { return stack.pos==0; }
+      void push_back(MemNode* elt) { stack.elts[stack.pos++] = elt; }
       void pop_back() { --stack.pos; }
       MemNode* &back() { return stack.elts[stack.pos-1]; }
       iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
         if (atBeginning) {
           for (MemNode *n=root; !n->isTerminator(); n=n->left)
-            stack.push_back(n);
+            push_back(n);
         }
       }
       iterator(const iterator &i) : root(i.root->incref()), stack(i.stack) { }
@@ -232,7 +232,7 @@ public:
       iterator &operator--() {
         if (empty()) {
           for (MemNode *n=root; !n->isTerminator(); n=n->right)
-            stack.push_back(n);
+            push_back(n);
         } else {
           MemNode *n = back();
           if (n->left->isTerminator()) {
@@ -248,9 +248,9 @@ public:
               }
             }
           } else {
-            stack.push_back(n->left);
+            push_back(n->left);
             for (n=n->left->right; !n->isTerminator(); n=n->right)
-              stack.push_back(n);
+              push_back(n);
           }
         }
         return *this;
@@ -271,9 +271,9 @@ public:
             }
           }
         } else {
-          stack.push_back(n->right);
+          push_back(n->right);
           for (n=n->right->left; !n->isTerminator(); n=n->left)
-            stack.push_back(n);
+            push_back(n);
         }
         return *this;
       }
@@ -324,7 +324,7 @@ public:
     iterator lower_bound(const MemoryObject* k) const {
       iterator it(node,false);
       for (MemNode *root=node; !root->isTerminator();) {
-        it.stack.push_back(root);
+        it.push_back(root);
         if (MOLT(k, root->value.first)) {
           root = root->left;
         } else if (MOLT(root->value.first, k)) {
