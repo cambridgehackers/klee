@@ -57,54 +57,15 @@ typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
     MemNode *left, *right;
     MemPair value;
     unsigned height, references;
-  protected:
+  private:
     MemNode(): left(&terminator), right(&terminator), height(0), references(3){assert(this==&terminator);}
-    static MemNode *balance(MemNode *left, const MemPair &value, MemNode *right) {
-      if (left->height > right->height + 2) {
-        MemNode *ll = left->left;
-        MemNode *lr = left->right;
-        if (ll->height >= lr->height) {
-          MemNode *nlr = new MemNode(lr->incref(), right, value);
-          MemNode *res = new MemNode(ll->incref(), nlr, left->value);
-          left->decref();
-          return res;
-        } else {
-          MemNode *lrl = lr->left;
-          MemNode *lrr = lr->right;
-          MemNode *nll = new MemNode(ll->incref(), lrl->incref(), left->value);
-          MemNode *nlr = new MemNode(lrr->incref(), right, value);
-          MemNode *res = new MemNode(nll, nlr, lr->value);
-          left->decref();
-          return res;
-        }
-      } else if (right->height > left->height + 2) {
-        MemNode *rl = right->left;
-        MemNode *rr = right->right;
-        if (rr->height >= rl->height) {
-          MemNode *nrl = new MemNode(left, rl->incref(), value);
-          MemNode *res = new MemNode(nrl, rr->incref(), right->value);
-          right->decref();
-          return res;
-        } else {
-          MemNode *rll = rl->left;
-          MemNode *rlr = rl->right;
-          MemNode *nrl = new MemNode(left, rll->incref(), value);
-          MemNode *nrr = new MemNode(rlr->incref(), rr->incref(), right->value);
-          MemNode *res = new MemNode(nrl, nrr, rl->value);
-          right->decref();
-          return res;
-        }
-      } else {
-        return new MemNode(left, right, value);
-      }
-    }
+    static MemNode *balance(MemNode *left, const MemPair &value, MemNode *right) { return new MemNode(left, right, value); }
     MemNode *popMin(MemPair &valueOut) {
       if (left->isTerminator()) {
         valueOut = value;
         return right->incref();
-      } else {
-        return balance(left->popMin(valueOut), value, right->incref());
       }
+      return balance(left->popMin(valueOut), value, right->incref());
     }
   public:
     MemNode(MemNode *_left, MemNode *_right, const MemPair &_value)
@@ -114,61 +75,44 @@ typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
       left->decref();
       right->decref();
     }
-    void decref() {
-      --references;
-      if (references==0) delete this;
-    }
+    void decref() { if (--references==0) delete this; }
     MemNode *incref() {
       ++references;
       return this;
     }
     bool isTerminator() { return this==&terminator; }
     MemNode *insert(const MemPair &v) {
-      if (isTerminator()) {
+      if (isTerminator())
         return new MemNode(terminator.incref(), terminator.incref(), v);
-      } else {
-        if (MOLT(v.first, value.first)) {
-          return balance(left->insert(v), value, right->incref());
-        } else if (MOLT(value.first, v.first)) {
-          return balance(left->incref(), value, right->insert(v));
-        } else {
-          return incref();
-        }
-      }
+      else if (MOLT(v.first, value.first))
+        return balance(left->insert(v), value, right->incref());
+      else if (MOLT(value.first, v.first))
+        return balance(left->incref(), value, right->insert(v));
+      return incref();
     }
     MemNode *replace(const MemPair &v) {
-      if (isTerminator()) {
+      if (isTerminator())
         return new MemNode(terminator.incref(), terminator.incref(), v);
-      } else {
-        if (MOLT(v.first, value.first)) {
-          return balance(left->replace(v), value, right->incref());
-        } else if (MOLT(value.first, v.first)) {
-          return balance(left->incref(), value, right->replace(v));
-        } else {
-          return new MemNode(left->incref(), right->incref(), v);
-        }
-      }
+      else if (MOLT(v.first, value.first))
+        return balance(left->replace(v), value, right->incref());
+      else if (MOLT(value.first, v.first))
+        return balance(left->incref(), value, right->replace(v));
+      return new MemNode(left->incref(), right->incref(), v);
     }
     MemNode *remove(const MemoryObject* &k) {
-      if (isTerminator()) {
+      if (isTerminator())
         return incref();
-      } else {
-        if (MOLT(k, value.first)) {
-          return balance(left->remove(k), value, right->incref());
-        } else if (MOLT(value.first, k)) {
-          return balance(left->incref(), value, right->remove(k));
-        } else {
-          if (left->isTerminator()) {
-            return right->incref();
-          } else if (right->isTerminator()) {
-            return left->incref();
-          } else {
-            MemPair min;
-            MemNode *nr = right->popMin(min);
-            return balance(left->incref(), min, nr);
-          }
-        }
-      }
+      else if (MOLT(k, value.first))
+        return balance(left->remove(k), value, right->incref());
+      else if (MOLT(value.first, k))
+        return balance(left->incref(), value, right->remove(k));
+      else if (left->isTerminator()) 
+        return right->incref();
+      else if (right->isTerminator())
+        return left->incref();
+      MemPair min;
+      MemNode *nr = right->popMin(min);
+      return balance(left->incref(), min, nr);
     }
   };
     MemNode *node;
@@ -190,11 +134,6 @@ public:
             push_back(n);
         }
       }
-#if 0
-      iterator(const iterator &i) : root(i.root->incref()), pos(i.pos), max(i.max), elts(new MemNode*[i.max]) {
-        std::copy(i.elts, i.elts+pos, elts);
-      }
-#endif
       ~iterator() {
         root->decref();
         delete[] elts;
