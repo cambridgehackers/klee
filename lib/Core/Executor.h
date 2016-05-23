@@ -177,37 +177,33 @@ public:
     class iterator {
       friend class MemoryMap;
       MemNode *root; 
-      class FixedStack {
-      public:
-        unsigned pos, max;
-        MemNode **elts;
-        FixedStack(unsigned _max) : pos(0), max(_max), elts(new MemNode*[max]) {}
-        FixedStack(const FixedStack &b) : pos(b.pos), max(b.max), elts(new MemNode*[b.max]) {
-          std::copy(b.elts, b.elts+pos, elts);
-        }
-        ~FixedStack() { delete[] elts; }
-      };
-      FixedStack zzstack;
+      unsigned pos, max;
+      MemNode **elts;
     public:
-      bool empty() { return zzstack.pos==0; }
-      void push_back(MemNode* elt) { zzstack.elts[zzstack.pos++] = elt; }
-      void pop_back() { --zzstack.pos; }
-      MemNode* &back() { return zzstack.elts[zzstack.pos-1]; }
-      iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), zzstack(root->height) {
+      bool empty() { return pos==0; }
+      void push_back(MemNode* elt) { elts[pos++] = elt; }
+      void pop_back() { --pos; }
+      MemNode* &back() { return elts[pos-1]; }
+      iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), pos(0), max(root->height), elts(new MemNode*[max]) {
         if (atBeginning) {
           for (MemNode *n=root; !n->isTerminator(); n=n->left)
             push_back(n);
         }
       }
-      iterator(const iterator &i) : root(i.root->incref()), zzstack(i.zzstack) { }
-      ~iterator() { root->decref(); }
+      iterator(const iterator &i) : root(i.root->incref()), pos(i.pos), max(i.max), elts(new MemNode*[i.max]) {
+        std::copy(i.elts, i.elts+pos, elts);
+      }
+      ~iterator() {
+        root->decref();
+        delete[] elts;
+      }
       iterator &operator=(const iterator &b) {
         b.root->incref();
         root->decref();
         root = b.root;
-        assert(zzstack.max == b.zzstack.max); 
-        zzstack.pos = b.zzstack.pos;
-        std::copy(b.zzstack.elts, b.zzstack.elts+zzstack.pos, zzstack.elts);
+        assert(max == b.max); 
+        pos = b.pos;
+        std::copy(b.elts, b.elts+pos, elts);
         return *this;
       }
       const MemPair &operator*() {
@@ -219,7 +215,7 @@ public:
         return &n->value;
       }
       bool operator==(const iterator &b) {
-        return (zzstack.pos == b.zzstack.pos && std::equal(zzstack.elts, zzstack.elts+zzstack.pos, b.zzstack.elts));
+        return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
       }
       bool operator!=(const iterator &b) { return !(*this==b); }
       iterator &operator--() {
