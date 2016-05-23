@@ -186,15 +186,6 @@ public:
           std::copy(b.elts, b.elts+pos, elts);
         }
         ~FixedStack() { delete[] elts; }
-        FixedStack &operator=(const FixedStack &b) {
-          assert(max == b.max); 
-          pos = b.pos;
-          std::copy(b.elts, b.elts+pos, elts);
-          return *this;
-        }
-        bool operator==(const FixedStack &b) {
-          return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
-        }
       };
       FixedStack zzstack;
     public:
@@ -214,7 +205,9 @@ public:
         b.root->incref();
         root->decref();
         root = b.root;
-        zzstack = b.zzstack;
+        assert(zzstack.max == b.zzstack.max); 
+        zzstack.pos = b.zzstack.pos;
+        std::copy(b.zzstack.elts, b.zzstack.elts+zzstack.pos, zzstack.elts);
         return *this;
       }
       const MemPair &operator*() {
@@ -225,8 +218,10 @@ public:
         MemNode *n = back();
         return &n->value;
       }
-      bool operator==(const iterator &b) { return zzstack==b.zzstack; }
-      bool operator!=(const iterator &b) { return !(zzstack==b.zzstack); }
+      bool operator==(const iterator &b) {
+        return (zzstack.pos == b.zzstack.pos && std::equal(zzstack.elts, zzstack.elts+zzstack.pos, b.zzstack.elts));
+      }
+      bool operator!=(const iterator &b) { return !(*this==b); }
       iterator &operator--() {
         if (empty()) {
           for (MemNode *n=root; !n->isTerminator(); n=n->right)
