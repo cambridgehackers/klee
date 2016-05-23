@@ -97,15 +97,8 @@ public:
       leftData->ptreeNode = left;
       rightData->ptreeNode = right;
     }
-private:
     ~PTreeNode() { }
 };
-class PTree {
-    typedef ExecutionState* data_type;
-public:
-    PTreeNode *zzroot;
-    PTree(const data_type &_root) : zzroot(new PTreeNode(0,_root)) { }
-    ~PTree() {}
     void treeRemove(PTreeNode *n) {
       assert(!n->left && !n->right);
       do {
@@ -122,6 +115,12 @@ public:
         n = p;
       } while (n && !n->left && !n->right);
     }
+class PTree {
+    typedef ExecutionState* data_type;
+public:
+    PTreeNode *zzroot;
+    PTree(const data_type &_root) : zzroot(new PTreeNode(0,_root)) { }
+    ~PTree() {}
 };
 } // namespace klee
 
@@ -433,7 +432,6 @@ Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHand
 Executor::Executor(const InterpreterOptions &opts, InterpreterHandler *ih)
   : Interpreter(opts),
     interpreterHandler(ih),
-    processTree(0),
     module(0),
     externalDispatcher(new ExternalDispatcher()),
     pathWriter(0),
@@ -456,8 +454,6 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
 Executor::~Executor() {
   delete memory;
   delete externalDispatcher;
-  if (processTree)
-    delete processTree;
   if (specialFunctionHandler)
     delete specialFunctionHandler;
   for (auto it=constantMap.begin(), itE=constantMap.end(); it!=itE;++it)
@@ -943,7 +939,7 @@ void Executor::terminateStateCase(ExecutionState &state, const char *err, const 
     if (it3 != seedMap.end())
       seedMap.erase(it3);
     addedStates.erase(it);
-    processTree->treeRemove(state.ptreeNode);
+    treeRemove(state.ptreeNode);
     delete &state;
   }
 }
@@ -2079,7 +2075,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
       initializeGlobalObject(*startingState, startingState->getWriteable(mo, res->second), i->getInitializer(), 0);
     }
   }
-  processTree = new PTree(startingState);
+  PTree *processTree = new PTree(startingState);
   startingState->ptreeNode = processTree->zzroot;
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(startingState);
@@ -2111,14 +2107,12 @@ printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
       auto it3 = seedMap.find(es);
       if (it3 != seedMap.end())
         seedMap.erase(it3);
-      processTree->treeRemove(es->ptreeNode);
+      treeRemove(es->ptreeNode);
       delete es;
     }
     removedStates.clear();
   }
 printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
-  delete processTree;
-  processTree = 0;
   // hack to clear memory objects
   delete memory;
   memory = new MemoryManager(NULL);

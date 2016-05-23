@@ -378,7 +378,6 @@ public:
   std::set<ExecutionState*> states;
   InterpreterHandler *interpreterHandler;
   MemoryManager *memory;
-  PTree *processTree;
   llvm::Module *module;
   std::vector<llvm::Constant*> constants;
   std::map<llvm::Constant*, KConstant*> constantMap;
