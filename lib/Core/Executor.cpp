@@ -444,7 +444,8 @@ printf("[%s:%d] constructor \n", __FUNCTION__, __LINE__);
 }
 
 Executor::~Executor() {
-  delete memory;
+  if (memory)
+    delete memory;
   delete externalDispatcher;
   if (specialFunctionHandler)
     delete specialFunctionHandler;
@@ -2103,7 +2104,7 @@ printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
 printf("[%s:%d] Executorafter run\n", __FUNCTION__, __LINE__);
   // hack to clear memory objects
   delete memory;
-  memory = new MemoryManager(NULL);
+  memory = NULL;
   globalObjects.clear();
   globalAddresses.clear();
   writeStatsLine();
