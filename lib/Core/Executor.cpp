@@ -87,23 +87,24 @@ public:
     PTreeNode *parent, *left, *right;
     ExecutionState *data;
     ref<Expr> condition;
-private:
     PTreeNode(PTreeNode *_parent, ExecutionState *_data)
       : parent(_parent), left(0), right(0), data(_data), condition(0) { }
+    void treeSplit(ExecutionState *leftData, ExecutionState *rightData) {
+      assert(!left && !right);
+      left = new PTreeNode(this, leftData);
+      right = new PTreeNode(this, rightData);
+      leftData->ptreeNode = left;
+      rightData->ptreeNode = right;
+    }
+private:
     ~PTreeNode() { }
 };
 class PTree {
     typedef ExecutionState* data_type;
 public:
-    PTreeNode *root;
-    PTree(const data_type &_root) : root(new PTreeNode(0,_root)) { }
+    PTreeNode *zzroot;
+    PTree(const data_type &_root) : zzroot(new PTreeNode(0,_root)) { }
     ~PTree() {}
-    std::pair<PTreeNode*,PTreeNode*> split(PTreeNode *n, const data_type &leftData, const data_type &rightData) {
-      assert(n && !n->left && !n->right);
-      n->left = new PTreeNode(n, leftData);
-      n->right = new PTreeNode(n, rightData);
-      return std::make_pair(n->left, n->right);
-    }
     void remove(PTreeNode *n) {
       assert(!n->left && !n->right);
       do {
@@ -380,9 +381,7 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
     }
   }
   current.ptreeNode->data = 0;
-  std::pair<PTreeNode*, PTreeNode*> res2 = processTree->split(current.ptreeNode, falseState, trueState);
-  falseState->ptreeNode = res2.first;
-  trueState->ptreeNode = res2.second;
+  current.ptreeNode->treeSplit(falseState, trueState);
   if (!isInternal) {
     if (pathWriter) {
       falseState->pathOS = pathWriter->open(current.pathOS);
@@ -515,9 +514,7 @@ void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &condi
     addedStates.insert(ns);
     result.push_back(ns);
     es->ptreeNode->data = 0;
-    std::pair<PTreeNode*,PTreeNode*> res = processTree->split(es->ptreeNode, ns, es);
-    ns->ptreeNode = res.first;
-    es->ptreeNode = res.second;
+    es->ptreeNode->treeSplit(ns, es);
   }
   // redistribute seeds to match conditions, killing states if necessary (inefficient but simple).
   auto it = seedMap.find(&state);
@@ -2084,7 +2081,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
     }
   }
   processTree = new PTree(startingState);
-  startingState->ptreeNode = processTree->root;
+  startingState->ptreeNode = processTree->zzroot;
   // Delay init till now so that ticks don't accrue during optimization and such.
   states.insert(startingState);
   if (CoreSearch.size() == 0) {
