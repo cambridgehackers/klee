@@ -58,7 +58,7 @@ typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
     MemPair value;
     unsigned height, references;
   protected:
-    MemNode() : left(&terminator), right(&terminator), height(0), references(3) { assert(this==&terminator); }
+    MemNode(): left(&terminator), right(&terminator), height(0), references(3){assert(this==&terminator);}
     static MemNode *balance(MemNode *left, const MemPair &value, MemNode *right) {
       if (left->height > right->height + 2) {
         MemNode *ll = left->left;
@@ -115,13 +115,6 @@ typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
       return this;
     }
     bool isTerminator() { return this==&terminator; }
-    size_t size() {
-      if (isTerminator()) {
-        return 0;
-      } else {
-        return left->size() + 1 + right->size();
-      }
-    }
     MemNode *popMin(MemPair &valueOut) {
       if (left->isTerminator()) {
         valueOut = value;
