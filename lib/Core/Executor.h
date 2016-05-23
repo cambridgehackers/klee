@@ -177,6 +177,7 @@ public:
     class iterator {
       friend class MemoryMap;
     private:
+      MemNode *root; 
       class FixedStack {
         unsigned pos, max;
         MemNode **elts;
@@ -201,7 +202,6 @@ public:
         }
         bool operator!=(const FixedStack &b) { return !(*this==b); }
       };
-      MemNode *root; 
       FixedStack stack;
     public:
       iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
