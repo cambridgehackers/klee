@@ -179,18 +179,15 @@ public:
     private:
       MemNode *root; 
       class FixedStack {
+      public:
         unsigned pos, max;
         MemNode **elts;
-      public:
         FixedStack(unsigned _max) : pos(0), max(_max), elts(new MemNode*[max]) {}
         FixedStack(const FixedStack &b) : pos(b.pos), max(b.max), elts(new MemNode*[b.max]) {
           std::copy(b.elts, b.elts+pos, elts);
         }
         ~FixedStack() { delete[] elts; }
         void push_back(MemNode* elt) { elts[pos++] = elt; }
-        void pop_back() { --pos; }
-        bool empty() { return pos==0; }
-        MemNode* &back() { return elts[pos-1]; }
         FixedStack &operator=(const FixedStack &b) {
           assert(max == b.max); 
           pos = b.pos;
@@ -204,6 +201,9 @@ public:
       };
       FixedStack stack;
     public:
+      bool empty() { return stack.pos==0; }
+      void pop_back() { --stack.pos; }
+      MemNode* &back() { return stack.elts[stack.pos-1]; }
       iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
         if (atBeginning) {
           for (MemNode *n=root; !n->isTerminator(); n=n->left)
@@ -220,29 +220,29 @@ public:
         return *this;
       }
       const MemPair &operator*() {
-        MemNode *n = stack.back();
+        MemNode *n = back();
         return n->value;
       }
       const MemPair *operator->() {
-        MemNode *n = stack.back();
+        MemNode *n = back();
         return &n->value;
       }
       bool operator==(const iterator &b) { return stack==b.stack; }
       bool operator!=(const iterator &b) { return stack!=b.stack; }
       iterator &operator--() {
-        if (stack.empty()) {
+        if (empty()) {
           for (MemNode *n=root; !n->isTerminator(); n=n->right)
             stack.push_back(n);
         } else {
-          MemNode *n = stack.back();
+          MemNode *n = back();
           if (n->left->isTerminator()) {
             for (;;) {
               MemNode *prev = n;
-              stack.pop_back();
-              if (stack.empty()) {
+              pop_back();
+              if (empty()) {
                 break;
               } else {
-                n = stack.back();
+                n = back();
                 if (prev==n->right)
                   break;
               }
@@ -256,16 +256,16 @@ public:
         return *this;
       }
       iterator &operator++() {
-        assert(!stack.empty());
-        MemNode *n = stack.back();
+        assert(!empty());
+        MemNode *n = back();
         if (n->right->isTerminator()) {
           for (;;) {
             MemNode *prev = n;
-            stack.pop_back();
-            if (stack.empty()) {
+            pop_back();
+            if (empty()) {
               break;
             } else {
-              n = stack.back();
+              n = back();
               if (prev==n->left)
                 break;
             }
@@ -333,8 +333,8 @@ public:
           return it;
         }
       }
-      if (!it.stack.empty()) {
-        MemNode *last = it.stack.back();
+      if (!it.empty()) {
+        MemNode *last = it.back();
         if (MOLT(last->value.first, k))
           ++it;
       }
