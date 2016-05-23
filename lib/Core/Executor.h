@@ -49,16 +49,17 @@ namespace llvm {
 
 namespace klee {
 static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->address < b->address; }
+typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
   class MemoryMap {
   class MemNode {
   public:
     static MemNode terminator;
     MemNode *left, *right;
-    std::pair<const MemoryObject*,ObjectHolder> value;
+    MemPair value;
     unsigned height, references;
   protected:
     MemNode() : left(&terminator), right(&terminator), height(0), references(3) { assert(this==&terminator); }
-    static MemNode *balance(MemNode *left, const std::pair<const MemoryObject*,ObjectHolder> &value, MemNode *right) {
+    static MemNode *balance(MemNode *left, const MemPair &value, MemNode *right) {
       if (left->height > right->height + 2) {
         MemNode *ll = left->left;
         MemNode *lr = left->right;
@@ -98,7 +99,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
       }
     }
   public:
-    MemNode(MemNode *_left, MemNode *_right, const std::pair<const MemoryObject*,ObjectHolder> &_value)
+    MemNode(MemNode *_left, MemNode *_right, const MemPair &_value)
       : left(_left), right(_right), value(_value), 
         height(std::max(left->height, right->height) + 1), references(1) { }
     ~MemNode() {
@@ -121,7 +122,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
         return left->size() + 1 + right->size();
       }
     }
-    MemNode *popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) {
+    MemNode *popMin(MemPair &valueOut) {
       if (left->isTerminator()) {
         valueOut = value;
         return right->incref();
@@ -129,7 +130,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
         return balance(left->popMin(valueOut), value, right->incref());
       }
     }
-    MemNode *insert(const std::pair<const MemoryObject*,ObjectHolder> &v) {
+    MemNode *insert(const MemPair &v) {
       if (isTerminator()) {
         return new MemNode(terminator.incref(), terminator.incref(), v);
       } else {
@@ -142,7 +143,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
         }
       }
     }
-    MemNode *replace(const std::pair<const MemoryObject*,ObjectHolder> &v) {
+    MemNode *replace(const MemPair &v) {
       if (isTerminator()) {
         return new MemNode(terminator.incref(), terminator.incref(), v);
       } else {
@@ -169,7 +170,7 @@ static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->addre
           } else if (right->isTerminator()) {
             return left->incref();
           } else {
-            std::pair<const MemoryObject*,ObjectHolder> min;
+            MemPair min;
             MemNode *nr = right->popMin(min);
             return balance(left->incref(), min, nr);
           }
@@ -225,11 +226,11 @@ public:
         stack = b.stack;
         return *this;
       }
-      const std::pair<const MemoryObject*,ObjectHolder> &operator*() {
+      const MemPair &operator*() {
         MemNode *n = stack.back();
         return n->value;
       }
-      const std::pair<const MemoryObject*,ObjectHolder> *operator->() {
+      const MemPair *operator->() {
         MemNode *n = stack.back();
         return &n->value;
       }
@@ -291,7 +292,7 @@ public:
       node = n;
       return *this;
     }
-    const std::pair<const MemoryObject*,ObjectHolder> *lookup(const MemoryObject* k) const {
+    const MemPair *lookup(const MemoryObject* k) const {
       MemNode *n = node;
       while (!n->isTerminator()) {
         const MemoryObject* key = n->value.first;
@@ -305,7 +306,7 @@ public:
       }
       return 0;
     }
-    const std::pair<const MemoryObject*,ObjectHolder> *lookup_previous(const MemoryObject* k) const {
+    const MemPair *lookup_previous(const MemoryObject* k) const {
       MemNode *n = node;
       MemNode *result = 0;
       while (!n->isTerminator()) {
@@ -321,10 +322,10 @@ public:
       }
       return result ? &result->value : 0;
     }
-    MemoryMap insert(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return MemoryMap(node->insert(value)); }
-    MemoryMap replace(const std::pair<const MemoryObject*,ObjectHolder> &value) const { return MemoryMap(node->replace(value)); }
+    MemoryMap insert(const MemPair &value) const { return MemoryMap(node->insert(value)); }
+    MemoryMap replace(const MemPair &value) const { return MemoryMap(node->replace(value)); }
     MemoryMap remove(const MemoryObject* &key) const { return MemoryMap(node->remove(key)); }
-    MemoryMap popMin(std::pair<const MemoryObject*,ObjectHolder> &valueOut) const { return MemoryMap(node->popMin(valueOut)); }
+    MemoryMap popMin(MemPair &valueOut) const { return MemoryMap(node->popMin(valueOut)); }
     iterator begin() const { return iterator(node, true); }
     iterator end() const { return iterator(node, false); }
     iterator lower_bound(const MemoryObject* k) const {
