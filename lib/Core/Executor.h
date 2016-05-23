@@ -48,8 +48,8 @@ namespace llvm {
 }
 
 namespace klee {
-static bool MOLT(const MemoryObject *a, const MemoryObject *b) { return a->address < b->address; }
-typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
+  typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
+
   class MemoryMap {
   class MemNode {
   public:
@@ -84,27 +84,27 @@ typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
     MemNode *insert(const MemPair &v) {
       if (isTerminator())
         return new MemNode(terminator.incref(), terminator.incref(), v);
-      else if (MOLT(v.first, value.first))
+      else if (v.first->address < value.first->address)
         return balance(left->insert(v), value, right->incref());
-      else if (MOLT(value.first, v.first))
+      else if (value.first->address < v.first->address)
         return balance(left->incref(), value, right->insert(v));
       return incref();
     }
     MemNode *replace(const MemPair &v) {
       if (isTerminator())
         return new MemNode(terminator.incref(), terminator.incref(), v);
-      else if (MOLT(v.first, value.first))
+      else if (v.first->address < value.first->address)
         return balance(left->replace(v), value, right->incref());
-      else if (MOLT(value.first, v.first))
+      else if (value.first->address < v.first->address)
         return balance(left->incref(), value, right->replace(v));
       return new MemNode(left->incref(), right->incref(), v);
     }
     MemNode *remove(const MemoryObject* &k) {
       if (isTerminator())
         return incref();
-      else if (MOLT(k, value.first))
+      else if (k->address < value.first->address)
         return balance(left->remove(k), value, right->incref());
-      else if (MOLT(value.first, k))
+      else if (value.first->address < k->address)
         return balance(left->incref(), value, right->remove(k));
       else if (left->isTerminator()) 
         return right->incref();
@@ -202,9 +202,9 @@ public:
       MemNode *n = node;
       while (!n->isTerminator()) {
         const MemoryObject* key = n->value.first;
-        if (MOLT(k, key))
+        if (k->address < key->address)
           n = n->left;
-        else if (MOLT(key, k))
+        else if (key->address < k->address)
           n = n->right;
         else
           return &n->value;
@@ -216,9 +216,9 @@ public:
       MemNode *result = 0;
       while (!n->isTerminator()) {
         const MemoryObject* key = n->value.first;
-        if (MOLT(k, key))
+        if (k->address < key->address)
           n = n->left;
-        else if (MOLT(key, k)) {
+        else if (key->address < k->address) {
           result = n;
           n = n->right;
         } else
@@ -236,20 +236,20 @@ public:
       iterator it(node,false);
       for (MemNode *root=node; !root->isTerminator();) {
         it.push_back(root);
-        if (MOLT(key, root->value.first))
+        if (key->address < root->value.first->address)
           root = root->left;
-        else if (MOLT(root->value.first, key))
+        else if (root->value.first->address < key->address)
           root = root->right;
         else
           goto retlab;
       }
       if (!it.empty()) {
         MemNode *last = it.back();
-        if (MOLT(last->value.first, key))
+        if (last->value.first->address < key->address)
           ++it;
       }
 retlab:
-      if (it!=end && !MOLT(key,it->first))
+      if (it!=end && !(key->address < it->first->address))
         ++it;
       return it;
     }
