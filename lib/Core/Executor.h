@@ -176,6 +176,7 @@ typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
 public:
     class iterator {
       friend class MemoryMap;
+    private:
       class FixedStack {
         unsigned pos, max;
         MemNode **elts;
@@ -200,7 +201,6 @@ public:
         }
         bool operator!=(const FixedStack &b) { return !(*this==b); }
       };
-    private:
       MemNode *root; 
       FixedStack stack;
     public:
