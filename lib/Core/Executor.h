@@ -98,6 +98,14 @@ typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
         return new MemNode(left, right, value);
       }
     }
+    MemNode *popMin(MemPair &valueOut) {
+      if (left->isTerminator()) {
+        valueOut = value;
+        return right->incref();
+      } else {
+        return balance(left->popMin(valueOut), value, right->incref());
+      }
+    }
   public:
     MemNode(MemNode *_left, MemNode *_right, const MemPair &_value)
       : left(_left), right(_right), value(_value), 
@@ -115,14 +123,6 @@ typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
       return this;
     }
     bool isTerminator() { return this==&terminator; }
-    MemNode *popMin(MemPair &valueOut) {
-      if (left->isTerminator()) {
-        valueOut = value;
-        return right->incref();
-      } else {
-        return balance(left->popMin(valueOut), value, right->incref());
-      }
-    }
     MemNode *insert(const MemPair &v) {
       if (isTerminator()) {
         return new MemNode(terminator.incref(), terminator.incref(), v);
@@ -190,9 +190,11 @@ public:
             push_back(n);
         }
       }
+#if 0
       iterator(const iterator &i) : root(i.root->incref()), pos(i.pos), max(i.max), elts(new MemNode*[i.max]) {
         std::copy(i.elts, i.elts+pos, elts);
       }
+#endif
       ~iterator() {
         root->decref();
         delete[] elts;
@@ -206,14 +208,8 @@ public:
         std::copy(b.elts, b.elts+pos, elts);
         return *this;
       }
-      const MemPair &operator*() {
-        MemNode *n = back();
-        return n->value;
-      }
-      const MemPair *operator->() {
-        MemNode *n = back();
-        return &n->value;
-      }
+      const MemPair &operator*() { return back()->value; }
+      const MemPair *operator->() { return &back()->value; }
       bool operator==(const iterator &b) {
         return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
       }
@@ -278,13 +274,12 @@ public:
       MemNode *n = node;
       while (!n->isTerminator()) {
         const MemoryObject* key = n->value.first;
-        if (MOLT(k, key)) {
+        if (MOLT(k, key))
           n = n->left;
-        } else if (MOLT(key, k)) {
+        else if (MOLT(key, k))
           n = n->right;
-        } else {
+        else
           return &n->value;
-        }
       }
       return 0;
     }
@@ -293,34 +288,31 @@ public:
       MemNode *result = 0;
       while (!n->isTerminator()) {
         const MemoryObject* key = n->value.first;
-        if (MOLT(k, key)) {
+        if (MOLT(k, key))
           n = n->left;
-        } else if (MOLT(key, k)) {
+        else if (MOLT(key, k)) {
           result = n;
           n = n->right;
-        } else {
+        } else
           return &n->value;
-        }
       }
       return result ? &result->value : 0;
     }
     MemoryMap insert(const MemPair &value) const { return MemoryMap(node->insert(value)); }
     MemoryMap replace(const MemPair &value) const { return MemoryMap(node->replace(value)); }
     MemoryMap remove(const MemoryObject* &key) const { return MemoryMap(node->remove(key)); }
-    MemoryMap popMin(MemPair &valueOut) const { return MemoryMap(node->popMin(valueOut)); }
     iterator begin() const { return iterator(node, true); }
     iterator end() const { return iterator(node, false); }
     iterator lower_bound(const MemoryObject* k) const {
       iterator it(node,false);
       for (MemNode *root=node; !root->isTerminator();) {
         it.push_back(root);
-        if (MOLT(k, root->value.first)) {
+        if (MOLT(k, root->value.first))
           root = root->left;
-        } else if (MOLT(root->value.first, k)) {
+        else if (MOLT(root->value.first, k))
           root = root->right;
-        } else {
+        else
           return it;
-        }
       }
       if (!it.empty()) {
         MemNode *last = it.back();
