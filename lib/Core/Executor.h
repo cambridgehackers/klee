@@ -242,26 +242,24 @@ public:
     MemoryMap remove(const MemoryObject* &key) const { return MemoryMap(node->remove(key)); }
     iterator begin() const { return iterator(node, true); }
     iterator end() const { return iterator(node, false); }
-    iterator lower_bound(const MemoryObject* k) const {
+    iterator upper_bound(const MemoryObject* key) const {
+      iterator end(node,false);
       iterator it(node,false);
       for (MemNode *root=node; !root->isTerminator();) {
         it.push_back(root);
-        if (MOLT(k, root->value.first))
+        if (MOLT(key, root->value.first))
           root = root->left;
-        else if (MOLT(root->value.first, k))
+        else if (MOLT(root->value.first, key))
           root = root->right;
         else
-          return it;
+          goto retlab;
       }
       if (!it.empty()) {
         MemNode *last = it.back();
-        if (MOLT(last->value.first, k))
+        if (MOLT(last->value.first, key))
           ++it;
       }
-      return it;
-    }
-    iterator upper_bound(const MemoryObject* key) const {
-      iterator end(node,false),it = lower_bound(key);
+retlab:
       if (it!=end && !MOLT(key,it->first))
         ++it;
       return it;
