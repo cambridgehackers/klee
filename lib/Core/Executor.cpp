@@ -98,22 +98,6 @@ public:
     }
     ~PTreeNode() { }
 };
-    void treeRemove(PTreeNode *n) {
-      assert(!n->left && !n->right);
-      do {
-        PTreeNode *p = n->parent;
-        delete n;
-        if (p) {
-          if (n == p->left)
-            p->left = 0;
-          else {
-            assert(n == p->right);
-            p->right = 0;
-          }
-        }
-        n = p;
-      } while (n && !n->left && !n->right);
-    }
 } // namespace klee
 
 namespace {
@@ -416,7 +400,7 @@ printf("[%s:%d] call getValue\n", __FUNCTION__, __LINE__);
   stats::solverTime += (util::getWallTimeVal() - now).usec();
   return success;
 }
-
+
 Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
   return new Executor(opts, ih);
 }
@@ -916,6 +900,24 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
     }
   }
   return info.str();
+}
+
+static void treeRemove(PTreeNode *n)
+{
+  assert(!n->left && !n->right);
+  do {
+    PTreeNode *p = n->parent;
+    delete n;
+    if (p) {
+      if (n == p->left)
+        p->left = 0;
+      else {
+        assert(n == p->right);
+        p->right = 0;
+      }
+    }
+    n = p;
+  } while (n && !n->left && !n->right);
 }
 
 void Executor::terminateStateCase(ExecutionState &state, const char *err, const char *suffix)
@@ -1456,14 +1458,13 @@ void Executor::executeInstruction(ExecutionState &state)
   case Instruction::Switch: {
     SwitchInst *si = cast<SwitchInst>(i);
     ref<Expr> cond = eval(ki, 0, state);
-    BasicBlock *bb = si->getParent();
     cond = toUnique(state, cond);
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(cond)) {
       // Somewhat gross to create these all the time, but fine till we // switch to an internal rep.
       LLVM_TYPE_Q llvm::IntegerType *Ty = cast<IntegerType>(si->getCondition()->getType());
       ConstantInt *ci = ConstantInt::get(Ty, CE->getZExtValue());
       unsigned index = si->findCaseValue(ci).getSuccessorIndex();
-      transferToBasicBlock(si->getSuccessor(index), si->getParent(), state);
+      transferToBasicBlock(si->getSuccessor(index), i->getParent(), state);
     } else {
       std::map<BasicBlock *, ref<Expr>> targets;
       ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
@@ -1489,7 +1490,7 @@ void Executor::executeInstruction(ExecutionState &state)
       auto bit = branches.begin();
       for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
         if (*bit)
-          transferToBasicBlock(it->first, bb, **bit);
+          transferToBasicBlock(it->first, i->getParent(), **bit);
         ++bit;
       }
     }
