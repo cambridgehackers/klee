@@ -90,6 +90,7 @@ public:
     PTreeNode(PTreeNode *_parent, ExecutionState *_data)
       : parent(_parent), left(0), right(0), data(_data), condition(0) { }
     void treeSplit(ExecutionState *leftData, ExecutionState *rightData) {
+      data = 0;
       assert(!left && !right);
       left = new PTreeNode(this, leftData);
       right = new PTreeNode(this, rightData);
@@ -105,7 +106,7 @@ public:
     PTreeNode *zzroot;
     PTree(const data_type &_root) : zzroot(new PTreeNode(0,_root)) { }
     ~PTree() {}
-    void remove(PTreeNode *n) {
+    void treeRemove(PTreeNode *n) {
       assert(!n->left && !n->right);
       do {
         PTreeNode *p = n->parent;
@@ -380,7 +381,6 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
       std::swap(trueState->coveredLines, falseState->coveredLines);
     }
   }
-  current.ptreeNode->data = 0;
   current.ptreeNode->treeSplit(falseState, trueState);
   if (!isInternal) {
     if (pathWriter) {
@@ -513,7 +513,6 @@ void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &condi
     ns->coveredLines.clear(); 
     addedStates.insert(ns);
     result.push_back(ns);
-    es->ptreeNode->data = 0;
     es->ptreeNode->treeSplit(ns, es);
   }
   // redistribute seeds to match conditions, killing states if necessary (inefficient but simple).
@@ -944,7 +943,7 @@ void Executor::terminateStateCase(ExecutionState &state, const char *err, const 
     if (it3 != seedMap.end())
       seedMap.erase(it3);
     addedStates.erase(it);
-    processTree->remove(state.ptreeNode);
+    processTree->treeRemove(state.ptreeNode);
     delete &state;
   }
 }
@@ -2112,7 +2111,7 @@ printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
       auto it3 = seedMap.find(es);
       if (it3 != seedMap.end())
         seedMap.erase(it3);
-      processTree->remove(es->ptreeNode);
+      processTree->treeRemove(es->ptreeNode);
       delete es;
     }
     removedStates.clear();
