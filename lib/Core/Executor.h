@@ -48,19 +48,29 @@ namespace llvm {
 }
 
 namespace klee {
-  typedef std::pair<const MemoryObject*,ObjectHolder> MemPair;
+  class ExternalDispatcher;
+  struct KFunction;
+  class KConstant;
+  class PTree;
+  class PTreeNode;
+  class SeedInfo;
+  class SpecialFunctionHandler;
+  template<class T> class ref;
+  typedef ref<Expr> Cell;
+  typedef std::pair<const MemoryObject*, const ObjectState*> ObjectPair;
+  typedef std::vector<ObjectPair> ResolutionList;
 
   class MemoryMap {
   class MemNode {
   public:
     static MemNode terminator;
     MemNode *left, *right;
-    MemPair value;
+    ObjectPair value;
     unsigned height, references;
   private:
     MemNode(): left(&terminator), right(&terminator), height(0), references(3){assert(this==&terminator);}
-    static MemNode *balance(MemNode *left, const MemPair &value, MemNode *right) { return new MemNode(left, right, value); }
-    MemNode *popMin(MemPair &valueOut) {
+    static MemNode *balance(MemNode *left, const ObjectPair &value, MemNode *right) { return new MemNode(left, right, value); }
+    MemNode *popMin(ObjectPair &valueOut) {
       if (left->isTerminator()) {
         valueOut = value;
         return right->incref();
@@ -68,7 +78,7 @@ namespace klee {
       return balance(left->popMin(valueOut), value, right->incref());
     }
   public:
-    MemNode(MemNode *_left, MemNode *_right, const MemPair &_value)
+    MemNode(MemNode *_left, MemNode *_right, const ObjectPair &_value)
       : left(_left), right(_right), value(_value), 
         height(std::max(left->height, right->height) + 1), references(1) { }
     ~MemNode() {
@@ -81,7 +91,7 @@ namespace klee {
       return this;
     }
     bool isTerminator() { return this==&terminator; }
-    MemNode *insert(const MemPair &v) {
+    MemNode *insert(const ObjectPair &v) {
       if (isTerminator())
         return new MemNode(terminator.incref(), terminator.incref(), v);
       else if (v.first->address < value.first->address)
@@ -90,7 +100,7 @@ namespace klee {
         return balance(left->incref(), value, right->insert(v));
       return incref();
     }
-    MemNode *replace(const MemPair &v) {
+    MemNode *replace(const ObjectPair &v) {
       if (isTerminator())
         return new MemNode(terminator.incref(), terminator.incref(), v);
       else if (v.first->address < value.first->address)
@@ -110,7 +120,7 @@ namespace klee {
         return right->incref();
       else if (right->isTerminator())
         return left->incref();
-      MemPair min;
+      ObjectPair min;
       MemNode *nr = right->popMin(min);
       return balance(left->incref(), min, nr);
     }
@@ -146,8 +156,8 @@ public:
         std::copy(b.elts, b.elts+pos, elts);
         return *this;
       }
-      const MemPair &operator*() { return back()->value; }
-      const MemPair *operator->() { return &back()->value; }
+      const ObjectPair &operator*() { return back()->value; }
+      const ObjectPair *operator->() { return &back()->value; }
       bool operator==(const iterator &b) {
         return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
       }
@@ -198,7 +208,7 @@ public:
       node = n;
       return *this;
     }
-    const MemPair *lookup(const MemoryObject* k) const {
+    const ObjectPair *lookup(const MemoryObject* k) const {
       MemNode *n = node;
       while (!n->isTerminator()) {
         const MemoryObject* key = n->value.first;
@@ -211,7 +221,7 @@ public:
       }
       return 0;
     }
-    const MemPair *lookup_previous(const MemoryObject* k) const {
+    const ObjectPair *lookup_previous(const MemoryObject* k) const {
       MemNode *n = node;
       MemNode *result = 0;
       while (!n->isTerminator()) {
@@ -226,8 +236,8 @@ public:
       }
       return result ? &result->value : 0;
     }
-    MemoryMap insert(const MemPair &value) const { return MemoryMap(node->insert(value)); }
-    MemoryMap replace(const MemPair &value) const { return MemoryMap(node->replace(value)); }
+    MemoryMap insert(const ObjectPair &value) const { return MemoryMap(node->insert(value)); }
+    MemoryMap replace(const ObjectPair &value) const { return MemoryMap(node->replace(value)); }
     MemoryMap remove(const MemoryObject* &key) const { return MemoryMap(node->remove(key)); }
     iterator begin() const { return iterator(node, true); }
     iterator end() const { return iterator(node, false); }
@@ -257,31 +267,6 @@ retlab:
     MemoryMap(const MemoryMap &s) : node(s.node->incref()) { }
     ~MemoryMap() { node->decref(); }
   };
-
-  class ExternalDispatcher;
-  class Expr;
-  class KInstIterator;
-  class MemoryManager;
-  class MemoryObject;
-  class ObjectState;
-  class PTree;
-  class SeedInfo;
-  class SpecialFunctionHandler;
-  struct StackFrame;
-  class TreeStreamWriter;
-  template<class T> class ref;
-  struct KFunction;
-  class KConstant;
-
-  class Array;
-  class CallPathNode;
-  typedef ref<Expr> Cell;
-  struct KInstruction;
-  class PTreeNode;
-  class ExecutionState;
-  class Executor;
-  typedef std::pair<const MemoryObject*, const ObjectState*> ObjectPair;
-  typedef std::vector<ObjectPair> ResolutionList;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
 

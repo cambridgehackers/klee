@@ -709,7 +709,7 @@ void Executor::executeIntCall(ExecutionState &state, KInstruction *ki, Function 
       for (auto it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
         const MemoryObject *mo = it->first;
         if (!mo->isUserSpecified) {
-          ObjectState *os = it->second;
+          const ObjectState *os = it->second;
           uint8_t *address = (uint8_t*) (unsigned long) mo->address;
           if (!os->readOnly)
             memcpy(address, os->concreteStore, mo->size);
@@ -1154,7 +1154,7 @@ retlab:
 bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &result) {
   uint64_t address = addr->getZExtValue();
   MemoryObject hack(address);
-  if (const MemPair *res = objects.lookup_previous(&hack)) {
+  if (const ObjectPair *res = objects.lookup_previous(&hack)) {
     const MemoryObject *mo = res->first;
     if ((mo->size==0 && address==mo->address) || (address - mo->address < mo->size)) {
       result = *res;
@@ -1179,7 +1179,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   if (solveGetValue(state, address, cex)) {
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
-    if (const MemPair *res = state.objects.lookup_previous(&hack)) {
+    if (const ObjectPair *res = state.objects.lookup_previous(&hack)) {
       const MemoryObject *mo = res->first;
       if (example - mo->address < mo->size) {
         op = *res;
@@ -2078,7 +2078,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   for (auto i = module->global_begin(), e = module->global_end(); i != e; ++i) {
     if (i->hasInitializer()) {
       MemoryObject *mo = globalObjects.find(i)->second;
-      const MemPair *res = startingState->objects.lookup(mo);
+      const ObjectPair *res = startingState->objects.lookup(mo);
       assert(res && res->second);
       initializeGlobalObject(*startingState, startingState->getWriteable(mo, res->second), i->getInitializer(), 0);
     }
