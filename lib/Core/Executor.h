@@ -129,10 +129,9 @@ public:
       void pop_back() { --pos; }
       MemNode* &back() { return elts[pos-1]; }
       iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), pos(0), max(root->height), elts(new MemNode*[max]) {
-        if (atBeginning) {
+        if (atBeginning)
           for (MemNode *n=root; !n->isTerminator(); n=n->left)
             push_back(n);
-        }
       }
       ~iterator() {
         root->decref();
@@ -154,24 +153,19 @@ public:
       }
       bool operator!=(const iterator &b) { return !(*this==b); }
       iterator &operator--() {
-        if (empty()) {
+        if (empty())
           for (MemNode *n=root; !n->isTerminator(); n=n->right)
             push_back(n);
-        } else {
+        else {
           MemNode *n = back();
-          if (n->left->isTerminator()) {
+          if (n->left->isTerminator())
             for (;;) {
               MemNode *prev = n;
               pop_back();
-              if (empty()) {
+              if (empty() || prev==back()->right)
                 break;
-              } else {
-                n = back();
-                if (prev==n->right)
-                  break;
-              }
             }
-          } else {
+          else {
             push_back(n->left);
             for (n=n->left->right; !n->isTerminator(); n=n->right)
               push_back(n);
@@ -182,19 +176,14 @@ public:
       iterator &operator++() {
         assert(!empty());
         MemNode *n = back();
-        if (n->right->isTerminator()) {
+        if (n->right->isTerminator())
           for (;;) {
             MemNode *prev = n;
             pop_back();
-            if (empty()) {
+            if (empty() || prev==back()->left)
               break;
-            } else {
-              n = back();
-              if (prev==n->left)
-                break;
-            }
           }
-        } else {
+        else {
           push_back(n->right);
           for (n=n->right->left; !n->isTerminator(); n=n->left)
             push_back(n);
