@@ -196,25 +196,25 @@ public:
           return (pos == b.pos && std::equal(elts, elts+pos, b.elts));
         }
       };
-      FixedStack stack;
+      FixedStack zzstack;
     public:
-      bool empty() { return stack.pos==0; }
-      void push_back(MemNode* elt) { stack.elts[stack.pos++] = elt; }
-      void pop_back() { --stack.pos; }
-      MemNode* &back() { return stack.elts[stack.pos-1]; }
-      iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), stack(root->height) {
+      bool empty() { return zzstack.pos==0; }
+      void push_back(MemNode* elt) { zzstack.elts[zzstack.pos++] = elt; }
+      void pop_back() { --zzstack.pos; }
+      MemNode* &back() { return zzstack.elts[zzstack.pos-1]; }
+      iterator(MemNode *_root, bool atBeginning) : root(_root->incref()), zzstack(root->height) {
         if (atBeginning) {
           for (MemNode *n=root; !n->isTerminator(); n=n->left)
             push_back(n);
         }
       }
-      iterator(const iterator &i) : root(i.root->incref()), stack(i.stack) { }
+      iterator(const iterator &i) : root(i.root->incref()), zzstack(i.zzstack) { }
       ~iterator() { root->decref(); }
       iterator &operator=(const iterator &b) {
         b.root->incref();
         root->decref();
         root = b.root;
-        stack = b.stack;
+        zzstack = b.zzstack;
         return *this;
       }
       const MemPair &operator*() {
@@ -225,8 +225,8 @@ public:
         MemNode *n = back();
         return &n->value;
       }
-      bool operator==(const iterator &b) { return stack==b.stack; }
-      bool operator!=(const iterator &b) { return !(stack==b.stack); }
+      bool operator==(const iterator &b) { return zzstack==b.zzstack; }
+      bool operator!=(const iterator &b) { return !(zzstack==b.zzstack); }
       iterator &operator--() {
         if (empty()) {
           for (MemNode *n=root; !n->isTerminator(); n=n->right)
