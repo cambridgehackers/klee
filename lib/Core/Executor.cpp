@@ -275,10 +275,8 @@ topnext:
     objects.push_back(state.symbolics[i].second);
   bool success = true;
   if (!objects.empty()) {
-      sys::TimeValue now = util::getWallTimeVal();
 printf("[%s:%d] call getInitialValues\n", __FUNCTION__, __LINE__);
       success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values);
-      stats::solverTime += (util::getWallTimeVal() - now).usec();
   }
   osolver->setCoreSolverTimeout(0);
   if (!success) {
@@ -297,10 +295,8 @@ Executor::StatePair
 Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
   osolver->setCoreSolverTimeout(0);
-  sys::TimeValue now = util::getWallTimeVal();
 printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
   bool success = osolver->evaluate(Query(current.constraints, current.constraints.simplifyExpr(condition)), res);
-  stats::solverTime += (util::getWallTimeVal() - now).usec();
   if (!success) {
     current.pc = current.prevPC;
     terminateStateCase(current, "Query timed out (fork).\n", "early");
@@ -382,23 +378,18 @@ printf("[%s:%d] call getRange\n", __FUNCTION__, __LINE__);
 
 int Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr) {
   bool result;
-  sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
 printf("[%s:%d] call mustBeTrue\n", __FUNCTION__, __LINE__);
   bool success = osolver->mustBeTrue(Query(state.constraints, expr), result);
-  stats::solverTime += (util::getWallTimeVal() - now).usec();
   if (!success)
       return -1;
   return (int)result;
 }
 
 bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
-  sys::TimeValue now = util::getWallTimeVal();
   expr = state.constraints.simplifyExpr(expr);
 printf("[%s:%d] call getValue\n", __FUNCTION__, __LINE__);
-  bool success = osolver->getValue(Query(state.constraints, expr), result);
-  stats::solverTime += (util::getWallTimeVal() - now).usec();
-  return success;
+  return osolver->getValue(Query(state.constraints, expr), result);
 }
 
 Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
