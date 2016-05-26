@@ -389,7 +389,6 @@ private:
   std::map<llvm::Function*, KFunction*> functionMap;
   llvm::DataLayout *targetData;
   std::set<llvm::Function*> escapingFunctions;
-  SwitchImplType m_SwitchType;
 
   /// Used to track states that have been added during the current /// instructions step.
   /// \invariant \ref addedStates is a subset of \ref states.

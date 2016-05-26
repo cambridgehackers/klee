@@ -2171,7 +2171,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   assert(!module && _module && "can only register one module"); // XXX gross
   module = _module;
   targetData = new DataLayout(module);
-  m_SwitchType = SwitchType;
   Context::initialize(targetData->isLittleEndian(), (Expr::Width) targetData->getPointerSizeInBits());
   specialFunctionHandler = new SpecialFunctionHandler(*this);
   specialFunctionHandler->prepare();
@@ -2212,7 +2211,7 @@ printf("[%s:%d] before runpreprocessmodule\n", __FUNCTION__, __LINE__);
   // directly I think?
   legacy::PassManager pm3;
   pm3.add(createCFGSimplificationPass());
-  switch(m_SwitchType) {
+  switch(SwitchType) {
   case Executor::eSwitchTypeInternal: break;
   case Executor::eSwitchTypeSimple: pm3.add(new LowerSwitchPass()); break;
   case Executor::eSwitchTypeLLVM:  pm3.add(createLowerSwitchPass()); break;
@@ -2231,16 +2230,10 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
   partialBranches = 0;
   numBranches = 0;
   theStatisticManager->useIndexedStats(0/*km->infos->getMaxID()*/);
-  llvm::outs() << "('Instructions'," << "'FullBranches'," << "'PartialBranches',"
-       << "'NumBranches'," << "'UserTime'," << "'NumStates',"
-       << "'MallocUsage'," << "'NumQueries'," << "'NumQueryConstructs',"
-       << "'NumObjects'," << "'WallTime'," << "'CoveredInstructions',"
-       << "'UncoveredInstructions'," << "'QueryTime'," << "'SolverTime',"
-       << "'CexCacheTime'," << "'ForkTime'," << "'ResolveTime',"
-#ifdef DEBUG
-       << "'ArrayHashTime',"
-#endif
-       << ")\n";
+  llvm::outs() << "('Instructions','FullBranches','PartialBranches',"
+    << "'NumBranches','UserTime','NumStates','MallocUsage','NumQueries','NumQueryConstructs',"
+    << "'NumObjects','WallTime','CoveredInstructions','UncoveredInstructions','QueryTime','SolverTime',"
+    << "'CexCacheTime','ForkTime','ResolveTime','ArrayHashTime',)\n";
   writeStatsLine();
   /* Build shadow structures */
   for (auto it = module->begin(), ie = module->end(); it != ie; ++it)
