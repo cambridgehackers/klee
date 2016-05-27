@@ -486,7 +486,7 @@ public: //friends
   void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name);
   // Fork current and return states in which condition holds / does
   // not hold, respectively. One of the states is necessarily the // current state, and one of the states may be null.
-  StatePair stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal);
+  StatePair stateFork(ExecutionState &current, ref<Expr> condition);
 
   /// Add the given (boolean) condition as a constraint on state. This
   /// function is a wrapper around the state's addConstraint function

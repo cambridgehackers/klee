@@ -285,7 +285,8 @@ printf("[%s:%d] name %s val \n", __FUNCTION__, __LINE__, state.symbolics[i].firs
 }
 
 Executor::StatePair
-Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
+Executor::stateFork(ExecutionState &current, ref<Expr> condition)
+{
   Solver::Validity res;
 printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
   if (!osolver->evaluate(Query(current.constraints, current.constraints.simplifyExpr(condition)), res)) {
@@ -298,15 +299,10 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
   // reduce the other constraints. For example, if we do a binary search on a particular value, and then see a comparison against
   // the value it has been fixed at, we should take this as a nice hint to just use the single constraint instead of all the binary
   // search ones. If that makes sense.
-  if (res==Solver::True) {
-    if (!isInternal && pathWriter)
-        current.pathOS << "1";
+  if (res==Solver::True)
     return StatePair(&current, 0);
-  } else if (res==Solver::False) {
-    if (!isInternal && pathWriter)
-        current.pathOS << "0";
+  else if (res==Solver::False)
     return StatePair(0, &current);
-  }
   TimerStatIncrementer timer(stats::forkTime);
   ++stats::forks;
   ExecutionState *trueState = &current;
@@ -344,18 +340,6 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
     }
   }
   current.ptreeNode->treeSplit(falseState, trueState);
-  if (!isInternal) {
-    if (pathWriter) {
-      falseState->pathOS = pathWriter->open(current.pathOS);
-      trueState->pathOS << "1";
-      falseState->pathOS << "0";
-    }
-    if (symPathWriter) {
-      falseState->symPathOS = symPathWriter->open(current.symPathOS);
-      trueState->symPathOS << "1";
-      falseState->symPathOS << "0";
-    }
-  }
   executeAddConstraint(*trueState, condition);
   executeAddConstraint(*falseState, Expr::createIsZero(condition));
   return StatePair(trueState, falseState);
@@ -996,7 +980,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
         break;
       example = tmp;
     }
-    StatePair fixedSize = stateFork(state, EqExpr::create(example, size), true);
+    StatePair fixedSize = stateFork(state, EqExpr::create(example, size));
     if (fixedSize.second) {
       // Check for exactly two values
       ref<ConstantExpr> tmp;
@@ -1009,7 +993,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       else {
         // See if a *really* big value is possible. If so assume
         // malloc will fail for it, so lets fork and return 0.
-        StatePair hugeSize = stateFork(*fixedSize.second,UltExpr::create(ConstantExpr::alloc(1<<31,W),size), true);
+        StatePair hugeSize = stateFork(*fixedSize.second,UltExpr::create(ConstantExpr::alloc(1<<31,W),size));
         if (hugeSize.first) {
           klee_message("NOTE: found huge malloc, returning 0");
           bindLocal(target, *hugeSize.first, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
@@ -1029,7 +1013,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
 }
 
 void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstruction *target) {
-  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address), true);
+  StatePair zeroPointer = stateFork(state, Expr::createIsZero(address));
   if (zeroPointer.first && target)
       bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
   if (zeroPointer.second) { // address != 0
@@ -1233,7 +1217,7 @@ nextlab:
     const MemoryObject *mo = i->first;
     ref<Expr> offset = mo->getOffsetExpr(address);
     const ObjectState *os = i->second;
-    StatePair branches = stateFork(*unbound, mo->getBoundsCheckPointer(address, bytes), true);
+    StatePair branches = stateFork(*unbound, mo->getBoundsCheckPointer(address, bytes));
     // bound can be 0 on failure or overlapped
     if (ExecutionState *bound = branches.first) {
       if (isWrite) {
@@ -1265,7 +1249,7 @@ void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionL
   resolve(state, p, rl);
   ExecutionState *unbound = &state;
   for (auto it = rl.begin(), ie = rl.end(); it != ie && unbound; ++it) {
-    StatePair branches = stateFork(*unbound, EqExpr::create(p, it->first->getBaseExpr()), true);
+    StatePair branches = stateFork(*unbound, EqExpr::create(p, it->first->getBaseExpr()));
     if (branches.first)
       results.push_back(std::make_pair(*it, branches.first));
     unbound = branches.second;
@@ -1392,7 +1376,25 @@ void Executor::executeInstruction(ExecutionState &state)
     }
     // FIXME: Find a way that we don't have this hidden dependency.
     assert(bi->getCondition() == bi->getOperand(0) && "Wrong operand index!");
-    Executor::StatePair branches = stateFork(state, eval(ki, 0, state), false);
+    Executor::StatePair branches = stateFork(state, eval(ki, 0, state));
+    if (branches.first && branches.second) {
+    if (pathWriter) {
+      branches.second->pathOS = pathWriter->open(state.pathOS);
+      branches.first->pathOS << "1";
+      branches.second->pathOS << "0";
+    }
+    if (symPathWriter) {
+      branches.second->symPathOS = symPathWriter->open(state.symPathOS);
+      branches.first->symPathOS << "1";
+      branches.second->symPathOS << "0";
+    }
+    }
+    else if (pathWriter) {
+      if (branches.first)
+        state.pathOS << "1";
+      if (branches.second)
+        state.pathOS << "0";
+    }
     ExecutionState *visitedTrue = branches.first, *visitedFalse = branches.second;
     unsigned id = theStatisticManager->getIndex();
     uint64_t hasTrue = theStatisticManager->getIndexedValue(stats::trueBranches, id);
@@ -1521,7 +1523,7 @@ void Executor::executeInstruction(ExecutionState &state)
         ref<ConstantExpr> value;
         bool success = solveGetValue(*free, v, value);
         assert(success && "FIXME: Unhandled solver failure");
-        StatePair res = stateFork(*free, EqExpr::create(v, value), true);
+        StatePair res = stateFork(*free, EqExpr::create(v, value));
         free = res.second;
         if (res.first) {
           uint64_t addr = value->getZExtValue();

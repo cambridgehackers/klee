@@ -382,12 +382,12 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state, KInstruction *
          "invalid number of arguments to realloc");
   ref<Expr> address = arguments[0];
   ref<Expr> size = arguments[1]; 
-  Executor::StatePair zeroSize = executor.stateFork(state, Expr::createIsZero(size), true); 
+  Executor::StatePair zeroSize = executor.stateFork(state, Expr::createIsZero(size)); 
   if (zeroSize.first) { // size == 0
     executor.executeFree(*zeroSize.first, address, target);   
   }
   if (zeroSize.second) { // size != 0
-    Executor::StatePair zeroPointer = executor.stateFork(*zeroSize.second, Expr::createIsZero(address), true); 
+    Executor::StatePair zeroPointer = executor.stateFork(*zeroSize.second, Expr::createIsZero(address)); 
     if (zeroPointer.first) { // address == 0
       executor.executeAlloc(*zeroPointer.first, size, false, target);
     } 
