@@ -169,12 +169,10 @@ ObjectState *ExecutionState::getWriteable(const MemoryObject *mo, const ObjectSt
   assert(!os->readOnly);
   if (cowKey==os->copyOnWriteOwner)
     return const_cast<ObjectState*>(os);
-  else {
-    ObjectState *n = new ObjectState(*os);
-    n->copyOnWriteOwner = cowKey;
-    objects = objects.replace(std::make_pair(mo, n));
-    return n;
-  }
+  ObjectState *n = new ObjectState(*os);
+  n->copyOnWriteOwner = cowKey;
+  objects = objects.replace(std::make_pair(mo, n));
+  return n;
 }
 
 /// Check for special cases where we statically know an instruction is
@@ -676,9 +674,8 @@ void Executor::executeIntCall(ExecutionState &state, KInstruction *ki, Function 
         const MemoryObject *mo = it->first;
         if (!mo->isUserSpecified) {
           const ObjectState *os = it->second;
-          uint8_t *address = (uint8_t*) (unsigned long) mo->address;
           if (!os->readOnly)
-            memcpy(address, os->concreteStore, mo->size);
+            memcpy((uint8_t*) (unsigned long) mo->address, os->concreteStore, mo->size);
         }
       }
       printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
@@ -1073,8 +1070,7 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
     auto oi = state.objects.upper_bound(&hack);
-    auto begin = state.objects.begin();
-    auto end = state.objects.end();
+    auto begin = state.objects.begin(), end = state.objects.end();
     auto start = oi;
     // XXX in the common case we can save one query if we ask
     // must BeTrue before may BeTrue for the first result. easy
@@ -1082,7 +1078,7 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
     // search backwards, start with one minus because this
     // is the object that address *should* be within, which means we
     // get write off the end with 4 queries (XXX can be better, no?)
-    while (oi!=begin) {
+    while (oi!=begin && !retFlag) {
       --oi;
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
@@ -1091,25 +1087,19 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
         if (retFlag) {
           rl.push_back(*oi);
           // fast path check
-          if (rl.size()==1) {
-            retFlag = mustBeTrue(state, inBounds);
-            if (retFlag)
+          if (rl.size()==1 && (retFlag = mustBeTrue(state, inBounds)))
               goto retlab;
-          }
         }
         retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
       }
-      if (retFlag == -1)
-        goto retlab;
-      if (retFlag)
-        break;
     }
+    if (retFlag == -1)
+      goto retlab;
     // search forwards
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()));
-      if (retFlag)
+      if ((retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()))))
         break;
       retFlag = mayBeTrue(state, inBounds);
       if (retFlag == -1)
@@ -1117,11 +1107,8 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
       if (retFlag) {
         rl.push_back(*oi);
         // fast path check
-        if (rl.size()==1) {
-          retFlag = mustBeTrue(state, inBounds);
-          if (retFlag)
-            break;
-        }
+        if (rl.size()==1 && (retFlag = mustBeTrue(state, inBounds)))
+          break;
       }
     }
   } else {
@@ -1154,6 +1141,7 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   unsigned bytes = Expr::getMinBytesForWidth(type);
   // fast path: single in-bounds resolution
   ObjectPair op;
+  int retFlag = 0;
   bool success = true;
   if (!dyn_cast<ConstantExpr>(address)) {
   TimerStatIncrementer timer(stats::resolveTime);
@@ -1171,47 +1159,38 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
     }
     // didn't work, now we have to search
     auto oi = state.objects.upper_bound(&hack);
-    auto begin = state.objects.begin();
-    auto end = state.objects.end();
+    auto begin = state.objects.begin(), end = state.objects.end();
     auto start = oi;
-    while (oi!=begin) {
+    while (oi!=begin && !retFlag) {
       --oi;
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      int retFlag = mayBeTrue(state, inBounds);
-      if (retFlag == -1)
-        goto truelab;
-      if (retFlag) {
-        op = *oi;
-        goto nextlab;
-      }
+      if ((retFlag = mayBeTrue(state, inBounds)))
+        goto rrlab;
       retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
       if (retFlag == -1)
-        goto truelab;
-      if (retFlag)
-        break;
+        goto rrlab;
     }
     // search forwards
     for (oi=start; oi!=end; ++oi) {
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      int retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()));
+      retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()));
       if (retFlag == -1)
-        goto truelab;
+        goto rrlab;
       if (retFlag)
         break;
-      retFlag = mayBeTrue(state, inBounds);
-      if (retFlag == -1)
-        goto truelab;
-      if (retFlag) {
-        op = *oi;
-        goto nextlab;
-      }
+      if ((retFlag = mayBeTrue(state, inBounds)))
+        goto rrlab;
     }
     success = false;
     goto nextlab;
+rrlab:
+    if (retFlag == 1) {
+      op = *oi;
+      goto nextlab;
     }
-truelab:
+    }
     address = toConstant(state, address, "resolve OneS failure");
   }
   success = state.resolveOne(cast<ConstantExpr>(address), op);
@@ -1220,7 +1199,7 @@ nextlab:
     const MemoryObject *mo = op.first;
     ref<Expr> offset = mo->getOffsetExpr(address);
     ref<Expr> inBounds = mo->getBoundsCheckPointer(offset, bytes);
-    int retFlag = mustBeTrue(state, inBounds);
+    retFlag = mustBeTrue(state, inBounds);
     if (retFlag == -1) {
       state.pc = state.prevPC;
       terminateStateCase(state, "Query timed out (bounds check).\n", "early");
