@@ -30,8 +30,8 @@ namespace klee {
     std::vector< std::pair<unsigned, uint64_t> > indices;
     /// offset - A constant offset to add to the pointer operand to execute the /// instruction.
     uint64_t offset;
-    KInstruction(llvm::Instruction *_inst, unsigned _dest, uint64_t _offset)
-        : inst(_inst), operands(new int[inst->getNumOperands()]), dest(_dest), offset(_offset) {}
+    KInstruction(llvm::Instruction *_inst, unsigned _dest)
+        : inst(_inst), operands(new int[inst->getNumOperands()]), dest(_dest), offset(-1) {}
   public:
     virtual ~KInstruction(); 
   }; 

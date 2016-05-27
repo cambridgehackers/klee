@@ -2233,7 +2233,7 @@ printf("[%s:%d] openassemblyll\n", __FUNCTION__, __LINE__);
       for (auto bbit = thisFunc->begin(), bbie = thisFunc->end(); bbit != bbie; ++bbit)
         for (auto it = bbit->begin(), ie = bbit->end(); it != ie; ++it) {
           registerMap[it] = rnum++;
-          KInstruction *ki = new KInstruction(it, registerMap[it], -1);
+          KInstruction *ki = new KInstruction(it, registerMap[it]);
           if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(it))
             computeOffsets(ki, gep_type_begin(gepi), gep_type_end(gepi));
           else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(it))

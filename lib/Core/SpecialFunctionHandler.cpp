@@ -359,10 +359,8 @@ void SpecialFunctionHandler::handleGetObjSize(ExecutionState &state, KInstructio
   assert(arguments.size()==1 && "invalid number of arguments to klee_get_obj_size");
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, arguments[0], rl, "klee_get_obj_size");
-  for (Executor::ExactResolutionList::iterator it = rl.begin(), 
-         ie = rl.end(); it != ie; ++it) {
+  for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it)
     executor.bindLocal(target, *it->second, ConstantExpr::create(it->first.first->size, Expr::Int32));
-  }
 }
 
 void SpecialFunctionHandler::handleGetErrno(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
