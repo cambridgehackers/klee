@@ -1051,19 +1051,21 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
 bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList &rl)
 {
   int retFlag = 0;
-  if (!dyn_cast<ConstantExpr>(address)) {
+  if (dyn_cast<ConstantExpr>(address)) {
+    ObjectPair res;
+    if (state.resolveOne(dyn_cast<ConstantExpr>(address), res))
+      rl.push_back(res);
+  } else {
     TimerStatIncrementer timer(stats::resolveTime);
     // XXX in general this isn't exactly what we want... for
     // a multiple resolution case (or for example, a \in {b,c,0})
     // we want to find the first object, find a cex assuming
     // not the first, find a cex assuming not the second...  etc.
     // XXX how do we smartly amortize the cost of checking to
-    // see if we need to keep searching up/down, in bad cases?
-    // maybe we don't care?
+    // see if we need to keep searching up/down, in bad cases? maybe we don't care?
     // XXX we really just need a smart place to start (although
     // if its a known solution then the code below is guaranteed
-    // to hit the fast path with exactly 2 queries). we could also
-    // just get this by inspection of the expr.
+    // to hit the fast path with exactly 2 queries). we could also just get this by inspection of the expr.
     ref<ConstantExpr> cex;
     if (!solveGetValue(state, address, cex))
       return true;
@@ -1093,28 +1095,19 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
         retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
       }
     }
-    if (retFlag == -1)
-      goto retlab;
-    // search forwards
-    for (oi=start; oi!=end; ++oi) {
+    for (oi=start; oi!=end && retFlag != -1; ++oi) { // search forwards
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       if ((retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()))))
         break;
       retFlag = mayBeTrue(state, inBounds);
-      if (retFlag == -1)
-        break;
-      if (retFlag) {
+      if (retFlag == 1) {
         rl.push_back(*oi);
         // fast path check
         if (rl.size()==1 && (retFlag = mustBeTrue(state, inBounds)))
           break;
       }
     }
-  } else {
-    ObjectPair res;
-    if (state.resolveOne(dyn_cast<ConstantExpr>(address), res))
-      rl.push_back(res);
   }
 retlab:
   if (retFlag == -1)
