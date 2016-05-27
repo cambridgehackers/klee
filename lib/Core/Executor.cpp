@@ -456,7 +456,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-void Executor::branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Expr> e, KInstruction *target, llvm::BasicBlock *parentBlock, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
+void Executor::branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Expr> e, KInstruction *ki, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
   std::vector<ref<Expr>> conditions;
   if (values) {
     for (auto vit = values->begin(), vie = values->end(); vit != vie; ++vit)
@@ -513,14 +513,14 @@ void Executor::branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Ex
   if (values) {
     for (auto vit = values->begin(), vie = values->end(); vit != vie; ++vit) {
       if (*bit)
-        bindLocal(target, **bit, *vit);
+        bindLocal(ki, **bit, *vit);
       ++bit;
     }
   }
   if (targets) {
     for (auto it = targets->begin(), ie = targets->end(); it != ie; ++it) {
       if (*bit)
-        transferToBasicBlock(it->first, parentBlock, **bit);
+        transferToBasicBlock(it->first, ki->inst->getParent(), **bit);
       ++bit;
     }
   }
@@ -634,7 +634,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
       assert(success && "FIXME: Unhandled solver failure");
       values.insert(value);
     }
-    branch(state, &values, e, target, NULL, NULL);
+    branch(state, &values, e, target, NULL);
   }
 }
 
@@ -1473,7 +1473,7 @@ void Executor::executeInstruction(ExecutionState &state)
       assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag)
         targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
-      branch(state, NULL, NULL, NULL, i->getParent(), &targets);
+      branch(state, NULL, NULL, ki, &targets);
     }
     break;
  }

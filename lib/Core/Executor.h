@@ -425,7 +425,7 @@ private:
   /// a constraint and return the results. The input state is included
   /// as one of the results. Note that the output vector may included
   /// NULL pointers for states which were unable to be created.
-  void branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Expr> e, KInstruction *target, llvm::BasicBlock *parentBlock, std::map<llvm::BasicBlock *, ref<Expr>> *targets);
+  void branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Expr> e, KInstruction *target, std::map<llvm::BasicBlock *, ref<Expr>> *targets);
   const ref<Expr> eval(KInstruction *ki, unsigned index, ExecutionState &state);
   void getArgumentCell(ExecutionState &state, KFunction *kf, unsigned aSize, std::vector<ref<Expr>> &arguments) {
     for (unsigned i = 0; i < aSize; i++)
