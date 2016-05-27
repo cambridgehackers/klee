@@ -352,19 +352,17 @@ printf("[%s:%d] call getRange\n", __FUNCTION__, __LINE__);
 }
 
 int Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr) {
-  bool result;
-  expr = state.constraints.simplifyExpr(expr);
 printf("[%s:%d] call mustBeTrue\n", __FUNCTION__, __LINE__);
-  bool success = osolver->mustBeTrue(Query(state.constraints, expr), result);
+  bool result;
+  bool success = osolver->mustBeTrue(Query(state.constraints, state.constraints.simplifyExpr(expr)), result);
   if (!success)
       return -1;
   return (int)result;
 }
 
 bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
-  expr = state.constraints.simplifyExpr(expr);
 printf("[%s:%d] call getValue\n", __FUNCTION__, __LINE__);
-  return osolver->getValue(Query(state.constraints, expr), result);
+  return osolver->getValue(Query(state.constraints, state.constraints.simplifyExpr(expr)), result);
 }
 
 Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
