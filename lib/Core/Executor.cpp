@@ -456,8 +456,17 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &conditions, std::set<ref<Expr>> *values, KInstruction *target, llvm::BasicBlock *parentBlock, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
-std::vector<ExecutionState*> result;
+void Executor::branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Expr> e, KInstruction *target, llvm::BasicBlock *parentBlock, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
+  std::vector<ref<Expr>> conditions;
+  if (values) {
+    for (auto vit = values->begin(), vie = values->end(); vit != vie; ++vit)
+      conditions.push_back(EqExpr::create(e, *vit));
+  }
+  if (targets) {
+    for (auto it = targets->begin(), ie = targets->end(); it != ie; ++it)
+      conditions.push_back(it->second);
+  }
+  std::vector<ExecutionState*> result;
   TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
   assert(N);
@@ -625,10 +634,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
       assert(success && "FIXME: Unhandled solver failure");
       values.insert(value);
     }
-    std::vector<ref<Expr>> conditions;
-    for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit)
-      conditions.push_back(EqExpr::create(e, *vit));
-    branch(state, conditions, &values, target, NULL, NULL);
+    branch(state, &values, e, target, NULL, NULL);
   }
 }
 
@@ -1467,10 +1473,7 @@ void Executor::executeInstruction(ExecutionState &state)
       assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag)
         targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
-      std::vector<ref<Expr>> conditions;
-      for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it)
-        conditions.push_back(it->second);
-      branch(state, conditions, NULL, NULL, i->getParent(), &targets);
+      branch(state, NULL, NULL, NULL, i->getParent(), &targets);
     }
     break;
  }
