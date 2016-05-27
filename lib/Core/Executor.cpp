@@ -310,9 +310,9 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
     return StatePair(0, &current);
   }
   TimerStatIncrementer timer(stats::forkTime);
-  ExecutionState *falseState, *trueState = &current;
   ++stats::forks;
-  falseState = new ExecutionState(*trueState);
+  ExecutionState *trueState = &current;
+  ExecutionState *falseState = new ExecutionState(*trueState);
   falseState->coveredNew = false;
   falseState->coveredLines.clear(); 
   addedStates.insert(falseState);
@@ -456,7 +456,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &conditions, std::vector<ExecutionState*> &result) {
+void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &conditions, std::set<ref<Expr>> *values, KInstruction *target, llvm::BasicBlock *parentBlock, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
+std::vector<ExecutionState*> result;
   TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
   assert(N);
@@ -499,6 +500,21 @@ void Executor::branch(ExecutionState &state, const std::vector<ref<Expr>> &condi
   for (unsigned i=0; i<N; ++i)
       if (result[i])
           executeAddConstraint(*result[i], conditions[i]);
+  auto bit = result.begin();
+  if (values) {
+    for (auto vit = values->begin(), vie = values->end(); vit != vie; ++vit) {
+      if (*bit)
+        bindLocal(target, **bit, *vit);
+      ++bit;
+    }
+  }
+  if (targets) {
+    for (auto it = targets->begin(), ie = targets->end(); it != ie; ++it) {
+      if (*bit)
+        transferToBasicBlock(it->first, parentBlock, **bit);
+      ++bit;
+    }
+  }
 }
 
 void Executor::executeAddConstraint(ExecutionState &state, ref<Expr> condition) {
@@ -612,14 +628,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     std::vector<ref<Expr>> conditions;
     for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit)
       conditions.push_back(EqExpr::create(e, *vit));
-    std::vector<ExecutionState*> branches;
-    branch(state, conditions, branches);
-    auto bit = branches.begin();
-    for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
-      if (*bit)
-        bindLocal(target, **bit, *vit);
-      ++bit;
-    }
+    branch(state, conditions, &values, target, NULL, NULL);
   }
 }
 
@@ -1461,14 +1470,7 @@ void Executor::executeInstruction(ExecutionState &state)
       std::vector<ref<Expr>> conditions;
       for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it)
         conditions.push_back(it->second);
-      std::vector<ExecutionState *> branches;
-      branch(state, conditions, branches);
-      auto bit = branches.begin();
-      for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
-        if (*bit)
-          transferToBasicBlock(it->first, i->getParent(), **bit);
-        ++bit;
-      }
+      branch(state, conditions, NULL, NULL, i->getParent(), &targets);
     }
     break;
  }
