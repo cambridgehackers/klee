@@ -243,6 +243,8 @@ void Executor::getConstraintLog(const ExecutionState &state, std::string &res, I
 
 bool Executor::getSymbolicSolution(const ExecutionState &state, std::vector<std::pair<std::string, std::vector<unsigned char>>> &res){
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+  std::vector<std::vector<unsigned char>> values;
+  std::vector<const Array*> objects;
   ExecutionState tmp(state);
   // Go through each byte in every test case and attempt to restrict
   // it to the constraints contained in cexPreferences.  (Note:
@@ -251,6 +253,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   // the preferred constraints.  See test/Features/PreferCex.c for
   // an example) While this process can be very expensive, it can
   // also make understanding individual test cases much easier.
+  for (unsigned i = 0; i != state.symbolics.size(); ++i)
+    objects.push_back(state.symbolics[i].second);
   for (unsigned i = 0; i != state.symbolics.size(); ++i) {
     const MemoryObject *mo = state.symbolics[i].first;
     auto pi = mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
@@ -268,16 +272,9 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     }
   }
 topnext:
-  std::vector< std::vector<unsigned char>> values;
-  std::vector<const Array*> objects;
-  for (unsigned i = 0; i != state.symbolics.size(); ++i)
-    objects.push_back(state.symbolics[i].second);
-  bool success = true;
-  if (!objects.empty()) {
 printf("[%s:%d] call getInitialValues\n", __FUNCTION__, __LINE__);
-      success = osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values);
-  }
-  if (!success) {
+  if (!objects.empty()
+   && !osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values)) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
     ExprPPrinter::printQuery(llvm::errs(), state.constraints, ConstantExpr::alloc(0, Expr::Bool));
     return false;
@@ -293,8 +290,7 @@ Executor::StatePair
 Executor::stateFork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   Solver::Validity res;
 printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
-  bool success = osolver->evaluate(Query(current.constraints, current.constraints.simplifyExpr(condition)), res);
-  if (!success) {
+  if (!osolver->evaluate(Query(current.constraints, current.constraints.simplifyExpr(condition)), res)) {
     current.pc = current.prevPC;
     terminateStateCase(current, "Query timed out (fork).\n", "early");
     return StatePair(0, 0);
