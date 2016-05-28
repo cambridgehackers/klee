@@ -434,10 +434,17 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-void Executor::branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Expr> e, KInstruction *ki, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
+void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<Expr> e, KInstruction *ki, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
   std::vector<ref<Expr>> conditions;
+  std::set<ref<Expr>> values;
   if (!targets) {
-    for (auto vit = values->begin(), vie = values->end(); vit != vie; ++vit)
+    for (auto siit = itemp->begin(), siie = itemp->end(); siit != siie; ++siit) {
+      ref<ConstantExpr> value;
+      bool success = solveGetValue(state, siit->assignment.evaluate(e), value);
+      assert(success && "FIXME: Unhandled solver failure");
+      values.insert(value);
+    }
+    for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit)
       conditions.push_back(EqExpr::create(e, *vit));
   }
   if (targets) {
@@ -489,7 +496,7 @@ truell:
           executeAddConstraint(*result[i], conditions[i]);
   auto bit = result.begin();
   if (!targets) {
-    for (auto vit = values->begin(), vie = values->end(); vit != vie; ++vit) {
+    for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
       if (*bit)
         bindLocal(ki, **bit, *vit);
       ++bit;
@@ -601,16 +608,8 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     bool success = solveGetValue(state, e, value);
     assert(success && "FIXME: Unhandled solver failure");
     bindLocal(target, state, value);
-  } else {
-    std::set<ref<Expr>> values;
-    for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
-      ref<ConstantExpr> value;
-      bool success = solveGetValue(state, siit->assignment.evaluate(e), value);
-      assert(success && "FIXME: Unhandled solver failure");
-      values.insert(value);
-    }
-    branch(state, &values, e, target, NULL);
-  }
+  } else
+    branch(state, &it->second, e, target, NULL);
 }
 
 // XXX shoot me
