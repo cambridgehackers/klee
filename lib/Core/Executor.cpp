@@ -434,10 +434,12 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   }
 }
 
-void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<Expr> e, KInstruction *ki, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
+void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<Expr> e, KInstruction *ki, llvm::SwitchInst *si, ref<Expr> cond)
+{
   std::vector<ref<Expr>> conditions;
   std::set<ref<Expr>> values;
-  if (!targets) {
+  std::map<BasicBlock *, ref<Expr>> targets;
+  if (itemp) {
     for (auto siit = itemp->begin(), siie = itemp->end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
       bool success = solveGetValue(state, siit->assignment.evaluate(e), value);
@@ -447,8 +449,23 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
     for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit)
       conditions.push_back(EqExpr::create(e, *vit));
   }
-  if (targets) {
-    for (auto it = targets->begin(), ie = targets->end(); it != ie; ++it)
+  if (si) {
+      ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
+      for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e; ++i) {
+        ref<Expr> match = EqExpr::create(cond, evalConstant(i.getCaseValue()));
+        isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
+        int retFlag = mayBeTrue(state, match);
+        assert(retFlag != -1 && "FIXME: Unhandled solver failure");
+        if (retFlag) {
+          auto it = targets.insert(std::make_pair(i.getCaseSuccessor(), ConstantExpr::alloc(0, Expr::Bool))).first;
+          it->second = OrExpr::create(match, it->second);
+        }
+      }
+      int retFlag = mayBeTrue(state, isDefault);
+      assert(retFlag != -1 && "FIXME: Unhandled solver failure");
+      if (retFlag)
+        targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
+    for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it)
       conditions.push_back(it->second);
   }
   std::vector<ExecutionState*> result;
@@ -495,15 +512,15 @@ truell:
       if (result[i])
           executeAddConstraint(*result[i], conditions[i]);
   auto bit = result.begin();
-  if (!targets) {
+  if (itemp) {
     for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
       if (*bit)
         bindLocal(ki, **bit, *vit);
       ++bit;
     }
   }
-  if (targets) {
-    for (auto it = targets->begin(), ie = targets->end(); it != ie; ++it) {
+  if (si) {
+    for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
       if (*bit)
         transferToBasicBlock(it->first, ki->inst->getParent(), **bit);
       ++bit;
@@ -609,7 +626,7 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
     assert(success && "FIXME: Unhandled solver failure");
     bindLocal(target, state, value);
   } else
-    branch(state, &it->second, e, target, NULL);
+    branch(state, &it->second, e, target, NULL, NULL);
 }
 
 // XXX shoot me
@@ -1355,7 +1372,7 @@ void Executor::executeInstruction(ExecutionState &state)
   case Instruction::Br: {
     BranchInst *bi = cast<BranchInst>(i);
     if (bi->isUnconditional()) {
-      transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), state);
+      transferToBasicBlock(bi->getSuccessor(0), i->getParent(), state);
       break;
     }
     // FIXME: Find a way that we don't have this hidden dependency.
@@ -1399,9 +1416,9 @@ void Executor::executeInstruction(ExecutionState &state)
       else ++partialBranches;
     }
     if (branches.first)
-      transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
+      transferToBasicBlock(bi->getSuccessor(0), i->getParent(), *branches.first);
     if (branches.second)
-      transferToBasicBlock(bi->getSuccessor(1), bi->getParent(), *branches.second);
+      transferToBasicBlock(bi->getSuccessor(1), i->getParent(), *branches.second);
     break;
   }
   case Instruction::Switch: {
@@ -1410,31 +1427,15 @@ void Executor::executeInstruction(ExecutionState &state)
     cond = toUnique(state, cond);
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(cond)) {
       // Somewhat gross to create these all the time, but fine till we // switch to an internal rep.
-      LLVM_TYPE_Q llvm::IntegerType *Ty = cast<IntegerType>(si->getCondition()->getType());
-      ConstantInt *ci = ConstantInt::get(Ty, CE->getZExtValue());
-      unsigned index = si->findCaseValue(ci).getSuccessorIndex();
-      transferToBasicBlock(si->getSuccessor(index), i->getParent(), state);
-    } else {
-      std::map<BasicBlock *, ref<Expr>> targets;
-      ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
-      for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e; ++i) {
-        ref<Expr> match = EqExpr::create(cond, evalConstant(i.getCaseValue()));
-        isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
-        int retFlag = mayBeTrue(state, match);
-        assert(retFlag != -1 && "FIXME: Unhandled solver failure");
-        if (retFlag) {
-          auto it = targets.insert(std::make_pair(i.getCaseSuccessor(), ConstantExpr::alloc(0, Expr::Bool))).first;
-          it->second = OrExpr::create(match, it->second);
-        }
-      }
-      int retFlag = mayBeTrue(state, isDefault);
-      assert(retFlag != -1 && "FIXME: Unhandled solver failure");
-      if (retFlag)
-        targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
-      branch(state, NULL, NULL, ki, &targets);
-    }
+      transferToBasicBlock(si->getSuccessor(
+         si->findCaseValue(ConstantInt::get(
+           cast<IntegerType>(si->getCondition()->getType()),
+           CE->getZExtValue())).getSuccessorIndex()),
+         i->getParent(), state);
+    } else
+      branch(state, NULL, NULL, ki, si, cond);
     break;
- }
+  }
   case Instruction::Unreachable:
     // Note that this is not necessarily an internal bug, llvm will
     // generate unreachable instructions in cases where it knows the
