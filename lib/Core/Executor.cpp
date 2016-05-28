@@ -343,10 +343,13 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
   return StatePair(trueState, falseState);
 }
 
-std::pair<ref<Expr>, ref<Expr>>
-Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
+std::string Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
+  std::string Str;
+  llvm::raw_string_ostream info(Str);
 printf("[%s:%d] call getRange\n", __FUNCTION__, __LINE__);
-  return osolver->getRange(Query(state.constraints, expr));
+  std::pair<ref<Expr>, ref<Expr>> res =  osolver->getRange(Query(state.constraints, expr));
+  info << "[" << res.first << ", " << res.second <<"]";
+  return info.str();
 }
 
 int Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr) {
@@ -856,9 +859,7 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
     bool success = solveGetValue(state, address, value);
     assert(success && "FIXME: Unhandled solver failure");
     example = value->getZExtValue();
-    info << "\texample: " << example << "\n";
-    std::pair<ref<Expr>, ref<Expr>> res = solveGetRange(state, address);
-    info << "\trange: [" << res.first << ", " << res.second <<"]\n";
+    info << "\texample: " << example << "\n\trange: " << solveGetRange(state, address) << "\n";
   }
 
   MemoryObject hack((unsigned) example);

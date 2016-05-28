@@ -330,26 +330,22 @@ void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state, KInstructi
   klee_warning_once(0, "%s: %s", "functionName" /*state.stack.back().func->getName().data()*/, msg_str.c_str());
 }
 
-void SpecialFunctionHandler::handlePrintRange(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size()==2 &&
-         "invalid number of arguments to klee_print_range");
-
+void SpecialFunctionHandler::handlePrintRange(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==2 && "invalid number of arguments to klee_print_range"); 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
   llvm::errs() << msg_str << ":" << arguments[1];
   if (!isa<ConstantExpr>(arguments[1])) {
     // FIXME: Pull into a unique value method?
     ref<ConstantExpr> value;
-    bool success __attribute__ ((unused)) = executor.solveGetValue(state, arguments[1], value);
+    bool success = executor.solveGetValue(state, arguments[1], value);
     assert(success && "FIXME: Unhandled solver failure");
     int res = executor.mustBeTrue(state, EqExpr::create(arguments[1], value));
     assert(res != -1 && "FIXME: Unhandled solver failure");
-    if (res) {
+    if (res)
       llvm::errs() << " == " << value;
-    } else { 
-      llvm::errs() << " ~= " << value;
-      std::pair< ref<Expr>, ref<Expr> > res = executor.solveGetRange(state, arguments[1]);
-      llvm::errs() << " (in [" << res.first << ", " << res.second <<"])";
-    }
+    else
+      llvm::errs() << " ~= " << value << " (in " << executor.solveGetRange(state, arguments[1]) <<")";
   }
   llvm::errs() << "\n";
 }
