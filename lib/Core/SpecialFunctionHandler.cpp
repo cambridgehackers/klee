@@ -418,35 +418,26 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state, KIns
 }
 
 void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
-  std::string name;
-
-  // FIXME: For backwards compatibility, we should eventually enforce the
-  // correct arguments.
+  std::string name; 
+  // FIXME: For backwards compatibility, we should eventually enforce the correct arguments.
   if (arguments.size() == 2) {
     name = "unnamed";
   } else {
     // FIXME: Should be a user.err, not an assert.
-    assert(arguments.size()==3 &&
-           "invalid number of arguments to klee_make_symbolic");  
+    assert(arguments.size()==3 && "invalid number of arguments to klee_make_symbolic");  
     name = readStringAtAddress(state, arguments[2]);
   }
-
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, arguments[0], rl, "make_symbolic");
-  
-  for (Executor::ExactResolutionList::iterator it = rl.begin(), 
-         ie = rl.end(); it != ie; ++it) {
+  for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
     const MemoryObject *mo = it->first.first;
     mo->setName(name);
-    
     const ObjectState *old = it->first.second;
     ExecutionState *s = it->second;
-    
     if (old->readOnly) {
       executor.terminateStateOnError(*s, "cannot make readonly object symbolic", "user.err");
       return;
     } 
-
     // FIXME: Type coercion should be done consistently somewhere.
     int res = executor.mustBeTrue(*s, EqExpr::create(ZExtExpr::create(arguments[1], Context::get().getPointerWidth()), mo->getSizeExpr()));
     assert(res != -1 && "FIXME: Unhandled solver failure");
