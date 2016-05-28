@@ -73,7 +73,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_prefer_cex", handlePreferCex, false),
   add("klee_posix_prefer_cex", handlePosixPreferCex, false),
   add("klee_print_expr", handlePrintExpr, false),
-  add("klee_print_range", handlePrintRange, false),
   add("klee_stack_trace", handleStackTrace, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
@@ -330,26 +329,6 @@ void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state, KInstructi
   klee_warning_once(0, "%s: %s", "functionName" /*state.stack.back().func->getName().data()*/, msg_str.c_str());
 }
 
-void SpecialFunctionHandler::handlePrintRange(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==2 && "invalid number of arguments to klee_print_range"); 
-  std::string msg_str = readStringAtAddress(state, arguments[0]);
-  llvm::errs() << msg_str << ":" << arguments[1];
-  if (!isa<ConstantExpr>(arguments[1])) {
-    // FIXME: Pull into a unique value method?
-    ref<ConstantExpr> value;
-    bool success = executor.solveGetValue(state, arguments[1], value);
-    assert(success && "FIXME: Unhandled solver failure");
-    int res = executor.mustBeTrue(state, EqExpr::create(arguments[1], value));
-    assert(res != -1 && "FIXME: Unhandled solver failure");
-    if (res)
-      llvm::errs() << " == " << value;
-    else
-      llvm::errs() << " ~= " << value << " (in " << executor.solveGetRange(state, arguments[1]) <<")";
-  }
-  llvm::errs() << "\n";
-}
-
 void SpecialFunctionHandler::handleGetObjSize(ExecutionState &state, KInstruction *target, std::vector<ref<Expr> > &arguments) {
   // XXX should type check args
   assert(arguments.size()==1 && "invalid number of arguments to klee_get_obj_size");
@@ -416,7 +395,7 @@ void SpecialFunctionHandler::handleCheckMemoryAccess(ExecutionState &state, KIns
     ObjectPair op; 
     if (!state.resolveOne(cast<ConstantExpr>(address), op)
      || !op.first->getBoundsCheckPointer(address, cast<ConstantExpr>(size)->getZExtValue())->isTrue())
-      executor.terminateStateOnError(state, "check_memory_access: memory error", "ptr.err", executor.getAddressInfo(state, address));
+      executor.terminateStateOnError(state, "check_memory_access: memory error", "ptr.err");
   }
 }
 

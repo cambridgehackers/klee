@@ -122,7 +122,6 @@ namespace klee {
     HANDLER(handlePreferCex);
     HANDLER(handlePosixPreferCex);
     HANDLER(handlePrintExpr);
-    HANDLER(handlePrintRange);
     HANDLER(handleRange);
     HANDLER(handleRealloc);
     HANDLER(handleReportError);

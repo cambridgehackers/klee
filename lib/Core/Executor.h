@@ -500,8 +500,6 @@ public: //friends
   /// Bind a constant value for e to the given target. NOTE: This
   /// function may fork state if the state has multiple seeds.
   void executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction *target);
-  /// Get textual information regarding a memory address.
-  std::string getAddressInfo(ExecutionState &state, ref<Expr> address);
   void terminateStateCase(ExecutionState &state, const char *err, const char *suffix);
   void terminateStateOnError(ExecutionState &state, const llvm::Twine &message, const char *suffix, const llvm::Twine &longMessage = "");
   void terminateStateOnExecError(ExecutionState &state, const llvm::Twine &message) {
@@ -529,7 +527,6 @@ public: //friends
   virtual bool getSymbolicSolution(const ExecutionState &state, std::vector< std::pair<std::string, std::vector<unsigned char>>> &res);
   void getCoveredLines(const ExecutionState &state, std::map<const std::string*, std::set<unsigned>> &res) {res = state.coveredLines;}
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const { return targetData->getTypeSizeInBits(type); }
-  std::string solveGetRange(const ExecutionState&, ref<Expr> query) const;
 };
 } // End klee namespace
 #endif

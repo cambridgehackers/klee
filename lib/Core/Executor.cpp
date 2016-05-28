@@ -343,15 +343,6 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
   return StatePair(trueState, falseState);
 }
 
-std::string Executor::solveGetRange(const ExecutionState& state, ref<Expr> expr) const {
-  std::string Str;
-  llvm::raw_string_ostream info(Str);
-printf("[%s:%d] call getRange\n", __FUNCTION__, __LINE__);
-  std::pair<ref<Expr>, ref<Expr>> res =  osolver->getRange(Query(state.constraints, expr));
-  info << "[" << res.first << ", " << res.second <<"]";
-  return info.str();
-}
-
 int Executor::mustBeTrue(const ExecutionState& state, ref<Expr> expr) {
 printf("[%s:%d] call mustBeTrue\n", __FUNCTION__, __LINE__);
   bool result;
@@ -847,47 +838,6 @@ void Executor::bindLocal(KInstruction *target, ExecutionState &state, ref<Expr> 
   state.stack.back().locals[target->dest] = value;
 }
 
-std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address) {
-  std::string Str;
-  llvm::raw_string_ostream info(Str);
-  info << "\taddress: " << address << "\n";
-  uint64_t example;
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(address))
-    example = CE->getZExtValue();
-  else {
-    ref<ConstantExpr> value;
-    bool success = solveGetValue(state, address, value);
-    assert(success && "FIXME: Unhandled solver failure");
-    example = value->getZExtValue();
-    info << "\texample: " << example << "\n\trange: " << solveGetRange(state, address) << "\n";
-  }
-
-  MemoryObject hack((unsigned) example);
-  auto lower = state.objects.upper_bound(&hack);
-  info << "\tnext: ";
-  if (lower==state.objects.end())
-    info << "none\n";
-  else {
-    const MemoryObject *mo = lower->first;
-    std::string alloc_info;
-    mo->getAllocInfo(alloc_info);
-    info << "object at " << mo->address << " of size " << mo->size << "\n" << "\t\t" << alloc_info << "\n";
-  }
-  if (lower!=state.objects.begin()) {
-    --lower;
-    info << "\tprev: ";
-    if (lower==state.objects.end())
-      info << "none\n";
-    else {
-      const MemoryObject *mo = lower->first;
-      std::string alloc_info;
-      mo->getAllocInfo(alloc_info);
-      info << "object at " << mo->address << " of size " << mo->size << "\n" << "\t\t" << alloc_info << "\n";
-    }
-  }
-  return info.str();
-}
-
 static void treeRemove(PTreeNode *n)
 {
   assert(!n->left && !n->right);
@@ -1030,7 +980,7 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address, KInstructio
     for (auto it = rl.begin(), ie = rl.end(); it != ie; ++it) {
       const MemoryObject *mo = it->first.first;
       if (mo->isLocal || mo->isGlobal)
-        terminateStateOnError(*it->second, "free of global", "free.err", getAddressInfo(*it->second, address));
+        terminateStateOnError(*it->second, "free of global", "free.err");
       else {
         it->second->unbindObject(mo);
         if (target)
@@ -1241,7 +1191,7 @@ nextlab:
     if (incomplete)
       terminateStateCase(*unbound, "Query timed out (resolve).\n", "early");
     else
-      terminateStateOnError(*unbound, "memory error: out of bound pointer", "ptr.err", getAddressInfo(*unbound, address));
+      terminateStateOnError(*unbound, "memory error: out of bound pointer", "ptr.err");
   }
 }
 
@@ -1257,7 +1207,7 @@ void Executor::resolveExact(ExecutionState &state, ref<Expr> p, ExactResolutionL
     unbound = branches.second;
   }
   if (unbound)
-    terminateStateOnError(*unbound, "merror: invalid pointer: " + name, "ptr.err", getAddressInfo(*unbound, p));
+    terminateStateOnError(*unbound, "merror: invalid pointer: " + name, "ptr.err");
 }
 
 void Executor::executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo, const std::string &name) {
