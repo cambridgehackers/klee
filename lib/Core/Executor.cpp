@@ -277,10 +277,8 @@ printf("[%s:%d] call getInitialValues\n", __FUNCTION__, __LINE__);
     ExprPPrinter::printQuery(llvm::errs(), state.constraints, ConstantExpr::alloc(0, Expr::Bool));
     return false;
   }
-  for (unsigned i = 0; i != state.symbolics.size(); ++i) {
-printf("[%s:%d] name %s val \n", __FUNCTION__, __LINE__, state.symbolics[i].first->name.c_str()); //, values[i]);
+  for (unsigned i = 0; i != state.symbolics.size(); ++i)
     res.push_back(std::make_pair(state.symbolics[i].first->name, values[i]));
-  }
   return true;
 }
 
@@ -438,7 +436,7 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
 void Executor::branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Expr> e, KInstruction *ki, std::map<llvm::BasicBlock *, ref<Expr>> *targets) {
   std::vector<ref<Expr>> conditions;
-  if (values) {
+  if (!targets) {
     for (auto vit = values->begin(), vie = values->end(); vit != vie; ++vit)
       conditions.push_back(EqExpr::create(e, *vit));
   }
@@ -476,11 +474,11 @@ void Executor::branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Ex
         bool success = solveGetValue(state, siit->assignment.evaluate(conditions[i]), res);
         assert(success && "FIXME: Unhandled solver failure");
         if (res->isTrue())
-          break;
+          goto truell;
       }
       // If we didn't find a satisfying condition randomly pick one // (the seed will be patched).
-      if (i==N)
-        i = theRNG.getInt32() % N;
+      i = theRNG.getInt32() % N;
+truell:
       // Extra check in case we're replaying seeds with a max-fork
       if (result[i])
         seedMap[result[i]].push_back(*siit);
@@ -490,7 +488,7 @@ void Executor::branch(ExecutionState &state, std::set<ref<Expr>> *values, ref<Ex
       if (result[i])
           executeAddConstraint(*result[i], conditions[i]);
   auto bit = result.begin();
-  if (values) {
+  if (!targets) {
     for (auto vit = values->begin(), vie = values->end(); vit != vie; ++vit) {
       if (*bit)
         bindLocal(ki, **bit, *vit);
@@ -515,17 +513,14 @@ void Executor::executeAddConstraint(ExecutionState &state, ref<Expr> condition) 
   // Check to see if this constraint violates seeds.
   auto it = seedMap.find(&state);
   if (it != seedMap.end()) {
-    bool warn = false;
     for (auto siit = it->second.begin(), siie = it->second.end(); siit != siie; ++siit) {
       int retFlag = mustBeFalse(state, siit->assignment.evaluate(condition));
       assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag) {
         siit->patchSeed(state, condition, this);
-        warn = true;
+        klee_warning("seeds patched for violating constraint");
       }
     }
-    if (warn)
-      klee_warning("seeds patched for violating constraint");
   }
   state.addConstraint(condition);
 }
@@ -654,11 +649,9 @@ void Executor::executeIntCall(ExecutionState &state, KInstruction *ki, Function 
       // then its concrete cache byte isn't being used) but is just a hack.
       for (auto it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
         const MemoryObject *mo = it->first;
-        if (!mo->isUserSpecified) {
-          const ObjectState *os = it->second;
-          if (!os->readOnly)
+        const ObjectState *os = it->second;
+        if (!mo->isUserSpecified && !os->readOnly)
             memcpy((uint8_t*) (unsigned long) mo->address, os->concreteStore, mo->size);
-        }
       }
       printf("[%s:%d] lib/Core/Executor.cpp \n", __FUNCTION__, __LINE__);
       std::string TmpStr;
@@ -682,8 +675,8 @@ void Executor::executeIntCall(ExecutionState &state, KInstruction *ki, Function 
       }
       for (auto it = state.objects.begin(), ie = state.objects.end(); it != ie; ++it) {
         const MemoryObject *mo = it->first;
+        const ObjectState *os = it->second;
         if (!mo->isUserSpecified) {
-          const ObjectState *os = it->second;
           uint8_t *address = (uint8_t*) (unsigned long) mo->address;
           if (memcmp(address, os->concreteStore, mo->size)!=0) {
             if (os->readOnly) {
@@ -943,7 +936,7 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state, const MemoryObje
 void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal, KInstruction *target, bool zeroMemory, const ObjectState *reallocFrom) {
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
-    MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, state.prevPC->inst);
+      MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, state.prevPC->inst);
       ObjectState *os = bindObjectInState(state, mo, isLocal);
       if (zeroMemory)
         os->initializeToZero();
@@ -1053,9 +1046,8 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
       return true;
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
-    auto oi = state.objects.upper_bound(&hack);
+    auto oi = state.objects.upper_bound(&hack), start = oi;
     auto begin = state.objects.begin(), end = state.objects.end();
-    auto start = oi;
     // XXX in the common case we can save one query if we ask
     // must BeTrue before may BeTrue for the first result. easy
     // to add I just want to have a nice symbolic test case first.
@@ -1110,7 +1102,7 @@ bool ExecutionState::resolveOne(const ref<ConstantExpr> &addr, ObjectPair &resul
   return false;
 }
 
-void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */)
+void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<Expr> address, ref<Expr> value, KInstruction *target)
 {
   Expr::Width type = (isWrite ? value->getWidth() : getWidthForLLVMType(target->inst->getType()));
   unsigned bytes = Expr::getMinBytesForWidth(type);
@@ -1133,17 +1125,14 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       }
     }
     // didn't work, now we have to search
-    auto oi = state.objects.upper_bound(&hack);
+    auto oi = state.objects.upper_bound(&hack), start = oi;
     auto begin = state.objects.begin(), end = state.objects.end();
-    auto start = oi;
     while (oi!=begin && !retFlag) {
       --oi;
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-      if ((retFlag = mayBeTrue(state, inBounds)))
-        goto rrlab;
-      retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()));
-      if (retFlag == -1)
+      if ((retFlag = mayBeTrue(state, inBounds))
+       || (retFlag = mustBeTrue(state, UgeExpr::create(address, mo->getBaseExpr()))) == -1)
         goto rrlab;
     }
     // search forwards
@@ -1151,11 +1140,9 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
       const MemoryObject *mo = oi->first;
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
       retFlag = mustBeTrue(state, UltExpr::create(address, mo->getBaseExpr()));
-      if (retFlag == -1)
-        goto rrlab;
-      if (retFlag)
+      if (retFlag == 1)
         break;
-      if ((retFlag = mayBeTrue(state, inBounds)))
+      if (retFlag == -1 || (retFlag = mayBeTrue(state, inBounds)))
         goto rrlab;
     }
     success = false;
@@ -1363,7 +1350,7 @@ void Executor::executeInstruction(ExecutionState &state)
       }
     } else if (!caller->use_empty())
       terminateStateOnExecError(state, "return void when caller expected a result");
-      // check that return value has no users instead of checking the type, since C defaults to returning int for undeclared fns
+      // check return value has no users instead of checking the type, since C defaults to returning int for undeclared fns
     break;
   }
   case Instruction::Br: {
@@ -1958,7 +1945,7 @@ printf("[%s:%d] start\n", __FUNCTION__, __LINE__);
   if (symPathWriter)
     startingState->symPathOS = symPathWriter->open();
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
-  getArgumentCell(*startingState, kf, f->arg_size(), arguments);
+  getArgumentCell(*startingState, kf, arguments.size(), arguments);
   if (argvMO) {
     ObjectState *argvOS = bindObjectInState(*startingState, argvMO, false);
     for (int i=0; i<argc+1+envc+1+1; i++) {
