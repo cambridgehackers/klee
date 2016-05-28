@@ -439,26 +439,25 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
       bool success = solveGetValue(state, siit->assignment.evaluate(e), value);
       assert(success && "FIXME: Unhandled solver failure");
       values.insert(value);
+      conditions.push_back(EqExpr::create(e, value));
     }
-    for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit)
-      conditions.push_back(EqExpr::create(e, *vit));
   }
   if (si) {
-      ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
-      for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e; ++i) {
-        ref<Expr> match = EqExpr::create(cond, evalConstant(i.getCaseValue()));
-        isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
-        int retFlag = mayBeTrue(state, match);
-        assert(retFlag != -1 && "FIXME: Unhandled solver failure");
-        if (retFlag) {
-          auto it = targets.insert(std::make_pair(i.getCaseSuccessor(), ConstantExpr::alloc(0, Expr::Bool))).first;
-          it->second = OrExpr::create(match, it->second);
-        }
-      }
-      int retFlag = mayBeTrue(state, isDefault);
+    ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
+    for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e; ++i) {
+      ref<Expr> match = EqExpr::create(cond, evalConstant(i.getCaseValue()));
+      isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
+      int retFlag = mayBeTrue(state, match);
       assert(retFlag != -1 && "FIXME: Unhandled solver failure");
-      if (retFlag)
-        targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
+      if (retFlag) {
+        auto it = targets.insert(std::make_pair(i.getCaseSuccessor(), ConstantExpr::alloc(0, Expr::Bool))).first;
+        it->second = OrExpr::create(match, it->second);
+      }
+    }
+    int retFlag = mayBeTrue(state, isDefault);
+    assert(retFlag != -1 && "FIXME: Unhandled solver failure");
+    if (retFlag)
+      targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
     for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it)
       conditions.push_back(it->second);
   }
