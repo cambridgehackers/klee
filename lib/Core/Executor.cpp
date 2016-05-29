@@ -450,16 +450,18 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
       int retFlag = mayBeTrue(state, match);
       assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag) {
-        auto it = targets.insert(std::make_pair(i.getCaseSuccessor(), ConstantExpr::alloc(0, Expr::Bool))).first;
-        it->second = OrExpr::create(match, it->second);
+        auto val = ConstantExpr::alloc(0, Expr::Bool);
+        auto exp = OrExpr::create(match, val);
+        targets.insert(std::make_pair(i.getCaseSuccessor(), exp));
+        conditions.push_back(exp);
       }
     }
     int retFlag = mayBeTrue(state, isDefault);
     assert(retFlag != -1 && "FIXME: Unhandled solver failure");
-    if (retFlag)
+    if (retFlag) {
       targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
-    for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it)
-      conditions.push_back(it->second);
+      conditions.push_back(isDefault);
+    }
   }
   std::vector<ExecutionState*> result;
   TimerStatIncrementer timer(stats::forkTime);
@@ -585,8 +587,7 @@ ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
   ref<Expr> result = e;
   if (!isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
-    if (solveGetValue(state, e, value)
-     && mustBeTrue(state, EqExpr::create(e, value)) == 1)
+    if (solveGetValue(state, e, value) && mustBeTrue(state, EqExpr::create(e, value)) == 1)
       result = value;
   }
   return result;
