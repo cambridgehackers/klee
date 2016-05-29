@@ -464,7 +464,6 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
     }
   }
   unsigned N = conditions.size();
-  assert(N);
   stats::forks += N-1;
   // XXX do proper balance or keep random?
   result.push_back(&state);
@@ -505,19 +504,15 @@ truell:
       if (result[i])
           executeAddConstraint(*result[i], conditions[i]);
   auto bit = result.begin();
-  if (itemp) {
-    for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
-      if (*bit)
-        bindLocal(ki, **bit, *vit);
-      ++bit;
-    }
+  for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
+    if (*bit)
+      bindLocal(ki, **bit, *vit);
+    ++bit;
   }
-  if (si) {
-    for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
-      if (*bit)
-        transferToBasicBlock(*it, ki->inst->getParent(), **bit);
-      ++bit;
-    }
+  for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
+    if (*bit)
+      transferToBasicBlock(*it, ki->inst->getParent(), **bit);
+    ++bit;
   }
 }
 
