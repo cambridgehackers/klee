@@ -315,8 +315,8 @@ printf("[%s:%d] call evaluate\n", __FUNCTION__, __LINE__);
     std::vector<SeedInfo> &falseSeeds = seedMap[falseState];
     for (auto siit = seeds.begin(), siie = seeds.end(); siit != siie; ++siit) {
       ref<ConstantExpr> res;
-      bool success = solveGetValue(current, siit->assignment.evaluate(condition), res);
-      assert(success && "FIXME: Unhandled solver failure");
+      solveGetValue(current, siit->assignment.evaluate(condition), res);
+      assert(!res.isNull() && "FIXME: Unhandled solver failure");
       if (res->isTrue())
         trueSeeds.push_back(*siit);
       else
@@ -353,7 +353,10 @@ printf("[%s:%d] call mustBeTrue\n", __FUNCTION__, __LINE__);
 
 bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
 printf("[%s:%d] call getValue\n", __FUNCTION__, __LINE__);
-  return osolver->getValue(Query(state.constraints, state.constraints.simplifyExpr(expr)), result);
+  bool success = osolver->getValue(Query(state.constraints, state.constraints.simplifyExpr(expr)), result);
+  if (!success)
+      result = NULL;
+  return success;
 }
 
 Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
@@ -432,8 +435,8 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
   if (itemp) {
     for (auto siit = itemp->begin(), siie = itemp->end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
-      bool success = solveGetValue(state, siit->assignment.evaluate(e), value);
-      assert(success && "FIXME: Unhandled solver failure");
+      solveGetValue(state, siit->assignment.evaluate(e), value);
+      assert(!value.isNull() && "FIXME: Unhandled solver failure");
       values.push_back(value);
       conditions.push_back(EqExpr::create(e, value));
     }
@@ -481,8 +484,8 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
       unsigned i;
       for (i=0; i<N; ++i) {
         ref<ConstantExpr> res;
-        bool success = solveGetValue(state, siit->assignment.evaluate(conditions[i]), res);
-        assert(success && "FIXME: Unhandled solver failure");
+        solveGetValue(state, siit->assignment.evaluate(conditions[i]), res);
+        assert(!res.isNull() && "FIXME: Unhandled solver failure");
         if (res->isTrue())
           goto truell;
       }
@@ -569,7 +572,8 @@ ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
   ref<Expr> result = e;
   if (!isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
-    if (solveGetValue(state, e, value) && mustBeTrue(state, EqExpr::create(e, value)) == 1)
+    solveGetValue(state, e, value);
+    if (!value.isNull() && mustBeTrue(state, EqExpr::create(e, value)) == 1)
       result = value;
   }
   return result;
@@ -583,8 +587,8 @@ Executor::toConstant(ExecutionState &state, ref<Expr> e, const char *reason) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(e))
     return CE;
   ref<ConstantExpr> value;
-  bool success = solveGetValue(state, e, value);
-  assert(success && "FIXME: Unhandled solver failure");
+  solveGetValue(state, e, value);
+  assert(!value.isNull() && "FIXME: Unhandled solver failure");
   std::string str;
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e << " to value " << value;
@@ -598,8 +602,8 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e, KInstruction 
   auto it = seedMap.find(&state);
   if (it==seedMap.end() || isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
-    bool success = solveGetValue(state, e, value);
-    assert(success && "FIXME: Unhandled solver failure");
+    solveGetValue(state, e, value);
+    assert(!value.isNull() && "FIXME: Unhandled solver failure");
     bindLocal(target, state, value);
   } else
     branch(state, &it->second, e, target, NULL, NULL);
@@ -908,8 +912,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     // return argument first). This shows up in pcre when llvm
     // collapses the size expression with a select.
     ref<ConstantExpr> example;
-    bool success = solveGetValue(state, size, example);
-    assert(success && "FIXME: Unhandled solver failure");
+    solveGetValue(state, size, example);
+    assert(!example.isNull() && "FIXME: Unhandled solver failure");
     // Try and start with a small example.
     Expr::Width W = example->getWidth();
     while (example->Ugt(ConstantExpr::alloc(128, W))->isTrue()) {
@@ -924,8 +928,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     if (fixedSize.second) {
       // Check for exactly two values
       ref<ConstantExpr> tmp;
-      bool success = solveGetValue(*fixedSize.second, size, tmp);
-      assert(success && "FIXME: Unhandled solver failure");
+      solveGetValue(*fixedSize.second, size, tmp);
+      assert(!tmp.isNull() && "FIXME: Unhandled solver failure");
       int retFlag = mustBeTrue(*fixedSize.second, EqExpr::create(tmp, size));
       assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag)
@@ -991,7 +995,8 @@ bool Executor::resolve(ExecutionState &state, ref<Expr> address, ResolutionList 
     // if its a known solution then the code below is guaranteed
     // to hit the fast path with exactly 2 queries). we could also just get this by inspection of the expr.
     ref<ConstantExpr> cex;
-    if (!solveGetValue(state, address, cex))
+    solveGetValue(state, address, cex);
+    if (cex.isNull())
       return true;
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
@@ -1063,7 +1068,8 @@ void Executor::executeMemoryOperation(ExecutionState &state, bool isWrite, ref<E
   TimerStatIncrementer timer(stats::resolveTime);
   // try cheap search, will succeed for any inbounds pointer
   ref<ConstantExpr> cex;
-  if (solveGetValue(state, address, cex)) {
+  solveGetValue(state, address, cex);
+  if (!cex.isNull()) {
     uint64_t example = cex->getZExtValue();
     MemoryObject hack(example);
     if (const ObjectPair *res = state.objects.lookup_previous(&hack)) {
@@ -1439,8 +1445,8 @@ void Executor::executeInstruction(ExecutionState &state)
          But in the end the caches should handle it for us, albeit with some overhead. */
       while(free) {
         ref<ConstantExpr> value;
-        bool success = solveGetValue(*free, v, value);
-        assert(success && "FIXME: Unhandled solver failure");
+        solveGetValue(*free, v, value);
+        assert(!value.isNull() && "FIXME: Unhandled solver failure");
         StatePair res = stateFork(*free, EqExpr::create(v, value));
         free = res.second;
         if (res.first) {
