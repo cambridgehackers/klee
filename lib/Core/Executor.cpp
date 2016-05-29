@@ -433,6 +433,8 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
   std::vector<ref<Expr>> conditions;
   std::set<ref<Expr>> values;
   std::set<BasicBlock *> targets;
+  std::vector<ExecutionState*> result;
+  TimerStatIncrementer timer(stats::forkTime);
   if (itemp) {
     for (auto siit = itemp->begin(), siie = itemp->end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
@@ -450,10 +452,8 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
       int retFlag = mayBeTrue(state, match);
       assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag) {
-        auto val = ConstantExpr::alloc(0, Expr::Bool);
-        auto exp = OrExpr::create(match, val);
         targets.insert(i.getCaseSuccessor());
-        conditions.push_back(exp);
+        conditions.push_back(OrExpr::create(match, ConstantExpr::alloc(0, Expr::Bool)));
       }
     }
     int retFlag = mayBeTrue(state, isDefault);
@@ -463,8 +463,6 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
       conditions.push_back(isDefault);
     }
   }
-  std::vector<ExecutionState*> result;
-  TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
   assert(N);
   stats::forks += N-1;
