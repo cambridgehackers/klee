@@ -432,7 +432,7 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
 {
   std::vector<ref<Expr>> conditions;
   std::set<ref<Expr>> values;
-  std::map<BasicBlock *, ref<Expr>> targets;
+  std::set<BasicBlock *> targets;
   if (itemp) {
     for (auto siit = itemp->begin(), siie = itemp->end(); siit != siie; ++siit) {
       ref<ConstantExpr> value;
@@ -452,14 +452,14 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
       if (retFlag) {
         auto val = ConstantExpr::alloc(0, Expr::Bool);
         auto exp = OrExpr::create(match, val);
-        targets.insert(std::make_pair(i.getCaseSuccessor(), exp));
+        targets.insert(i.getCaseSuccessor());
         conditions.push_back(exp);
       }
     }
     int retFlag = mayBeTrue(state, isDefault);
     assert(retFlag != -1 && "FIXME: Unhandled solver failure");
     if (retFlag) {
-      targets.insert(std::make_pair(si->getDefaultDest(), isDefault));
+      targets.insert(si->getDefaultDest());
       conditions.push_back(isDefault);
     }
   }
@@ -517,7 +517,7 @@ truell:
   if (si) {
     for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
       if (*bit)
-        transferToBasicBlock(it->first, ki->inst->getParent(), **bit);
+        transferToBasicBlock(*it, ki->inst->getParent(), **bit);
       ++bit;
     }
   }
