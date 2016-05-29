@@ -1979,15 +1979,14 @@ printf("[%s:%d] Executorbefore run\n", __FUNCTION__, __LINE__);
     states.insert(addedStates.begin(), addedStates.end());
     addedStates.clear();
     for (auto it = removedStates.begin(), ie = removedStates.end(); it != ie; ++it) {
-      ExecutionState *es = *it;
-      auto it2 = states.find(es);
+      auto it2 = states.find(*it);
       assert(it2!=states.end());
       states.erase(it2);
-      auto it3 = seedMap.find(es);
+      auto it3 = seedMap.find(*it);
       if (it3 != seedMap.end())
         seedMap.erase(it3);
-      treeRemove(es->ptreeNode);
-      delete es;
+      treeRemove((*it)->ptreeNode);
+      delete *it;
     }
     removedStates.clear();
   }
