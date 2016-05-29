@@ -457,7 +457,7 @@ public: //friends
       return -1;
     return 1-res;
   }
-  bool solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
+  void solveGetValue(const ExecutionState &, ref<Expr> expr, ref<ConstantExpr> &result);
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo, bool isLocal, const Array *array = 0);
   /// Resolve a pointer to the memory objects it could point to the
   /// start of, forking execution when necessary and generating errors

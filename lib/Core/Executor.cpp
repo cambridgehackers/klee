@@ -351,12 +351,10 @@ printf("[%s:%d] call mustBeTrue\n", __FUNCTION__, __LINE__);
   return (int)result;
 }
 
-bool Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
+void Executor::solveGetValue(const ExecutionState& state, ref<Expr> expr, ref<ConstantExpr> &result) {
 printf("[%s:%d] call getValue\n", __FUNCTION__, __LINE__);
-  bool success = osolver->getValue(Query(state.constraints, state.constraints.simplifyExpr(expr)), result);
-  if (!success)
+  if (!osolver->getValue(Query(state.constraints, state.constraints.simplifyExpr(expr)), result))
       result = NULL;
-  return success;
 }
 
 Interpreter *Interpreter::create(const InterpreterOptions &opts, InterpreterHandler *ih) {
