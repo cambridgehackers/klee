@@ -251,25 +251,24 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
   // the preferred constraints.  See test/Features/PreferCex.c for
   // an example) While this process can be very expensive, it can
   // also make understanding individual test cases much easier.
-  for (unsigned i = 0; i != state.symbolics.size(); ++i)
-    objects.push_back(state.symbolics[i].second);
+  bool process = true;
   for (unsigned i = 0; i != state.symbolics.size(); ++i) {
     const MemoryObject *mo = state.symbolics[i].first;
+    objects.push_back(state.symbolics[i].second);
     auto pi = mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
-    for (; pi != pie; ++pi) {
+    for (; pi != pie && process; ++pi) {
       // Attempt to bound byte to constraints held in cexPreferences
       int retFlag = mustBeTrue(tmp, Expr::createIsZero(*pi));
       // If it isn't possible to constrain this particular byte in the desired
       // way (normally this would mean that the byte can't be constrained to
       // be between 0 and 127 without making the entire constraint list UNSAT)
       // then just continue on to the next byte.
-      if (retFlag == -1) goto topnext;
+      if (retFlag == -1) process = false;
       // If the particular constraint operated on in this iteration through
       // the loop isn't implied then add it to the list of constraints.
       if (!retFlag) tmp.addConstraint(*pi);
     }
   }
-topnext:
 printf("[%s:%d] call getInitialValues\n", __FUNCTION__, __LINE__);
   if (!objects.empty()
    && !osolver->getInitialValues(Query(tmp.constraints, ConstantExpr::alloc(0, Expr::Bool)), objects, values)) {
