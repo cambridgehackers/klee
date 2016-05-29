@@ -425,8 +425,8 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<Expr> e, KInstruction *ki, llvm::SwitchInst *si, ref<Expr> cond)
 {
   std::vector<ref<Expr>> conditions;
-  std::set<ref<Expr>> values;
-  std::set<BasicBlock *> targets;
+  std::vector<ref<Expr>> values;
+  std::vector<BasicBlock *> targets;
   std::vector<ExecutionState*> result;
   TimerStatIncrementer timer(stats::forkTime);
   if (itemp) {
@@ -434,7 +434,7 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
       ref<ConstantExpr> value;
       bool success = solveGetValue(state, siit->assignment.evaluate(e), value);
       assert(success && "FIXME: Unhandled solver failure");
-      values.insert(value);
+      values.push_back(value);
       conditions.push_back(EqExpr::create(e, value));
     }
   }
@@ -446,14 +446,14 @@ void Executor::branch(ExecutionState &state, std::vector<SeedInfo> *itemp, ref<E
       int retFlag = mayBeTrue(state, match);
       assert(retFlag != -1 && "FIXME: Unhandled solver failure");
       if (retFlag) {
-        targets.insert(i.getCaseSuccessor());
+        targets.push_back(i.getCaseSuccessor());
         conditions.push_back(OrExpr::create(match, ConstantExpr::alloc(0, Expr::Bool)));
       }
     }
     int retFlag = mayBeTrue(state, isDefault);
     assert(retFlag != -1 && "FIXME: Unhandled solver failure");
     if (retFlag) {
-      targets.insert(si->getDefaultDest());
+      targets.push_back(si->getDefaultDest());
       conditions.push_back(isDefault);
     }
   }
@@ -494,19 +494,14 @@ truell:
         seedMap[result[i]].push_back(*siit);
     }
   }
-  for (unsigned i=0; i<N; ++i)
-      if (result[i])
-          executeAddConstraint(*result[i], conditions[i]);
-  auto bit = result.begin();
-  for (auto vit = values.begin(), vie = values.end(); vit != vie; ++vit) {
-    if (*bit)
-      bindLocal(ki, **bit, *vit);
-    ++bit;
-  }
-  for (auto it = targets.begin(), ie = targets.end(); it != ie; ++it) {
-    if (*bit)
-      transferToBasicBlock(*it, ki->inst->getParent(), **bit);
-    ++bit;
+  for (unsigned i=0; i<N; ++i) {
+    if (result[i]) {
+      executeAddConstraint(*result[i], conditions[i]);
+      if (itemp)
+        bindLocal(ki, *result[i], values[i]);
+      else
+        transferToBasicBlock(targets[i], ki->inst->getParent(), *result[i]);
+    }
   }
 }
 
